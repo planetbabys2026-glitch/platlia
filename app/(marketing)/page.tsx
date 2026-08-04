@@ -15,7 +15,7 @@ export default function LandingPage() {
     <main className="flex flex-1 flex-col items-center justify-center gap-12 px-6 py-16">
       <div className="max-w-2xl space-y-5 text-center">
         <p className="text-muted-foreground font-mono text-xs tracking-[0.2em] uppercase">
-          Nexus
+          Platlia
         </p>
         <h1 className="text-4xl leading-[1.05] font-semibold text-balance sm:text-6xl">
           Tu restaurante, ordenado de principio a fin

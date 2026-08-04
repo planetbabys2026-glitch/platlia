@@ -60,7 +60,7 @@ const schema = z.object({
 
   // ─── Bootstrap del superadministrador ─────────────────────────────────────
   // Se define únicamente durante el primer despliegue y se borra después. Sin
-  // ella, /__nx/bootstrap responde 404 y es indistinguible de una ruta inexistente.
+  // ella, /__pl/bootstrap responde 404 y es indistinguible de una ruta inexistente.
   SUPERADMIN_BOOTSTRAP_TOKEN: opcional(z.string().min(32)),
 });
 
@@ -80,7 +80,7 @@ export const env = parsed.data;
 /**
  * Devuelve una variable opcional garantizando que esté configurada, con un error
  * que dice exactamente qué falta. Se usa en el punto donde la integración se
- * activa, para que un Nexus sin Cloudinary o sin MercadoPago igual arranque.
+ * activa, para que un Platlia sin Cloudinary o sin MercadoPago igual arranque.
  */
 export function requireEnv<K extends keyof typeof env>(
   key: K,

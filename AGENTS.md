@@ -1,4 +1,4 @@
-# Nexus — convenciones del proyecto
+# Platlia — convenciones del proyecto
 
 SaaS multi-tenant de gestión para bares y restaurantes. Next.js **15.5.22** (App Router),
 React 19, Tailwind v4, Prisma 7 sobre PostgreSQL. UI en español.

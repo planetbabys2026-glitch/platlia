@@ -25,10 +25,10 @@ function createPool(): Pool {
 
 // En desarrollo el hot reload reevalúa los módulos: sin este singleton se abre
 // un pool nuevo por recarga hasta agotar max_connections del servidor.
-const globalForPool = globalThis as unknown as { nexusPgPool?: Pool };
+const globalForPool = globalThis as unknown as { platliaPgPool?: Pool };
 
-export const pool: Pool = globalForPool.nexusPgPool ?? createPool();
+export const pool: Pool = globalForPool.platliaPgPool ?? createPool();
 
 if (env.NODE_ENV !== "production") {
-  globalForPool.nexusPgPool = pool;
+  globalForPool.platliaPgPool = pool;
 }

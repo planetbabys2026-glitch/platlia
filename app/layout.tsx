@@ -31,13 +31,13 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Nexus — Gestión para bares y restaurantes",
-    template: "%s · Nexus",
+    default: "Platlia — Gestión para bares y restaurantes",
+    template: "%s · Platlia",
   },
   description:
     "Administrá tu restaurante o bar: mesas, pedidos, caja, cocina e informes en un solo lugar.",
-  applicationName: "Nexus",
-  appleWebApp: { capable: true, title: "Nexus", statusBarStyle: "default" },
+  applicationName: "Platlia",
+  appleWebApp: { capable: true, title: "Platlia", statusBarStyle: "default" },
 };
 
 // En Next 15 themeColor va en el export `viewport`, no dentro de `metadata`.
