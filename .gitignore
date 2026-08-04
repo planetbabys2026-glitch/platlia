@@ -12,6 +12,15 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/blob-report
+
+# prisma client generado
+/generated
+
+# certificados de `next dev --experimental-https`
+/certificates
 
 # next.js
 /.next/

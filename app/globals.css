@@ -1,26 +1,247 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /* Estados de mesa: se leen de un vistazo sobre la grilla del salón. */
+  --color-mesa-libre: var(--mesa-libre);
+  --color-mesa-ocupada: var(--mesa-ocupada);
+  --color-mesa-cuenta: var(--mesa-cuenta);
+  --color-mesa-reservada: var(--mesa-reservada);
+  --color-mesa-inactiva: var(--mesa-inactiva);
+
+  /* Escala de tiempo de espera en cocina: ordenada, de verde a rojo. */
+  --color-espera-ok: var(--espera-ok);
+  --color-espera-atencion: var(--espera-atencion);
+  --color-espera-demora: var(--espera-demora);
+  --color-espera-critico: var(--espera-critico);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ─────────────────────────────────────────────────────────────────────────────
+   Paleta Nexus — todos los valores son sólidos y opacos. Ningún token lleva
+   canal alfa: sobre una tablet barata en un bar oscuro, un borde translúcido se
+   vuelve invisible y un estado de mesa deja de distinguirse.
+
+   La base es grafito frío, no crema: las fotos de los platos que suben los
+   restaurantes viven sobre este cromado todo el día, y un tinte cálido les corre
+   el color. Los acentos son apagados a propósito, sin neones ni degradados; el
+   color se reserva para decir algo (estado de mesa, tiempo de espera, error).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --radius: 0.5rem;
+
+  --background: #ffffff;
+  --foreground: #12171a;
+  --card: #ffffff;
+  --card-foreground: #12171a;
+  --popover: #ffffff;
+  --popover-foreground: #12171a;
+
+  /* Petróleo profundo: serio sin ser azul corporativo, y sobrio en pantalla. */
+  --primary: #0e5b54;
+  --primary-foreground: #ffffff;
+  --secondary: #eaeff0;
+  --secondary-foreground: #12171a;
+  --muted: #f4f6f7;
+  --muted-foreground: #59656d;
+  --accent: #eaeff0;
+  --accent-foreground: #0e5b54;
+
+  --destructive: #a32f2f;
+  --destructive-foreground: #ffffff;
+  --success: #2f7d4f;
+  --success-foreground: #ffffff;
+  --warning: #b0651a;
+  --warning-foreground: #ffffff;
+  --info: #1c6c9c;
+  --info-foreground: #ffffff;
+
+  --border: #dde3e6;
+  --input: #dde3e6;
+  --ring: #0e5b54;
+
+  --mesa-libre: #2f7d4f;
+  --mesa-ocupada: #b0651a;
+  --mesa-cuenta: #1c6c9c;
+  --mesa-reservada: #6b5fa8;
+  --mesa-inactiva: #7c878d;
+
+  --espera-ok: #2f7d4f;
+  --espera-atencion: #b0651a;
+  --espera-demora: #c05621;
+  --espera-critico: #a32f2f;
+
+  --chart-1: #0e5b54;
+  --chart-2: #1c6c9c;
+  --chart-3: #b0651a;
+  --chart-4: #6b5fa8;
+  --chart-5: #2f7d4f;
+
+  --sidebar: #f4f6f7;
+  --sidebar-foreground: #12171a;
+  --sidebar-primary: #0e5b54;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeff0;
+  --sidebar-accent-foreground: #0e5b54;
+  --sidebar-border: #dde3e6;
+  --sidebar-ring: #0e5b54;
+}
+
+/* Los bares trabajan a media luz y la caja suele estar en penumbra: el modo
+   oscuro no es un adorno, es el modo en el que se va a usar de verdad. */
+.dark {
+  --background: #101416;
+  --foreground: #e9edee;
+  --card: #171d20;
+  --card-foreground: #e9edee;
+  --popover: #1e262a;
+  --popover-foreground: #e9edee;
+
+  --primary: #2e9186;
+  --primary-foreground: #06201d;
+  --secondary: #1e262a;
+  --secondary-foreground: #e9edee;
+  --muted: #1a2124;
+  --muted-foreground: #97a3a9;
+  --accent: #1e262a;
+  --accent-foreground: #4fb3a6;
+
+  --destructive: #d05a5a;
+  --destructive-foreground: #1a0d0d;
+  --success: #4e9d6d;
+  --success-foreground: #08160e;
+  --warning: #d08a3c;
+  --warning-foreground: #1c1206;
+  --info: #4a94c4;
+  --info-foreground: #071620;
+
+  --border: #2a3438;
+  --input: #313c41;
+  --ring: #2e9186;
+
+  --mesa-libre: #4e9d6d;
+  --mesa-ocupada: #d08a3c;
+  --mesa-cuenta: #4a94c4;
+  --mesa-reservada: #8e83c4;
+  --mesa-inactiva: #6d787e;
+
+  --espera-ok: #4e9d6d;
+  --espera-atencion: #d08a3c;
+  --espera-demora: #dd7748;
+  --espera-critico: #d05a5a;
+
+  --chart-1: #2e9186;
+  --chart-2: #4a94c4;
+  --chart-3: #d08a3c;
+  --chart-4: #8e83c4;
+  --chart-5: #4e9d6d;
+
+  --sidebar: #171d20;
+  --sidebar-foreground: #e9edee;
+  --sidebar-primary: #2e9186;
+  --sidebar-primary-foreground: #06201d;
+  --sidebar-accent: #1e262a;
+  --sidebar-accent-foreground: #4fb3a6;
+  --sidebar-border: #2a3438;
+  --sidebar-ring: #2e9186;
+}
+
+@layer base {
+  * {
+    /* `outline-ring` sin alfa: el foco de teclado tiene que ser visible también
+       sobre fondos oscuros y en pantallas de bajo contraste. */
+    @apply border-border outline-ring;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /* Todo en este producto es un número: mesa 12, turno 47, $18.900, 8 min de
+     espera. Las cifras van tabulares en toda la interfaz para que se alineen en
+     columna y no bailen al actualizarse en vivo. */
+  body {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* La firma visual del producto: la cifra grande. Se usa para el número de
+     mesa, el turno en la pantalla del salón y el total a cobrar. */
+  .numeral {
+    @apply font-display tabular-nums;
+    font-feature-settings: "tnum" 1, "ss01" 1;
+    letter-spacing: -0.02em;
+  }
+}
+
+@media print {
+  /* Las rutas de /imprimir salen a térmica de 55mm y 80mm: sin color de fondo,
+     sin sombras y con la métrica exacta del papel. */
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
 }
