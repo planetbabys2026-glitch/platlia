@@ -50,15 +50,28 @@ cmds = [
 # `require()` condicional según plataforma dentro de su loader, y esa rama
 # dinámica no la sigue el análisis estático. Sin esto, el hash de contraseñas
 # revienta en producción con "Failed to load native binding" aunque el build
-# haya terminado sin ningún error. `-L` para copiar el archivo real: en pnpm
-# `node_modules/@node-rs` son symlinks al store, y ese store no viaja al
-# standalone.
+# haya terminado sin ningún error.
+#
+# Van dos `cp` porque son dos ubicaciones distintas del store de pnpm:
+#   · `node_modules/@node-rs/argon2` es un symlink directo al paquete.
+#   · el binding de la plataforma (`argon2-linux-x64-gnu` o el que toque) NO
+#     cuelga de ahí adentro: pnpm lo resuelve como hermano de `argon2` dentro
+#     del node_modules aislado del propio paquete
+#     (`.pnpm/@node-rs+argon2@…/node_modules/@node-rs/`), que es donde Node
+#     lo busca al hacer `require("@node-rs/argon2-<plataforma>")` desde
+#     `argon2/index.js`. Si solo se copia el primero, el binding real nunca
+#     viaja al standalone aunque el `cp` no tire ningún error —así fue como
+#     el primer intento de este fix pareció andar en el build y siguió roto
+#     en producción. El glob evita fijar a mano la plataforma o la versión.
+#     `-L` en ambos para copiar el archivo real: son symlinks al store, y ese
+#     store no viaja al standalone.
 cmds = [
   "/usr/local/bin/pnpm run build",
   "mkdir -p .next/standalone/public .next/standalone/.next/static .next/standalone/node_modules/@node-rs",
   "cp -r public/. .next/standalone/public/",
   "cp -r .next/static/. .next/standalone/.next/static/",
   "cp -rL node_modules/@node-rs/. .next/standalone/node_modules/@node-rs/",
+  "cp -rL node_modules/.pnpm/@node-rs+argon2-*/node_modules/@node-rs/argon2-* .next/standalone/node_modules/@node-rs/",
 ]
 
 [start]
