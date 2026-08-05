@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter, JetBrains_Mono } from "next/font/google";
+import { RegistroServiceWorker } from "@/components/pwa/registro-sw";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -38,6 +39,7 @@ export const metadata: Metadata = {
     "Administrá tu restaurante o bar: mesas, pedidos, caja, cocina e informes en un solo lugar.",
   applicationName: "Platlia",
   appleWebApp: { capable: true, title: "Platlia", statusBarStyle: "default" },
+  manifest: "/manifest.webmanifest",
 };
 
 // En Next 15 themeColor va en el export `viewport`, no dentro de `metadata`.
@@ -63,6 +65,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         {children}
         <Toaster richColors closeButton position="top-right" />
+        <RegistroServiceWorker />
       </body>
     </html>
   );

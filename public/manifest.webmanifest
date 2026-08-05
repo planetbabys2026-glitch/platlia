@@ -1,0 +1,22 @@
+{
+  "name": "Platlia — Gestión de Restaurantes y Bares",
+  "short_name": "Platlia",
+  "description": "Mesas, pedidos, caja, cocina e informes en un solo lugar.",
+  "start_url": "/panel",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "es-CO",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4e51",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

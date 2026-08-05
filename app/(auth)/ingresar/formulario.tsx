@@ -1,8 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { Campo } from "@/components/formulario/campo";
+import { CampoContrasena } from "@/components/formulario/campo-contrasena";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ingresar } from "@/features/auth/actions";
@@ -40,14 +42,20 @@ export function FormularioIngreso({ desde }: { desde?: string }) {
         required
         errores={!estado.ok ? estado.campos?.email : undefined}
       />
-      <Campo
-        label="Contraseña"
-        name="password"
-        type="password"
-        autoComplete="current-password"
-        required
-        errores={!estado.ok ? estado.campos?.password : undefined}
-      />
+      <div className="space-y-1">
+        <CampoContrasena
+          label="Contraseña"
+          name="password"
+          autoComplete="current-password"
+          required
+          errores={!estado.ok ? estado.campos?.password : undefined}
+        />
+        <p className="text-right text-sm">
+          <Link href="/recuperar" className="text-muted-foreground hover:text-foreground">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+      </div>
 
       <Enviar>Ingresar</Enviar>
     </form>

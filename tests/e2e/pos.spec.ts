@@ -1,0 +1,158 @@
+import { expect, test } from "@playwright/test";
+import { abrirCaja, cerrarPedidosAbiertos, dejarCajaCerrada, ingresar } from "./apoyo";
+
+const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
+
+/**
+ * Negocios sin mesas: el módulo se apaga desde Configuración y la interfaz
+ * entera se adapta —el menú, la pantalla de entrada, el formulario de apertura—
+ * sin necesitar el módulo MESAS para nada.
+ *
+ * En serie: deja el negocio sembrado sin mesas al final de cada prueba, para no
+ * romper el resto de la suite que sí las necesita. La reactivación va en
+ * `afterAll` y no en el último test: si cualquier prueba de acá arriba falla,
+ * el modo serie salta el resto del archivo, y un "último test" que nunca llega
+ * a correr deja mesas apagado para TODA la suite que sigue —le pasó a esta
+ * misma suite más de una vez mientras se escribía—. `afterAll` corre siempre.
+ */
+test.describe.configure({ mode: "serial" });
+
+async function apagarMesas(page: import("@playwright/test").Page) {
+  await page.goto("/administracion/configuracion");
+  const casilla = page.getByLabel("Este negocio sienta mesas");
+  if (await casilla.isChecked()) {
+    await casilla.uncheck();
+    await page.getByRole("button", { name: /guardar módulos/i }).click();
+    await expect(page.getByText(/apagado: la pantalla de entrada es pos/i)).toBeVisible();
+  }
+}
+
+async function prenderMesas(page: import("@playwright/test").Page) {
+  await page.goto("/administracion/configuracion");
+  const casilla = page.getByLabel("Este negocio sienta mesas");
+  if (!(await casilla.isChecked())) {
+    await casilla.check();
+    await page.getByRole("button", { name: /guardar módulos/i }).click();
+  }
+}
+
+test.afterAll(async ({ browser }) => {
+  const page = await browser.newPage();
+  await ingresar(page, DUENO);
+  await prenderMesas(page);
+  await page.close();
+});
+
+test("no se puede apagar mesas con una mesa ocupada", async ({ page }) => {
+  await ingresar(page, DUENO);
+  await abrirCaja(page);
+
+  await page.goto("/salon");
+  await page.getByRole("button", { name: /abrir pedido en la mesa 1$/i }).click();
+  await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
+
+  await page.goto("/administracion/configuracion");
+  await page.getByLabel("Este negocio sienta mesas").uncheck();
+  await page.getByRole("button", { name: /guardar módulos/i }).click();
+  await expect(page.getByText(/hay una mesa con un pedido abierto/i)).toBeVisible();
+
+  // Se libera la mesa para no dejarla trabada para el resto de la suite.
+  await cerrarPedidosAbiertos(page);
+  await dejarCajaCerrada(page);
+});
+
+test("al apagar mesas, /salon deja de existir y el menú ofrece POS", async ({ page }) => {
+  await ingresar(page, DUENO);
+  await apagarMesas(page);
+
+  await page.goto("/salon");
+  await expect(page.getByText("404")).toBeVisible();
+
+  await page.goto("/panel");
+  // exact:true: "Ir al POS" (el botón grande del panel) también matchea "POS"
+  // por substring, y acá se está probando específicamente el enlace del menú.
+  await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Salón", exact: true })).toHaveCount(0);
+});
+
+// No se reusa `ingresar` de apoyo.ts: ese helper da por sentado que todo el
+// mundo llega a /panel, y acá justamente se está probando que cajero y
+// administrador ya no lo hacen.
+async function ingresarSinAsumirDestino(
+  page: import("@playwright/test").Page,
+  datos: { email: string; password: string },
+) {
+  await page.goto("/ingresar");
+  await page.getByLabel("Correo").fill(datos.email);
+  await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
+  await page.getByRole("button", { name: /ingresar/i }).click();
+}
+
+test("el cajero entra directo a POS, no al panel", async ({ page }) => {
+  // Mesas sigue apagado desde la prueba anterior. Contexto de navegador propio
+  // de este test: no arrastra la sesión del dueño.
+  await ingresarSinAsumirDestino(page, { email: "caja@platlia.com", password: "platlia123" });
+  await expect(page).toHaveURL(/\/pos$/);
+});
+
+test("el administrador también entra directo a POS", async ({ page }) => {
+  await ingresarSinAsumirDestino(page, { email: "admin@platlia.com", password: "platlia123" });
+  await expect(page).toHaveURL(/\/pos$/);
+});
+
+test("el propietario sigue viendo el panel: es quien mira la salud del negocio", async ({
+  page,
+}) => {
+  await ingresar(page, DUENO);
+  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page.getByRole("link", { name: "Ir al POS" })).toBeVisible();
+});
+
+test("desde POS se abre un pedido para llevar y uno a domicilio", async ({ page }) => {
+  await ingresar(page, DUENO);
+  await abrirCaja(page);
+  await page.goto("/pos");
+
+  await page.getByLabel("Nombre del cliente").fill("Recoge en mostrador");
+  await page.getByRole("button", { name: /nuevo pedido/i }).click();
+  // La página del pedido no dice "para llevar" en ningún lado: solo el turno.
+  // Esa distinción se lee en la lista de /pos, no en el detalle.
+  await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
+  await expect(page.getByText(/turno \d+/i)).toBeVisible();
+
+  await page.goto("/pos");
+  await expect(
+    page.locator("li").filter({ hasText: "Recoge en mostrador" }),
+  ).toContainText("para llevar");
+
+  await page.getByLabel("Tipo de pedido").selectOption("DOMICILIO");
+  await page.getByLabel("Nombre del cliente").fill("Envío a domicilio");
+  // Sin dirección, el servidor lo rechaza: abrirPedidoSchema la exige para DOMICILIO.
+  await page.getByRole("button", { name: /nuevo pedido/i }).click();
+  await expect(page.getByText(/un domicilio necesita dirección/i)).toBeVisible();
+
+  await page.getByLabel("Dirección de entrega").fill("Calle 10 # 20-30");
+  await page.getByRole("button", { name: /nuevo pedido/i }).click();
+  await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
+
+  await page.goto("/pos");
+  await expect(
+    page.locator("li").filter({ hasText: "Envío a domicilio" }),
+  ).toContainText("domicilio");
+
+  await cerrarPedidosAbiertos(page);
+  await dejarCajaCerrada(page);
+});
+
+test("al prender mesas de nuevo, /salon vuelve y POS desaparece del menú", async ({ page }) => {
+  await ingresar(page, DUENO);
+  await prenderMesas(page);
+
+  await page.goto("/salon");
+  // level:1 porque "Salón" es el h1 de esta página Y el nombre de un área del
+  // salón sembrado: sin acotar el nivel, el h2 del área también matchea.
+  await expect(page.getByRole("heading", { name: "Salón", level: 1 })).toBeVisible();
+
+  await expect(page.getByRole("link", { name: "Salón", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "POS", exact: true })).toHaveCount(0);
+});

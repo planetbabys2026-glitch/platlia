@@ -130,6 +130,7 @@ export const guardarProducto = defineAction({
       name: input.name,
       description: input.description ?? null,
       sku: input.sku ?? null,
+      imageUrl: input.imageUrl ?? null,
       priceCop: input.priceCop,
       kitchenStation: input.kitchenStation ?? null,
       preparationMinutes: input.preparationMinutes ?? null,

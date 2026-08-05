@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { AppModule } from "@/generated/prisma/enums";
 import { getComandas } from "@/features/cocina/queries";
+import { getSettings } from "@/features/negocio/queries";
 import { requireModule } from "@/lib/auth/dal";
+import { currentBusinessDate } from "@/lib/time";
 import { Comanda, RefrescoAutomatico } from "./comanda";
 
 export const metadata: Metadata = { title: "Cocina" };
@@ -9,7 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function CocinaPage() {
   const ctx = await requireModule(AppModule.COCINA);
-  const estaciones = await getComandas(ctx.business.id);
+  const settings = await getSettings(ctx.business.id);
+  const estaciones = await getComandas(ctx.business.id, currentBusinessDate(settings));
 
   const total = estaciones.reduce((n, e) => n + e.comandas.length, 0);
 

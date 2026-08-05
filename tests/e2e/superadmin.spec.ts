@@ -14,7 +14,7 @@ const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
 async function ingresarApp(page: Page, datos: { email: string; password: string }) {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(datos.email);
-  await page.getByLabel("Contraseña").fill(datos.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
 }
 
@@ -56,9 +56,10 @@ test("el superadministrador entra por su puerta y ve los negocios", async ({ pag
   await page.getByRole("button", { name: /entrar/i }).click();
 
   await expect(page).toHaveURL(/\/superadmin$/);
-  await expect(page.getByRole("heading", { name: "Superadministración" })).toBeVisible();
+  // level:1: "Negocios" es el h1 de la página Y el h2 de la tarjeta con la
+  // lista, dentro de esa misma página.
+  await expect(page.getByRole("heading", { name: "Negocios", level: 1 })).toBeVisible();
   await expect(page.getByText("Bar Demo").first()).toBeVisible();
-  await expect(page.getByText("Negocios").first()).toBeVisible();
 });
 
 test("un correo que no es superadministrador recibe el mismo mensaje", async ({ page }) => {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FormularioIngreso } from "./formulario";
 
 export const metadata: Metadata = { title: "Ingresar" };
@@ -8,9 +9,9 @@ export const metadata: Metadata = { title: "Ingresar" };
 export default async function IngresarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ desde?: string }>;
+  searchParams: Promise<{ desde?: string; restablecida?: string }>;
 }) {
-  const { desde } = await searchParams;
+  const { desde, restablecida } = await searchParams;
 
   return (
     <div className="space-y-6">
@@ -20,6 +21,14 @@ export default async function IngresarPage({
           Con el correo y la contraseña de tu cuenta.
         </p>
       </div>
+
+      {restablecida && (
+        <Alert>
+          <AlertDescription>
+            Tu contraseña quedó cambiada. Entrá con la nueva.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <FormularioIngreso desde={desde} />
 

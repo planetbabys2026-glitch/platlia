@@ -58,7 +58,7 @@ test.describe("webhook de MercadoPago", () => {
 test("la pantalla de facturación muestra el estado de la licencia", async ({ page }) => {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(DUENO.email);
-  await page.getByLabel("Contraseña").fill(DUENO.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(DUENO.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
   await expect(page).toHaveURL(/\/panel$/);
 

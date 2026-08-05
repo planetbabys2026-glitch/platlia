@@ -19,7 +19,7 @@ const MESERO = {
 async function ingresar(page: Page, datos: { email: string; password: string }) {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(datos.email);
-  await page.getByLabel("Contraseña").fill(datos.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
   await expect(page).toHaveURL(/\/panel$/);
 }
@@ -85,7 +85,7 @@ test("el mesero dado de baja deja de entrar", async ({ page }) => {
   await page.context().clearCookies();
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(MESERO.email);
-  await page.getByLabel("Contraseña").fill(MESERO.clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(MESERO.clave);
   await page.getByRole("button", { name: /ingresar/i }).click();
 
   await expect(page).not.toHaveURL(/\/panel$/);

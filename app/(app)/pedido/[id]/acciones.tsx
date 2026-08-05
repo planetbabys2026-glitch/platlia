@@ -5,8 +5,11 @@ import { useFormStatus } from "react-dom";
 import { PaymentMethod } from "@/generated/prisma/enums";
 import {
   anularItem,
+  anularPedido,
   cambiarCantidad,
   pedirCuenta,
+  ponerNotaItem,
+  quitarItem,
   registrarPago,
 } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -82,6 +85,51 @@ export function ControlCantidad({
   );
 }
 
+/**
+ * La nota de un renglón ("sin cebolla", "extra salsa"). `key={notes}` para que,
+ * cuando el servidor devuelve un valor distinto (otro mesero la cambió, o esta
+ * misma acción la acaba de guardar), el input no controlado se remonte con el
+ * valor nuevo: sin eso queda pisado por el `defaultValue` con el que se montó
+ * la primera vez, el mismo problema que ya resolvimos para el monto a cobrar.
+ */
+export function NotaRenglon({ itemId, notes }: { itemId: string; notes: string | null }) {
+  const [estado, accion] = useActionState(ponerNotaItem, ESTADO_INICIAL);
+
+  return (
+    <form action={accion} className="flex items-center gap-1">
+      <input type="hidden" name="itemId" value={itemId} />
+      <Input
+        key={notes ?? ""}
+        name="notes"
+        defaultValue={notes ?? ""}
+        placeholder="Nota (sin cebolla, extra salsa…)"
+        aria-label="Nota del renglón"
+        maxLength={200}
+        className="h-7 flex-1 text-xs"
+      />
+      <Enviar variant="ghost" size="sm" className="h-7 shrink-0 text-xs">
+        {notes ? "Guardar" : "Agregar"}
+      </Enviar>
+      {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
+    </form>
+  );
+}
+
+/** Sacar un renglón que cocina todavía no tomó: sin motivo, para cualquiera que atiende. */
+export function QuitarRenglon({ itemId }: { itemId: string }) {
+  const [estado, accion] = useActionState(quitarItem, ESTADO_INICIAL);
+
+  return (
+    <form action={accion} className="inline">
+      <input type="hidden" name="itemId" value={itemId} />
+      <Enviar variant="ghost" size="sm" className="h-7 text-xs">
+        Quitar
+      </Enviar>
+      {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
+    </form>
+  );
+}
+
 export function AnularRenglon({ itemId }: { itemId: string }) {
   const [estado, accion] = useActionState(anularItem, ESTADO_INICIAL);
 
@@ -101,6 +149,55 @@ export function AnularRenglon({ itemId }: { itemId: string }) {
         Anular
       </Enviar>
       {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
+    </form>
+  );
+}
+
+/**
+ * Anula el pedido entero.
+ *
+ * Un pedido vacío lo anula el cajero —se abrió por error y, si no pudiera, no
+ * podría cerrar su turno—; uno con consumo, solo el administrador. La acción
+ * decide; acá solo se pide el motivo. El ejemplo del placeholder depende del
+ * tipo: "mesa abierta por error" no tiene sentido para un pedido que nunca
+ * tuvo mesa.
+ */
+export function AnularPedido({
+  orderId,
+  vacio,
+  esMesa,
+}: {
+  orderId: string;
+  vacio: boolean;
+  esMesa: boolean;
+}) {
+  const [estado, accion] = useActionState(anularPedido, ESTADO_INICIAL);
+
+  const placeholder = !vacio
+    ? "Motivo de la anulación"
+    : esMesa
+      ? "Motivo (mesa abierta por error)"
+      : "Motivo (pedido abierto por error)";
+
+  return (
+    <form action={accion} className="space-y-2">
+      <input type="hidden" name="orderId" value={orderId} />
+      <div className="flex items-center gap-1">
+        <Input
+          name="motivo"
+          required
+          minLength={3}
+          placeholder={placeholder}
+          aria-label="Motivo de la anulación del pedido"
+          className="h-8 text-xs"
+        />
+        <Enviar variant="ghost" size="sm" className="h-8 text-xs">
+          Anular pedido
+        </Enviar>
+      </div>
+      {!estado.ok && estado.error && (
+        <p className="text-destructive text-xs">{estado.error}</p>
+      )}
     </form>
   );
 }

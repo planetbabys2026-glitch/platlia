@@ -1,14 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppModule } from "@/generated/prisma/enums";
+import { AppModule, Role } from "@/generated/prisma/enums";
 import { getCarta, getPedido } from "@/features/pedidos/queries";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { requireModule } from "@/lib/auth/dal";
+import { requireModule, tieneRol } from "@/lib/auth/dal";
 import { formatCop, formatRateBp } from "@/lib/money";
 import { Carta } from "./carta";
-import { AnularRenglon, Cobrar, ControlCantidad, PedirCuenta } from "./acciones";
+import {
+  AnularPedido,
+  AnularRenglon,
+  Cobrar,
+  ControlCantidad,
+  NotaRenglon,
+  PedirCuenta,
+  QuitarRenglon,
+} from "./acciones";
 
 export const metadata: Metadata = { title: "Pedido" };
 export const dynamic = "force-dynamic";
@@ -41,6 +49,10 @@ export default async function PedidoPage({
   const editable = pedido.status === "ABIERTA" || pedido.status === "CUENTA_PEDIDA";
   const renglones = pedido.items.filter((i) => i.status !== "ANULADO");
   const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);
+  // El mesero canta y ajusta la mesa, pero no factura: anularItem, anularPedido
+  // y registrarPago ya lo exigen en el servidor. Ofrecerle acá el botón sería
+  // una trampa que siempre falla.
+  const puedeCobrar = tieneRol(ctx.role, [Role.CAJERO, Role.ADMINISTRADOR]);
 
   return (
     <div className="space-y-6">
@@ -120,10 +132,19 @@ export default async function PedidoPage({
                           {formatRateBp(item.taxRateBpSnapshot)}
                         </span>
                       </div>
-                      {item.notes && (
-                        <p className="text-muted-foreground text-xs italic">{item.notes}</p>
+                      {editable ? (
+                        <NotaRenglon itemId={item.id} notes={item.notes} />
+                      ) : (
+                        item.notes && (
+                          <p className="text-muted-foreground text-xs italic">{item.notes}</p>
+                        )
                       )}
-                      {editable && <AnularRenglon itemId={item.id} />}
+                      {editable &&
+                        (item.status === "PENDIENTE" ? (
+                          <QuitarRenglon itemId={item.id} />
+                        ) : (
+                          puedeCobrar && <AnularRenglon itemId={item.id} />
+                        ))}
                     </li>
                   ))}
                 </ul>
@@ -153,7 +174,19 @@ export default async function PedidoPage({
             <PedirCuenta orderId={pedido.id} />
           )}
 
-          {editable && renglones.length > 0 && (
+          {editable && puedeCobrar && (
+            <Card>
+              <CardContent>
+                <AnularPedido
+                  orderId={pedido.id}
+                  vacio={renglones.length === 0}
+                  esMesa={pedido.type === "MESA"}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {editable && puedeCobrar && renglones.length > 0 && (
             <Card>
               <CardContent>
                 <h2 className="mb-3 font-medium">Cobrar</h2>

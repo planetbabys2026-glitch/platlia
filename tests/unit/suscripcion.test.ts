@@ -153,6 +153,19 @@ describe("diasParaElCorte", () => {
     ).toBe(-4);
   });
 
+  it("cuenta exactamente los días de prueba cuando la suscripción está en PRUEBA", () => {
+    expect(
+      diasParaElCorte(
+        sub({
+          status: "PRUEBA",
+          trialEndsAt: new Date("2026-08-12T00:00:00Z"),
+          graceUntil: new Date("2026-08-15T00:00:00Z"),
+        }),
+        ahora,
+      ),
+    ).toBe(7);
+  });
+
   it("sin fechas no hay cuenta que dar", () => {
     expect(diasParaElCorte(sub(), ahora)).toBeNull();
   });

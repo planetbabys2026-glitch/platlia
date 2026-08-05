@@ -187,7 +187,7 @@ async function main() {
       trialEndsAt: finPrueba,
       currentPeriodStart: new Date(),
       currentPeriodEnd: finPrueba,
-      graceUntil: new Date(finPrueba.getTime() + 3 * DIA_MS),
+      graceUntil: finPrueba,
     },
   });
 

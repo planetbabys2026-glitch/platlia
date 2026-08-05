@@ -88,7 +88,10 @@ export function estadoSegunFechas(
 
 /** Días que faltan para que se corte el servicio. Negativo si ya se cortó. */
 export function diasParaElCorte(sub: PeriodoSuscripcion, ahora = new Date()): number | null {
-  const limite = sub.graceUntil ?? sub.currentPeriodEnd ?? sub.trialEndsAt;
+  const limite =
+    sub.status === "PRUEBA"
+      ? (sub.trialEndsAt ?? sub.currentPeriodEnd ?? sub.graceUntil)
+      : (sub.graceUntil ?? sub.currentPeriodEnd ?? sub.trialEndsAt);
   if (!limite) return null;
   return Math.ceil((limite.getTime() - ahora.getTime()) / 86_400_000);
 }

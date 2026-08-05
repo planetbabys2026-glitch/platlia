@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { z } from "zod";
 // Autenticación: resuelve al usuario y crea la empresa ANTES de que exista un
 // businessId con el que acotar. Es una de las tres excepciones previstas por la
 // regla (auth, billing, superadmin).
@@ -13,14 +14,21 @@ import {
   createSession,
   destroySession,
   readSession,
+  revokeAllSessions,
   setSessionBusiness,
 } from "@/lib/auth/session";
+import { emitirToken, emitidoHaceMenosDe, consumirToken } from "@/features/auth/tokens";
 import {
   crearNegocioSchema,
   elegirNegocioSchema,
   ingresarSchema,
   registroSchema,
+  restablecerPasswordSchema,
+  solicitarRecuperacionSchema,
 } from "@/features/auth/schemas";
+import { env } from "@/lib/env";
+import { correoDeRecuperacion, correoDeVerificacion } from "@/lib/email/plantillas";
+import { enviarCorreoSinBloquear } from "@/lib/email/enviar";
 
 const DIA_MS = 86_400_000;
 const DIAS_DE_PRUEBA = 7;
@@ -90,7 +98,7 @@ async function crearNegocio(nombre: string, userId: string) {
           trialEndsAt: finPrueba,
           currentPeriodStart: new Date(),
           currentPeriodEnd: finPrueba,
-          graceUntil: new Date(finPrueba.getTime() + DIAS_DE_GRACIA * DIA_MS),
+          graceUntil: finPrueba,
         },
       },
     },
@@ -186,7 +194,129 @@ export const registrarse = definePublicAction({
 
     const negocio = await crearNegocio(input.nombreNegocio, user.id);
     await createSession({ userId: user.id, businessId: negocio.id });
+
+    // No bloquea: que Resend esté caído no puede impedir que el negocio quede
+    // creado. El dueño ya entró; confirmar el correo es lo que sigue, no lo que
+    // condiciona el alta.
+    const token = await emitirToken(user.id, "EMAIL_VERIFICATION");
+    const verificacion = correoDeVerificacion({
+      nombre: input.name,
+      urlDeVerificacion: `${env.APP_URL}/verificar-correo?token=${token}`,
+    });
+    await enviarCorreoSinBloquear({
+      para: input.email,
+      asunto: verificacion.asunto,
+      html: verificacion.html,
+      texto: verificacion.texto,
+      contexto: `verificación de correo para ${input.email}`,
+    });
+
     redirect("/panel");
+  },
+});
+
+const COOLDOWN_REENVIO_MS = 60_000;
+
+export const solicitarRecuperacion = definePublicAction({
+  schema: solicitarRecuperacionSchema,
+  async handler({ input }) {
+    const user = await rootDb.user.findUnique({
+      where: { email: input.email },
+      select: { id: true, name: true, status: true, deletedAt: true },
+    });
+
+    // Se manda el correo solo si hay cuenta activa, pero SIEMPRE se contesta lo
+    // mismo: decir "ese correo no existe" es regalarle a cualquiera la lista de
+    // quién tiene cuenta en el negocio.
+    if (user && user.status === "ACTIVO" && !user.deletedAt) {
+      const yaPedido = await emitidoHaceMenosDe(
+        user.id,
+        "PASSWORD_RESET",
+        COOLDOWN_REENVIO_MS,
+      );
+      if (!yaPedido) {
+        const token = await emitirToken(user.id, "PASSWORD_RESET");
+        const recuperacion = correoDeRecuperacion({
+          urlDeRestablecer: `${env.APP_URL}/restablecer-contrasena?token=${token}`,
+        });
+        await enviarCorreoSinBloquear({
+          para: input.email,
+          asunto: recuperacion.asunto,
+          html: recuperacion.html,
+          texto: recuperacion.texto,
+          contexto: `recuperación de contraseña para ${input.email}`,
+        });
+      }
+    }
+
+    return {
+      mensaje:
+        "Si ese correo tiene una cuenta, ya le mandamos cómo recuperar la contraseña.",
+    };
+  },
+});
+
+export const restablecerContrasena = definePublicAction({
+  schema: restablecerPasswordSchema,
+  async handler({ input }) {
+    const resultado = await consumirToken(input.token, "PASSWORD_RESET");
+    if (!resultado.ok) {
+      throw new ErrorDeUsuario(
+        resultado.motivo === "usado"
+          ? "Ese enlace ya se usó. Pedí uno nuevo."
+          : "Ese enlace venció o no es válido. Pedí uno nuevo.",
+      );
+    }
+
+    await rootDb.user.update({
+      where: { id: resultado.userId },
+      data: {
+        passwordHash: await hashPassword(input.password),
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+
+    // Si el motivo para cambiarla fue que alguien más la sabía, dejar sus
+    // sesiones abiertas no arregla nada.
+    await revokeAllSessions(resultado.userId);
+
+    redirect("/ingresar?restablecida=1");
+  },
+});
+
+export const reenviarVerificacion = definePublicAction({
+  schema: z.object({}),
+  async handler() {
+    const sesion = await readSession("APP");
+    if (!sesion) redirect("/ingresar");
+
+    const user = await rootDb.user.findUnique({
+      where: { id: sesion.userId },
+      select: { id: true, name: true, email: true, emailVerifiedAt: true },
+    });
+    if (!user) redirect("/ingresar");
+    if (user.emailVerifiedAt) return { mensaje: "Ese correo ya estaba confirmado." };
+
+    const yaPedido = await emitidoHaceMenosDe(user.id, "EMAIL_VERIFICATION", COOLDOWN_REENVIO_MS);
+    if (yaPedido) {
+      throw new ErrorDeUsuario("Ya te mandamos un correo hace un momento. Revisá tu bandeja.");
+    }
+
+    const token = await emitirToken(user.id, "EMAIL_VERIFICATION");
+    const verificacion = correoDeVerificacion({
+      nombre: user.name,
+      urlDeVerificacion: `${env.APP_URL}/verificar-correo?token=${token}`,
+    });
+    await enviarCorreoSinBloquear({
+      para: user.email,
+      asunto: verificacion.asunto,
+      html: verificacion.html,
+      texto: verificacion.texto,
+      contexto: `reenvío de verificación para ${user.email}`,
+    });
+
+    return { mensaje: "Te mandamos un correo nuevo." };
   },
 });
 

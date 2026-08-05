@@ -69,6 +69,11 @@ enum SessionKind {
   SUPERADMIN
 }
 
+enum VerificationTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 enum SubscriptionStatus {
   PRUEBA
   ACTIVA
@@ -235,10 +240,31 @@ model BusinessSettings {
   /// en negocios donde el mesero toma pedidos antes de que llegue el cajero.
   requireOpenCashSession Boolean @default(true)
 
+  /// No todo negocio reparte a domicilio. Si está en false, "Domicilio" no
+  /// aparece como tipo de pedido y no hace falta pedir dirección. Mesas se
+  /// apaga aparte, como AppModule: es una pantalla entera (/salon), no un tipo
+  /// de pedido dentro de otra pantalla.
+  deliveryEnabled Boolean @default(true)
+
   /// Impresión térmica. El ancho decide el @page de app/imprimir.
   receiptWidth  ReceiptWidth @default(MM80)
   receiptHeader String?
   receiptFooter String?
+
+  /// Imagen que el POS y la carta muestran para un producto sin foto propia.
+  /// Se elige desde Configuración entre lo que el superadministrador cargó a
+  /// Cloudinary; si el negocio no eligió ninguna, la carta usa la que el
+  /// superadministrador marcó `isDefault`. Solo si tampoco hay esa cae al
+  /// inicial tipográfico.
+  defaultPlaceholderId String?
+  defaultPlaceholder   PlaceholderImage? @relation(fields: [defaultPlaceholderId], references: [id], onDelete: SetNull)
+
+  /// Configuración del Turnero para Televisor del Salón
+  turneroMediaMode            String  @default("NONE")
+  turneroImages               String  @default("[]")
+  turneroImageIntervalSeconds Int     @default(10)
+  turneroYoutubeUrl           String?
+  turneroBadgePosition        String  @default("TOP_RIGHT")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -318,16 +344,17 @@ model User {
 
   memberships        Membership[]
   sessions           Session[]
+  verificationTokens VerificationToken[]
   auditLogs          AuditLog[]
-  ordersOpened       Order[]        @relation("OrderOpenedBy")
-  ordersClosed       Order[]        @relation("OrderClosedBy")
-  ordersCanceled     Order[]        @relation("OrderCanceledBy")
-  orderItemsCreated  OrderItem[]    @relation("OrderItemCreatedBy")
-  orderItemsCanceled OrderItem[]    @relation("OrderItemCanceledBy")
-  paymentsReceived   OrderPayment[] @relation("OrderPaymentReceivedBy")
-  cashSessionsOpened CashSession[]  @relation("CashSessionOpenedBy")
-  cashSessionsClosed CashSession[]  @relation("CashSessionClosedBy")
-  cashMovements      CashMovement[] @relation("CashMovementCreatedBy")
+  ordersOpened       Order[]             @relation("OrderOpenedBy")
+  ordersClosed       Order[]             @relation("OrderClosedBy")
+  ordersCanceled     Order[]             @relation("OrderCanceledBy")
+  orderItemsCreated  OrderItem[]         @relation("OrderItemCreatedBy")
+  orderItemsCanceled OrderItem[]         @relation("OrderItemCanceledBy")
+  paymentsReceived   OrderPayment[]      @relation("OrderPaymentReceivedBy")
+  cashSessionsOpened CashSession[]       @relation("CashSessionOpenedBy")
+  cashSessionsClosed CashSession[]       @relation("CashSessionClosedBy")
+  cashMovements      CashMovement[]      @relation("CashMovementCreatedBy")
 
   @@index([isSuperAdmin])
 }
@@ -382,6 +409,30 @@ model Session {
 
   @@index([userId, kind])
   @@index([expiresAt])
+}
+
+/// Un solo uso: verificar el correo o restablecer la contraseña. Se guarda el
+/// hash del token, no el token —igual que una contraseña— porque una fila de
+/// esta tabla filtrada no puede regalar la cuenta de nadie.
+///
+/// `purpose` distingue las dos razones porque comparten forma entera: usuario,
+/// vencimiento, un solo uso. Antes de emitir uno nuevo se borran los anteriores
+/// sin usar del mismo usuario y propósito, así nunca hay dos enlaces vivos
+/// compitiendo por ser "el" válido.
+model VerificationToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose   VerificationTokenPurpose
+  tokenHash String                   @unique
+
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, purpose])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -564,6 +615,32 @@ model ProductVariant {
   @@index([businessId, productId])
 }
 
+/// Biblioteca de fotos genéricas en Cloudinary que el superadministrador cura
+/// desde /superadmin, para negocios que no suben sus propias fotos de producto.
+/// Es global, no de una empresa: `businessId` no aplica y por eso se consulta con
+/// rootDb, nunca con tenantDb().
+model PlaceholderImage {
+  id String @id @default(cuid())
+
+  /// Cómo la ve el propietario al elegirla desde Configuración: "Cerveza",
+  /// "Plato genérico". Es una etiqueta, no una categoría de producto.
+  label    String
+  imageUrl String
+
+  /// La que usa cualquier negocio que no eligió una propia. Solo puede haber una
+  /// verdadera a la vez; eso lo cuida la acción que la marca, no una constraint
+  /// de base —el mismo patrón que TaxRate.isDefault.
+  isDefault Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  businesses BusinessSettings[]
+
+  @@index([sortOrder])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Salón
 // ─────────────────────────────────────────────────────────────────────────────
@@ -635,6 +712,11 @@ model Order {
 
   /// Número que se canta y se muestra en el televisor del salón. Rota al llegar
   /// a BusinessSettings.turnNumberMax. Solo para pedidos que se esperan.
+  ///
+  /// NO es único dentro de la jornada, y no puede serlo: rotar significa
+  /// repetirse, y un índice único convertía el tope en un techo de pedidos para
+  /// llevar por día. Quien evita que dos personas esperando compartan número es
+  /// `abrirPedido`, que saltea los turnos que siguen en el televisor.
   turnNumber Int?
 
   type   OrderType   @default(MESA)
@@ -683,7 +765,7 @@ model Order {
   payments OrderPayment[]
 
   @@unique([businessId, businessDate, code])
-  @@unique([businessId, businessDate, turnNumber])
+  @@index([businessId, businessDate, turnNumber])
   @@index([businessId, status])
   @@index([businessId, businessDate])
   @@index([businessId, tableId, status])

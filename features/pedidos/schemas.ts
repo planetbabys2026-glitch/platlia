@@ -36,6 +36,13 @@ export const cambiarCantidadSchema = z.object({
   quantity: cantidad,
 });
 
+export const ponerNotaItemSchema = z.object({
+  itemId: id,
+  notes: textoOpcional(200),
+});
+
+export const quitarItemSchema = z.object({ itemId: id });
+
 export const anularItemSchema = z.object({
   itemId: id,
   motivo: z

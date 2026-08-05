@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { abrirCaja, dejarCajaCerrada, ingresar } from "./apoyo";
 
 /**
  * El informe de la jornada.
@@ -8,26 +9,6 @@ import { expect, test, type Page } from "@playwright/test";
  * el dueño usa para decidir y lo que el contador usa para declarar.
  */
 test.describe.configure({ mode: "serial" });
-
-const CAJERO = { email: "caja@platlia.com", password: "platlia123" };
-
-async function ingresar(page: Page) {
-  await page.goto("/ingresar");
-  await page.getByLabel("Correo").fill(CAJERO.email);
-  await page.getByLabel("Contraseña").fill(CAJERO.password);
-  await page.getByRole("button", { name: /ingresar/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
-}
-
-async function dejarCajaCerrada(page: Page) {
-  await page.goto("/caja");
-  const cerrar = page.getByRole("button", { name: /cerrar caja/i });
-  if (await cerrar.isVisible().catch(() => false)) {
-    await page.getByLabel(/cuánto contaste/i).fill("0");
-    await cerrar.click();
-    await expect(page.getByRole("heading", { name: "Caja" })).toBeVisible();
-  }
-}
 
 test("una venta cobrada aparece en el informe con el impuesto desagregado", async ({
   page,
@@ -42,9 +23,7 @@ test("una venta cobrada aparece en el informe con el impuesto desagregado", asyn
   const pedidosAntes = await leerCifra(page, "Pedidos");
 
   // Se vende: tres cervezas de $5.000 con 8% incluido.
-  await page.goto("/caja");
-  await page.getByLabel(/base del turno/i).fill("0");
-  await page.getByRole("button", { name: /abrir caja/i }).click();
+  await abrirCaja(page);
 
   await page.goto("/salon");
   await page.getByRole("button", { name: /abrir pedido en la mesa 6$/i }).click();

@@ -26,7 +26,9 @@ export const ingresarSchema = z.object({
   desde: z.string().optional(),
 });
 
-export const registroSchema = z.object({
+// Objeto base, sin el .refine() de abajo: crearNegocioSchema necesita .pick(),
+// que solo existe en un ZodObject y no en el ZodEffects que devuelve .refine().
+const registroBase = z.object({
   name: z
     .string()
     .trim()
@@ -34,6 +36,7 @@ export const registroSchema = z.object({
     .max(120, "El nombre es demasiado largo."),
   email: correo,
   password: contrasena,
+  confirmarPassword: z.string(),
   nombreNegocio: z
     .string()
     .trim()
@@ -41,7 +44,28 @@ export const registroSchema = z.object({
     .max(120, "El nombre del negocio es demasiado largo."),
 });
 
-export const crearNegocioSchema = registroSchema.pick({ nombreNegocio: true });
+export const registroSchema = registroBase.refine(
+  (v) => v.password === v.confirmarPassword,
+  { error: "Las contraseñas no coinciden.", path: ["confirmarPassword"] },
+);
+
+export const crearNegocioSchema = registroBase.pick({ nombreNegocio: true });
+
+export const solicitarRecuperacionSchema = z.object({
+  email: correo,
+});
+
+// Mismo motivo que registroBase: .pick()/.extend() necesitan un ZodObject.
+const restablecerBase = z.object({
+  token: z.string().min(1, "Ese enlace no es válido."),
+  password: contrasena,
+  confirmarPassword: z.string(),
+});
+
+export const restablecerPasswordSchema = restablecerBase.refine(
+  (v) => v.password === v.confirmarPassword,
+  { error: "Las contraseñas no coinciden.", path: ["confirmarPassword"] },
+);
 
 export const elegirNegocioSchema = z.object({
   businessId: z.string().min(1, "Elegí un negocio."),

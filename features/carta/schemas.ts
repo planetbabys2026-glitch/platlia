@@ -29,6 +29,12 @@ export const productoSchema = z.object({
   name: nombre,
   description: textoOpcional(500),
   sku: textoOpcional(40),
+  // Por ahora se pega la URL a mano (por ejemplo, subida aparte a Cloudinary):
+  // el widget de subida directa desde acá es un paso siguiente, no este.
+  imageUrl: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.url("Pegá una URL de imagen válida.").max(500).optional(),
+  ),
   priceCop: montoCopPositivo,
   /** Vacío = la tarifa por defecto de la empresa. */
   taxRateId: z.preprocess((v) => (v === "" ? undefined : v), id.optional()),

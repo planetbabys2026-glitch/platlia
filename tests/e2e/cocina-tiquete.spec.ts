@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { abrirCaja, dejarCajaCerrada, ingresar } from "./apoyo";
 
 /**
  * Comandas y tiquete: lo que pasa después de que el mesero canta un producto.
@@ -7,33 +8,9 @@ import { expect, test, type Page } from "@playwright/test";
  */
 test.describe.configure({ mode: "serial" });
 
-const CAJERO = { email: "caja@platlia.com", password: "platlia123" };
-
-async function ingresar(page: Page) {
-  await page.goto("/ingresar");
-  await page.getByLabel("Correo").fill(CAJERO.email);
-  await page.getByLabel("Contraseña").fill(CAJERO.password);
-  await page.getByRole("button", { name: /ingresar/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
-}
-
-async function dejarCajaCerrada(page: Page) {
-  await page.goto("/caja");
-  const cerrar = page.getByRole("button", { name: /cerrar caja/i });
-  if (await cerrar.isVisible().catch(() => false)) {
-    await page.getByLabel(/cuánto contaste/i).fill("0");
-    await cerrar.click();
-    await expect(page.getByRole("heading", { name: "Caja" })).toBeVisible();
-  }
-}
-
 test.beforeEach(async ({ page }) => {
   await ingresar(page);
-  await dejarCajaCerrada(page);
-  await page.goto("/caja");
-  await page.getByLabel(/base del turno/i).fill("0");
-  await page.getByRole("button", { name: /abrir caja/i }).click();
-  await expect(page.getByRole("heading", { name: /^caja \d+$/i })).toBeVisible();
+  await abrirCaja(page);
 });
 
 test.afterEach(async ({ page }) => {
@@ -56,7 +33,7 @@ test("lo que se canta aparece en cocina, separado por estación", async ({ page 
   await expect(page.getByRole("heading", { name: /^barra ·/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^cocina ·/i })).toBeVisible();
 
-  // La comanda avanza pendiente → en preparación → listo.
+  // La comanda avanza pendiente → en preparación → listo → entregado.
   const bandeja = page
     .locator("article")
     .filter({ hasText: "Bandeja paisa" })
@@ -66,7 +43,12 @@ test("lo que se canta aparece en cocina, separado por estación", async ({ page 
   await expect(bandeja.getByRole("button", { name: "Listo" })).toBeVisible();
   await bandeja.getByRole("button", { name: "Listo" }).click();
 
-  // Marcada lista, sale de la pantalla de cocina.
+  // Marcada lista NO sale de la pantalla: si saliera, nadie podría marcarla
+  // entregada y el plato se quedaría "listo" para siempre en la base.
+  await expect(bandeja.getByRole("button", { name: "Entregar" })).toBeVisible();
+
+  // Entregada sí: ahí deja de ser trabajo de nadie.
+  await bandeja.getByRole("button", { name: "Entregar" }).click();
   await expect(
     page.locator("article").filter({ hasText: "Bandeja paisa" }),
   ).toHaveCount(0);

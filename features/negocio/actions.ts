@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Role } from "@/generated/prisma/enums";
-import { datosNegocioSchema, operacionSchema } from "@/features/negocio/schemas";
+import { AppModule, Role } from "@/generated/prisma/enums";
+import { datosNegocioSchema, modulosSchema, operacionSchema, turneroSchema } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { assertTimeZone } from "@/lib/time";
 
@@ -84,5 +84,71 @@ export const guardarOperacion = defineAction({
     revalidatePath("/administracion/configuracion");
     revalidatePath("/panel");
     revalidatePath("/caja");
+  },
+});
+
+/**
+ * Prende o apaga mesas y domicilios.
+ *
+ * No todo negocio los usa —un local de mostrador no tiene mesas que sentar—, y
+ * la interfaz se adapta: sin mesas, "Salón" desaparece del menú y la pantalla de
+ * entrada pasa a ser /pos.
+ */
+export const guardarModulos = defineAction({
+  schema: modulosSchema,
+  roles: ADMINISTRAN,
+  async handler({ input, ctx, db }) {
+    if (!input.mesasHabilitado) {
+      // Apagar mesas con una mesa ocupada dejaría ese pedido sin ninguna
+      // pantalla desde la cual seguir atendiéndolo: /salon desaparece del menú
+      // y /pedido/[id] no se llega a él sin el enlace directo.
+      const mesaAbierta = await db.order.findFirst({
+        where: { type: "MESA", status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
+        select: { id: true },
+      });
+      if (mesaAbierta) {
+        throw new ErrorDeUsuario(
+          "Hay una mesa con un pedido abierto. Cobralo o anulalo antes de apagar mesas.",
+        );
+      }
+    }
+
+    await db.businessModule.upsert({
+      where: { businessId_module: { businessId: ctx.business.id, module: AppModule.MESAS } },
+      update: { enabled: input.mesasHabilitado },
+      create: {
+        businessId: ctx.business.id,
+        module: AppModule.MESAS,
+        enabled: input.mesasHabilitado,
+      },
+    });
+
+    await db.businessSettings.updateMany({
+      data: { deliveryEnabled: input.deliveryEnabled },
+    });
+
+    revalidatePath("/administracion/configuracion");
+    revalidatePath("/salon");
+    revalidatePath("/pos");
+    revalidatePath("/panel");
+  },
+});
+
+export const guardarTurneroSettings = defineAction({
+  schema: turneroSchema,
+  roles: ADMINISTRAN,
+  async handler({ input, db }) {
+    await db.businessSettings.updateMany({
+      data: {
+        turneroMediaMode: input.turneroMediaMode,
+        turneroImages: input.turneroImages,
+        turneroImageIntervalSeconds: input.turneroImageIntervalSeconds,
+        turneroYoutubeUrl: input.turneroYoutubeUrl ?? null,
+        turneroBadgePosition: input.turneroBadgePosition,
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
+    revalidatePath("/turnero");
   },
 });

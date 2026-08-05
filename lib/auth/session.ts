@@ -146,13 +146,21 @@ export async function destroySession(kind: SessionKindToken = "APP"): Promise<vo
 }
 
 /**
- * Revoca todas las sesiones de un usuario. Se usa al cambiar la contraseña y al
- * dar de baja a alguien: si el motivo para cambiarla fue que alguien más la sabía,
- * dejar sus sesiones abiertas no arregla nada.
+ * Revoca las sesiones de un usuario. Se usa al cambiar la contraseña y al dar de
+ * baja a alguien: si el motivo para cambiarla fue que alguien más la sabía, dejar
+ * sus sesiones abiertas no arregla nada.
+ *
+ * `kind` acota a un solo tipo de sesión. Hace falta para quitarle a alguien el
+ * acceso de superadministrador sin de paso cerrarle la sesión que tenga como
+ * cliente de un negocio: son dos cuentas de acceso independientes que comparten
+ * usuario, y perder una no tiene por qué tocar la otra.
  */
-export async function revokeAllSessions(userId: string): Promise<number> {
+export async function revokeAllSessions(
+  userId: string,
+  kind?: SessionKindToken,
+): Promise<number> {
   const { count } = await rootDb.session.updateMany({
-    where: { userId, revokedAt: null },
+    where: { userId, revokedAt: null, ...(kind ? { kind } : {}) },
     data: { revokedAt: new Date() },
   });
   return count;

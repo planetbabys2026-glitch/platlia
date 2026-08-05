@@ -26,7 +26,13 @@ export { licenciaVigente, tieneRol };
 
 export type Contexto = {
   session: SesionViva;
-  user: { id: string; name: string; email: string; isSuperAdmin: boolean };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    isSuperAdmin: boolean;
+    emailVerifiedAt: Date | null;
+  };
   business: {
     id: string;
     name: string;
@@ -74,7 +80,7 @@ export const getCurrentUser = cache(async () => {
 
   return rootDb.user.findUnique({
     where: { id: sesion.userId },
-    select: { id: true, name: true, email: true, isSuperAdmin: true },
+    select: { id: true, name: true, email: true, isSuperAdmin: true, emailVerifiedAt: true },
   });
 });
 
@@ -84,7 +90,7 @@ export const getContext = cache(async (): Promise<Contexto | null> => {
 
   const user = await rootDb.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, name: true, email: true, isSuperAdmin: true },
+    select: { id: true, name: true, email: true, isSuperAdmin: true, emailVerifiedAt: true },
   });
   if (!user) return null;
 

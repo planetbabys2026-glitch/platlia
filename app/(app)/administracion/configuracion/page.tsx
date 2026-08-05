@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Role } from "@/generated/prisma/enums";
+import { AppModule, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/dal";
 import { tenantDb } from "@/lib/db/tenant";
-import { FormularioDatos, FormularioOperacion } from "./formularios";
+import { FormularioDatos, FormularioModulos, FormularioOperacion, FormularioTurnero } from "./formularios";
 
 export const metadata: Metadata = { title: "Configuración" };
 export const dynamic = "force-dynamic";
@@ -39,6 +39,37 @@ export default async function ConfiguracionPage() {
         <CardContent className="space-y-4">
           <h2 className="font-medium">Datos del negocio</h2>
           <FormularioDatos negocio={negocio} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4">
+          <h2 className="font-medium">Módulos</h2>
+          <p className="text-muted-foreground text-sm">
+            No todo negocio usa lo mismo: un local de mostrador no tiene mesas que sentar.
+          </p>
+          <FormularioModulos
+            mesasHabilitado={ctx.modules.has(AppModule.MESAS)}
+            deliveryEnabled={settings.deliveryEnabled}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4">
+          <h2 className="font-medium">Turnero del Salón</h2>
+          <p className="text-muted-foreground text-sm">
+            Personalizá la pantalla del televisor: multimedia de fondo, carrusel de fotos publicitaria o video de YouTube, y la posición del recuadro de turnos listos.
+          </p>
+          <FormularioTurnero
+            settings={{
+              turneroMediaMode: settings.turneroMediaMode,
+              turneroImages: settings.turneroImages,
+              turneroImageIntervalSeconds: settings.turneroImageIntervalSeconds,
+              turneroYoutubeUrl: settings.turneroYoutubeUrl,
+              turneroBadgePosition: settings.turneroBadgePosition,
+            }}
+          />
         </CardContent>
       </Card>
 

@@ -13,7 +13,7 @@ const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
 async function ingresar(page: import("@playwright/test").Page, datos = DUENO) {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(datos.email);
-  await page.getByLabel("Contraseña").fill(datos.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
 }
 
@@ -81,7 +81,8 @@ test("el registro crea negocio, licencia de prueba y deja adentro", async ({ pag
   await page.getByLabel("Tu nombre").fill("Prueba Automática");
   await page.getByLabel("Nombre del negocio").fill(`Bar de Prueba ${sufijo}`);
   await page.getByLabel("Correo").fill(`prueba-${sufijo}@platlia.test`);
-  await page.getByLabel("Contraseña").fill("contrasenasegura");
+  await page.getByLabel("Contraseña", { exact: true }).fill("contrasenasegura");
+  await page.getByLabel("Repetir contraseña").fill("contrasenasegura");
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
 
   await expect(page).toHaveURL(/\/panel$/);

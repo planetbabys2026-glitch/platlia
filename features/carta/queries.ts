@@ -22,6 +22,7 @@ export async function getCartaAdmin(businessId: string) {
           id: true,
           name: true,
           sku: true,
+          imageUrl: true,
           priceCop: true,
           active: true,
           isAvailable: true,

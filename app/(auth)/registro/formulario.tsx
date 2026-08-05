@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Campo } from "@/components/formulario/campo";
+import { CampoContrasena } from "@/components/formulario/campo-contrasena";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { registrarse } from "@/features/auth/actions";
@@ -53,14 +54,20 @@ export function FormularioRegistro() {
         required
         errores={campos?.email}
       />
-      <Campo
+      <CampoContrasena
         label="Contraseña"
         name="password"
-        type="password"
         autoComplete="new-password"
         required
         ayuda="Mínimo 8 caracteres."
         errores={campos?.password}
+      />
+      <CampoContrasena
+        label="Repetir contraseña"
+        name="confirmarPassword"
+        autoComplete="new-password"
+        required
+        errores={campos?.confirmarPassword}
       />
 
       <Enviar />

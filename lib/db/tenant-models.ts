@@ -41,7 +41,12 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
  * así que la forma correcta de listar el personal de una empresa es consultar
  * Membership e incluir el usuario.
  */
-export const GLOBAL_MODELS: ReadonlySet<string> = new Set(["User", "MpWebhookEvent"]);
+export const GLOBAL_MODELS: ReadonlySet<string> = new Set([
+  "User",
+  "VerificationToken",
+  "MpWebhookEvent",
+  "PlaceholderImage",
+]);
 
 /**
  * `Business` es el único modelo que se acota por `id` en lugar de `businessId`:

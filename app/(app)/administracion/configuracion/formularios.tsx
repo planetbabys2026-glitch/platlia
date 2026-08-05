@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ReceiptWidth } from "@/generated/prisma/enums";
-import { guardarDatosNegocio, guardarOperacion } from "@/features/negocio/actions";
+import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarTurneroSettings } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -254,6 +254,134 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
       />
 
       <Enviar>Guardar configuración</Enviar>
+    </form>
+  );
+}
+
+export function FormularioModulos({
+  mesasHabilitado,
+  deliveryEnabled,
+}: {
+  mesasHabilitado: boolean;
+  deliveryEnabled: boolean;
+}) {
+  const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
+
+  return (
+    <form action={accion} className="space-y-4">
+      <Resultado estado={estado} />
+
+      <Casilla
+        name="mesasHabilitado"
+        label="Este negocio sienta mesas"
+        defaultChecked={mesasHabilitado}
+        ayuda={
+          mesasHabilitado
+            ? "Apagalo si es un mostrador sin mesas: el Salón desaparece y la pantalla de entrada pasa a ser POS."
+            : "Está apagado: la pantalla de entrada es POS, no Salón."
+        }
+      />
+
+      <Casilla
+        name="deliveryEnabled"
+        label="Este negocio reparte a domicilio"
+        defaultChecked={deliveryEnabled}
+        ayuda="Si lo apagás, 'Domicilio' deja de ofrecerse como tipo de pedido."
+      />
+
+      <Enviar>Guardar módulos</Enviar>
+    </form>
+  );
+}
+
+export type TurneroSettingsProps = {
+  turneroMediaMode: string;
+  turneroImages: string;
+  turneroImageIntervalSeconds: number;
+  turneroYoutubeUrl: string | null;
+  turneroBadgePosition: string;
+};
+
+export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps }) {
+  const [estado, accion] = useActionState(guardarTurneroSettings, ESTADO_INICIAL);
+  const [modo, setModo] = useState(settings.turneroMediaMode);
+
+  return (
+    <form action={accion} className="space-y-4">
+      <Resultado estado={estado} />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="turneroMediaMode">Fondo / Multimedia del Televisor</Label>
+          <select
+            id="turneroMediaMode"
+            name="turneroMediaMode"
+            value={modo}
+            onChange={(e) => setModo(e.target.value)}
+            className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+          >
+            <option value="NONE">Sin multimedia (Fondo Oscuro Estándar)</option>
+            <option value="IMAGES">Carrusel de Imágenes Publicitarias</option>
+            <option value="YOUTUBE">Video de YouTube (Embed)</option>
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="turneroBadgePosition">Posición del Recuadro de Turnos Listos</Label>
+          <select
+            id="turneroBadgePosition"
+            name="turneroBadgePosition"
+            defaultValue={settings.turneroBadgePosition}
+            className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+          >
+            <option value="TOP_RIGHT">Esquina Superior Derecha</option>
+            <option value="TOP_LEFT">Esquina Superior Izquierda</option>
+          </select>
+        </div>
+      </div>
+
+      {modo === "IMAGES" && (
+        <div className="space-y-4 pt-2 border-t border-border">
+          <div className="space-y-1.5">
+            <Label htmlFor="turneroImages">URLs de Imágenes Publicitarias (Una por línea o separadas por coma)</Label>
+            <textarea
+              id="turneroImages"
+              name="turneroImages"
+              rows={3}
+              defaultValue={settings.turneroImages}
+              placeholder="https://ejemplo.com/promo1.jpg&#10;https://ejemplo.com/promo2.jpg"
+              className="border-input bg-card focus-visible:ring-ring w-full rounded-lg border p-3 text-sm focus-visible:ring-3 focus-visible:outline-none font-mono text-xs"
+            />
+            <p className="text-muted-foreground text-xs">
+              Ingresá enlaces directos de imágenes promocionales para proyectar en el salón.
+            </p>
+          </div>
+
+          <Campo
+            label="Intervalo de rotación de imágenes (segundos)"
+            name="turneroImageIntervalSeconds"
+            type="number"
+            min={3}
+            max={300}
+            defaultValue={settings.turneroImageIntervalSeconds}
+            ayuda="Cada cuántos segundos cambia automáticamente la imagen del carrusel."
+          />
+        </div>
+      )}
+
+      {modo === "YOUTUBE" && (
+        <div className="space-y-2 pt-2 border-t border-border">
+          <Campo
+            label="Enlace o ID del Video de YouTube"
+            name="turneroYoutubeUrl"
+            defaultValue={settings.turneroYoutubeUrl ?? ""}
+            placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            ayuda="El video se reproducirá automáticamente en bucle como fondo del turnero."
+          />
+        </div>
+      )}
+
+      <Enviar>Guardar configuración de turnero</Enviar>
     </form>
   );
 }

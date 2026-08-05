@@ -154,6 +154,22 @@ export function NuevoProducto({
         </div>
       </div>
 
+      <div className="space-y-1">
+        <Label htmlFor={`imagen-${categoryId}`} className="text-xs">
+          URL de la imagen
+        </Label>
+        <Input
+          id={`imagen-${categoryId}`}
+          name="imageUrl"
+          type="url"
+          placeholder="https://res.cloudinary.com/…"
+        />
+        <p className="text-muted-foreground text-xs">
+          Opcional. Sin imagen, el POS muestra la inicial del producto.
+        </p>
+        {campos?.imageUrl && <p className="text-destructive text-xs">{campos.imageUrl[0]}</p>}
+      </div>
+
       <Enviar size="sm">Agregar producto</Enviar>
     </form>
   );

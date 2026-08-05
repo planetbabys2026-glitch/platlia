@@ -105,6 +105,23 @@ Errores: cualquier excepción dentro de una acción se convierte en un mensaje g
 filtrar detalles del servidor. Para un texto que sí deba leer el usuario ("ese correo ya tiene
 cuenta") se lanza `ErrorDeUsuario`.
 
+**Verificación de correo y recuperación de contraseña** (`features/auth/tokens.ts`) comparten un
+solo modelo, `VerificationToken`, distinguido por `purpose`. Se guarda el **hash** del token, no
+el token: una fila filtrada no puede regalar ninguna cuenta. Antes de emitir uno nuevo se borran
+los anteriores sin usar del mismo usuario y propósito, para que nunca haya dos enlaces vivos
+compitiendo por ser "el" válido.
+
+Verificar el correo consume el token en un simple `GET` —como en casi todo el resto de la
+industria—: saber el propio correo no da acceso a nada. Restablecer la contraseña NO: el enlace
+del correo abre un formulario y el token se consume recién al mandarlo por `POST`. La diferencia
+importa porque los escáneres de seguridad de algunos correos corporativos abren los enlaces por su
+cuenta antes de que la persona los toque; que eso queme un token de sesión real sería un enlace de
+recuperación muerto antes de usarse.
+
+`solicitarRecuperacion` contesta **siempre el mismo mensaje**, exista o no la cuenta —el mismo
+principio que ya aplica `ingresar` con su hash señuelo—: decir "ese correo no existe" es regalarle
+a cualquiera la lista de quién tiene cuenta.
+
 ## Superadministración
 
 Puerta aparte: cookie `pl_sa` con path `/superadmin`, sesión de tipo `SUPERADMIN` y
@@ -117,12 +134,25 @@ indistinguible de una ruta inexistente y no confirma que la puerta exista. El to
 tiempo constante.
 
 La consola muestra **cuentas, no contenido**: cuántas mesas y cuántos pedidos, nunca qué
-vendieron. Dar soporte no requiere leerle la operación a nadie. Toda acción pide motivo y queda
-en `AuditLog` con quién la hizo.
+vendieron. Dar soporte no requiere leerle la operación a nadie. Toda acción sobre un negocio
+—suspender, extender licencia— pide motivo y queda en `AuditLog` con quién la hizo, porque son
+cosas que un dueño después pregunta por qué se hicieron. Las de `/superadmin/equipo` (agregar,
+editar, resetear clave, quitar acceso) quedan igual en `AuditLog` pero sin motivo escrito: es
+gestión interna del propio equipo de soporte, no una acción sobre un cliente.
 
 **En un archivo `"use server"` no pueden vivir los esquemas de zod**: toda función a nivel de
 módulo se compila como Server Action y el build falla con "Server Actions must be async
 functions", que no menciona a zod por ningún lado. Por eso cada feature tiene su `schemas.ts`.
+
+**El equipo de superadministración no tiene jerarquía de roles**, a diferencia del de un negocio:
+cualquiera edita, resetea la contraseña o da de alta a cualquiera, porque ya es el mismo círculo
+de confianza. La única regla real (`lib/auth/reglas-superadmin.ts`) es la que impide los dos
+accidentes que dejan a la plataforma sin nadie que pueda entrar: quitarse el acceso a uno mismo, y
+quitarle el acceso al último que queda. Quitarle a alguien la marca de superadministrador revoca
+solo sus sesiones de tipo `SUPERADMIN` (`revokeAllSessions(userId, "SUPERADMIN")`): si esa persona
+además es cliente de algún negocio, esa sesión no tiene nada que ver con esto y sigue viva.
+Resetearle la contraseña sí revoca todo, sin filtrar por tipo: la contraseña cambió, así que toda
+sesión que dependía de ella tiene que morir.
 
 ## Equipo y correo
 
@@ -208,6 +238,7 @@ prisma/schema.prisma     modelo de datos    prisma/migrations/    prisma/seed.ts
 generated/prisma/        cliente generado (ignorado por git)
 app/(auth|onboarding|app|superadmin|bootstrap|bloqueado)/   grupos de rutas
 app/imprimir/            HTML limpio para @page 55mm/80mm
+app/turnero/             el televisor del salón: fuera de (app), sin barra de navegación
 lib/db/                  pool.ts · root.ts (rootDb) · tenant.ts (tenantDb) · tenant-models.ts
 lib/{auth,actions,billing,printing,email}/      infraestructura
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests

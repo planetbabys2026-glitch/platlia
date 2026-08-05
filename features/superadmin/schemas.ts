@@ -11,12 +11,16 @@ import { z } from "zod";
 
 const correo = z.string().trim().toLowerCase().pipe(z.email("Escribí un correo válido."));
 
+// Más larga que la de un usuario normal: esta cuenta ve todos los negocios.
+const contrasenaSuperAdmin = z
+  .string()
+  .min(12, "Para un superadministrador, mínimo 12 caracteres.");
+
 export const bootstrapSchema = z.object({
   token: z.string().min(1, "Falta el token."),
   name: z.string().trim().min(2, "Escribí el nombre.").max(120),
   email: correo,
-  // Más larga que la de un usuario normal: esta cuenta ve todos los negocios.
-  password: z.string().min(12, "Para un superadministrador, mínimo 12 caracteres."),
+  password: contrasenaSuperAdmin,
 });
 
 export const ingresoSchema = z.object({
@@ -40,4 +44,25 @@ export const suspenderSchema = sobreEmpresa.extend({
 export const extenderSchema = sobreEmpresa.extend({
   dias: z.preprocess((v) => Number(v), z.number().int().min(1).max(365)),
   motivo,
+});
+
+export const agregarSuperAdminSchema = z.object({
+  name: z.string().trim().min(2, "Escribí el nombre.").max(120),
+  email: correo,
+  password: contrasenaSuperAdmin,
+});
+
+export const editarSuperAdminSchema = z.object({
+  userId: z.string().min(1),
+  name: z.string().trim().min(2, "Escribí el nombre.").max(120),
+  email: correo,
+});
+
+export const restablecerContrasenaSuperAdminSchema = z.object({
+  userId: z.string().min(1),
+  password: contrasenaSuperAdmin,
+});
+
+export const quitarSuperAdminSchema = z.object({
+  userId: z.string().min(1),
 });

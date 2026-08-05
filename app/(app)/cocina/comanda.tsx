@@ -51,9 +51,14 @@ function useMinutos(desde: number): number {
   return Math.max(0, Math.floor((ahora - desde) / 60_000));
 }
 
+const SIGUIENTE_PASO: Record<string, string> = {
+  PENDIENTE: "Empezar",
+  EN_PREPARACION: "Listo",
+  LISTO: "Entregar",
+};
+
 function Boton({ estado }: { estado: string }) {
   const { pending } = useFormStatus();
-  const etiqueta = estado === "PENDIENTE" ? "Empezar" : "Listo";
 
   return (
     <button
@@ -66,7 +71,7 @@ function Boton({ estado }: { estado: string }) {
           : "bg-primary text-primary-foreground hover:bg-primary/80",
       )}
     >
-      {pending ? "…" : etiqueta}
+      {pending ? "…" : (SIGUIENTE_PASO[estado] ?? "Avanzar")}
     </button>
   );
 }
@@ -81,6 +86,9 @@ export function Comanda({ comanda }: { comanda: ComandaEnPantalla }) {
       className={cn(
         "border-border bg-card space-y-2 rounded-xl border p-3",
         comanda.estado === "EN_PREPARACION" && "border-primary",
+        // Lo listo se apaga: ya no es trabajo de la cocina, solo falta que
+        // alguien lo lleve.
+        comanda.estado === "LISTO" && "border-espera-ok opacity-70",
       )}
     >
       <div className="flex items-start justify-between gap-2">

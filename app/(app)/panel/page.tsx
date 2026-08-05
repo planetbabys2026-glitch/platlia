@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { AppModule, Role } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { requireActiveLicense } from "@/lib/auth/dal";
 import { tenantDb } from "@/lib/db/tenant";
 import { formatBusinessDate, currentBusinessDate } from "@/lib/time";
+import { AvisoCorreoSinVerificar } from "./verificar-correo";
 
 export const metadata: Metadata = { title: "Panel" };
 
@@ -14,10 +17,21 @@ export const dynamic = "force-dynamic";
 export default async function PanelPage() {
   // La página verifica por su cuenta, como todas: sesión + empresa + licencia.
   const ctx = await requireActiveLicense();
+  const usaMesas = ctx.modules.has(AppModule.MESAS);
+
+  // Cajero y administrador entran a trabajar, no a mirar indicadores: sin mesas
+  // no hay salón que atender, y el panel —pensado para quien mira la salud del
+  // negocio— no es la pantalla que necesitan al entrar. El propietario sí sigue
+  // viendo el panel: es quien de verdad usa esos números.
+  if (!usaMesas && (ctx.role === Role.CAJERO || ctx.role === Role.ADMINISTRADOR)) {
+    redirect("/pos");
+  }
+
   const db = tenantDb(ctx.business.id);
 
   const [mesas, productos, cajaAbierta] = await Promise.all([
-    db.table.count({ where: { deletedAt: null } }),
+    // Sin mesas no hace falta contarlas: nadie va a ver ese número.
+    usaMesas ? db.table.count({ where: { deletedAt: null } }) : Promise.resolve(0),
     db.product.count({ where: { deletedAt: null, active: true } }),
     db.cashSession.findFirst({
       where: { status: "ABIERTA" },
@@ -39,6 +53,8 @@ export default async function PanelPage() {
         </p>
       </div>
 
+      {!ctx.user.emailVerifiedAt && <AvisoCorreoSinVerificar email={ctx.user.email} />}
+
       {ctx.licencia.enGracia && (
         <Card className="border-warning">
           <CardContent>
@@ -54,7 +70,7 @@ export default async function PanelPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Indicador titulo="Mesas" valor={mesas} />
+        {usaMesas && <Indicador titulo="Mesas" valor={mesas} />}
         <Indicador titulo="Productos en carta" valor={productos} />
         <Indicador
           titulo="Caja"
@@ -65,7 +81,7 @@ export default async function PanelPage() {
 
       <div className="flex flex-wrap gap-3">
         <Button asChild size="lg">
-          <Link href="/salon">Ir al salón</Link>
+          <Link href={usaMesas ? "/salon" : "/pos"}>{usaMesas ? "Ir al salón" : "Ir al POS"}</Link>
         </Button>
         <Button asChild size="lg" variant="outline">
           <Link href="/caja">{cajaAbierta ? "Ver la caja" : "Abrir la caja"}</Link>

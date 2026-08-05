@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AppModule, OrderType, Role } from "@/generated/prisma/enums";
+import { AppModule, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { recalcularTotales } from "@/features/pedidos/totales";
+import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
 import {
   abrirPedidoSchema,
   agregarItemSchema,
@@ -12,12 +13,14 @@ import {
   cambiarCantidadSchema,
   pagoSchema,
   pedidoSchema,
+  ponerNotaItemSchema,
   propinaSchema,
+  quitarItemSchema,
 } from "@/features/pedidos/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { tieneRol } from "@/lib/auth/reglas";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
-import { siguienteTurno } from "@/lib/turns";
 
 /** Roles que atienden el salón: todos menos cocina. */
 const ATIENDEN = [Role.MESERO, Role.CAJERO, Role.ADMINISTRADOR] as const;
@@ -97,24 +100,15 @@ export const abrirPedido = defineAction({
           select: { code: true },
         });
 
-        // El turno solo aplica a lo que el cliente espera; una mesa se llama por
-        // su número, no por turno.
-        let turnNumber: number | null = null;
-        if (input.type !== OrderType.MESA) {
-          const ultimoTurno = await tx.order.findFirst({
-            where: { businessDate, turnNumber: { not: null } },
-            orderBy: { turnNumber: "desc" },
-            select: { turnNumber: true },
-          });
-          turnNumber = siguienteTurno(ultimoTurno?.turnNumber ?? null, settings.turnNumberMax);
-        }
-
+        // El turno NO se reparte acá. Se asigna recién cuando el pedido se cobra
+        // (registrarPago): en un mostrador de venta rápida, el turnero no tiene
+        // por qué gritar un número por algo que el cliente ni siquiera terminó de
+        // pedir, ni por un pedido que se anula antes de pagarse.
         const pedido = await tx.order.create({
           data: {
             businessId: ctx.business.id,
             code: (ultimo?.code ?? 0) + 1,
             businessDate,
-            turnNumber,
             type: input.type,
             tableId: input.tableId ?? null,
             cashSessionId: caja?.id ?? null,
@@ -304,6 +298,96 @@ export const cambiarCantidad = defineAction({
   },
 });
 
+/**
+ * La nota de un renglón: "sin cebolla", "extra queso", "bien cocido".
+ *
+ * No toca precio ni impuesto —es texto para la cocina, no un producto nuevo—,
+ * así que no hace falta recalcular nada. Cualquiera de los que atienden puede
+ * escribirla: es la forma barata de cubrir "adiciones y salsas" sin modelar un
+ * sistema de modificadores con precio propio.
+ */
+export const ponerNotaItem = defineAction({
+  schema: ponerNotaItemSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, db }) {
+    const item = await db.orderItem.findFirst({
+      where: { id: input.itemId },
+      select: { id: true, orderId: true, status: true, order: { select: { status: true } } },
+    });
+    if (!item) throw new ErrorDeUsuario("Ese renglón no existe.");
+    if (item.status === "ANULADO") throw new ErrorDeUsuario("Ese renglón está anulado.");
+    if (item.order.status === "PAGADA" || item.order.status === "ANULADA") {
+      throw new ErrorDeUsuario("El pedido ya está cerrado.");
+    }
+
+    await db.orderItem.update({
+      where: { id: item.id },
+      data: { notes: input.notes ?? null },
+    });
+
+    revalidatePath(`/pedido/${item.orderId}`);
+  },
+});
+
+/**
+ * Saca un renglón mientras se está armando el pedido.
+ *
+ * No es una anulación: cocina todavía no vio el renglón como algo por preparar
+ * —sigue PENDIENTE, nadie lo empezó—, así que no hace falta motivo ni queda en
+ * la bitácora. Apenas cocina lo toma (EN_PREPARACION en adelante) sacarlo ya es
+ * una anulación de verdad y pasa por `anularItem`, con motivo y solo para
+ * quien cobra. Por eso lo puede tocar cualquiera de ATIENDEN: es parte de tomar
+ * el pedido, no de facturarlo.
+ */
+export const quitarItem = defineAction({
+  schema: quitarItemSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx, db }) {
+    const orderId = await db.$transaction(async (tx) => {
+      const item = await tx.orderItem.findFirst({
+        where: { id: input.itemId },
+        select: {
+          id: true,
+          orderId: true,
+          quantity: true,
+          status: true,
+          productId: true,
+          product: { select: { trackStock: true } },
+          order: { select: { status: true } },
+        },
+      });
+      if (!item) throw new ErrorDeUsuario("Ese renglón no existe.");
+      if (item.status !== "PENDIENTE") {
+        throw new ErrorDeUsuario(
+          "Cocina ya lo tomó: para sacarlo hay que anularlo con motivo.",
+        );
+      }
+      if (item.order.status === "PAGADA" || item.order.status === "ANULADA") {
+        throw new ErrorDeUsuario("El pedido ya está cerrado.");
+      }
+
+      await tx.orderItem.update({
+        where: { id: item.id },
+        data: { status: "ANULADO", canceledAt: new Date(), canceledById: ctx.user.id },
+      });
+
+      if (item.product.trackStock) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQty: { increment: item.quantity } },
+        });
+      }
+
+      await recalcularTotales(tx, item.orderId);
+      return item.orderId;
+    });
+
+    revalidatePath(`/pedido/${orderId}`);
+  },
+});
+
 export const anularItem = defineAction({
   schema: anularItemSchema,
   roles: COBRAN,
@@ -441,6 +525,9 @@ export const registrarPago = defineAction({
         select: {
           id: true,
           status: true,
+          type: true,
+          turnNumber: true,
+          businessDate: true,
           totalCop: true,
           paidCop: true,
           tableId: true,
@@ -496,12 +583,22 @@ export const registrarPago = defineAction({
         faltante <= 0 || (huboEfectivo && faltante > 0 && faltante < settings.cashRoundingCop);
 
       if (cerrado) {
+        // El turno se reparte acá y no al abrir el pedido: es el momento en que
+        // el cliente pagó de verdad y hay algo que preparar. Una mesa se llama
+        // por su número, no por turno, y un pedido que ya tenía uno —porque esto
+        // es el segundo pago de varios— no pide otro.
+        const turnNumber =
+          pedido.type !== "MESA" && pedido.turnNumber === null
+            ? await siguienteTurnoLibre(tx, pedido.businessDate, settings.turnNumberMax)
+            : undefined;
+
         await tx.order.update({
           where: { id: pedido.id },
           data: {
             status: "PAGADA",
             closedAt: new Date(),
             closedById: ctx.user.id,
+            ...(turnNumber !== undefined ? { turnNumber } : {}),
             // Si el pedido se abrió sin caja, se cuelga de la que lo cobró: el
             // corte tiene que incluirlo.
             cashSessionId: pedido.cashSessionId ?? caja.id,
@@ -524,19 +621,43 @@ export const registrarPago = defineAction({
 
 export const anularPedido = defineAction({
   schema: anularPedidoSchema,
-  roles: [Role.ADMINISTRADOR],
+  // El cajero entra acá porque un pedido VACÍO también se anula desde esta
+  // acción, y ese caso es suyo. El chequeo fino está adentro.
+  roles: COBRAN,
   modulo: AppModule.PEDIDOS,
   async handler({ input, ctx, db }) {
     await db.$transaction(async (tx) => {
       const pedido = await tx.order.findFirst({
         where: { id: input.orderId },
-        select: { id: true, code: true, status: true, totalCop: true, tableId: true },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          totalCop: true,
+          tableId: true,
+          _count: { select: { items: { where: { status: { not: "ANULADO" } } } } },
+        },
       });
       if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
+
+      // Primero el estado del pedido, después quién lo pide: si no, a un cajero
+      // parado frente a un pedido ya pagado se le contesta "pedí un
+      // administrador" y sale a buscarlo para que le digan lo mismo. El estado es
+      // un hecho del pedido; el permiso, una cuestión de quién está mirando.
       if (pedido.status === "ANULADA") throw new ErrorDeUsuario("Ese pedido ya estaba anulado.");
       if (pedido.status === "PAGADA") {
         throw new ErrorDeUsuario(
           "Un pedido pagado no se anula: hay que registrar la devolución del pago.",
+        );
+      }
+
+      // Anular un pedido CON consumo es una decisión que después se discute, y
+      // la toma un administrador. Uno vacío es una mesa que se abrió por error:
+      // si solo el administrador pudiera borrarla, el cajero no podría cerrar su
+      // turno hasta que alguien apareciera.
+      if (pedido._count.items > 0 && !tieneRol(ctx.role, [Role.ADMINISTRADOR])) {
+        throw new ErrorDeUsuario(
+          "Ese pedido tiene consumo: solo un administrador puede anularlo.",
         );
       }
 

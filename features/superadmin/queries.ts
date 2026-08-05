@@ -61,6 +61,28 @@ export async function getResumenPlataforma() {
 }
 
 /**
+ * El equipo de superadministración: quién más tiene esta puerta.
+ *
+ * Por creación, el más viejo primero: es el orden en que se fueron sumando las
+ * personas de confianza a la consola.
+ */
+export async function getSuperAdmins() {
+  return rootDb.user.findMany({
+    where: { isSuperAdmin: true },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      status: true,
+      lastLoginAt: true,
+      lockedUntil: true,
+      createdAt: true,
+    },
+  });
+}
+
+/**
  * Avisos de MercadoPago que fallaron.
  *
  * Es la primera pantalla que se mira cuando alguien dice "pagué y no me
@@ -73,4 +95,66 @@ export async function getWebhooksConError() {
     take: 20,
     select: { id: true, mpEventId: true, type: true, error: true, receivedAt: true },
   });
+}
+
+/**
+ * Bitácora de auditoría de superadministradores.
+ * Muestra qué superadmin otorgó extensiones de licencia, suspenciones, reactivaciones y cambios de equipo.
+ */
+export async function getAuditLogs() {
+  return rootDb.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 150,
+    select: {
+      id: true,
+      action: true,
+      entity: true,
+      entityId: true,
+      metadata: true,
+      createdAt: true,
+      business: { select: { id: true, name: true, slug: true } },
+      user: { select: { id: true, name: true, email: true } },
+    },
+  });
+}
+
+/**
+ * Historial de pagos e intentos de adquisición de licencias (MercadoPago).
+ * Muestra tanto cobros aprobados como fallidos/rechazados y eventos de webhook recibidos.
+ */
+export async function getPagosEIntentos() {
+  const [pagos, webhooks] = await Promise.all([
+    rootDb.subscriptionPayment.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 150,
+      select: {
+        id: true,
+        amountCop: true,
+        status: true,
+        mpPaymentId: true,
+        mpPreferenceId: true,
+        mpStatusDetail: true,
+        method: true,
+        periodStart: true,
+        periodEnd: true,
+        paidAt: true,
+        createdAt: true,
+        business: { select: { id: true, name: true, slug: true } },
+      },
+    }),
+    rootDb.mpWebhookEvent.findMany({
+      orderBy: { receivedAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        mpEventId: true,
+        type: true,
+        error: true,
+        receivedAt: true,
+        processedAt: true,
+      },
+    }),
+  ]);
+
+  return { pagos, webhooks };
 }

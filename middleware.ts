@@ -18,6 +18,8 @@ const PUBLICAS = new Set([
   "/ingresar",
   "/registro",
   "/recuperar",
+  "/restablecer-contrasena",
+  "/verificar-correo",
   "/terminos",
   "/privacidad",
   "/pl-bootstrap",
@@ -79,10 +81,13 @@ function aIngresar(request: NextRequest, destino: string, esSuperadmin: boolean)
 export const config = {
   matcher: [
     /*
-     * Todo menos los estáticos y los archivos de marca. El negativo se escribe
-     * acá y no con `if`s adentro porque así el middleware ni siquiera se invoca
-     * para una imagen.
+     * Todo menos los estáticos, los archivos de marca y los de la PWA (manifest,
+     * service worker, iconos, respaldo offline). El negativo se escribe acá y no
+     * con `if`s adentro porque así el middleware ni siquiera se invoca para una
+     * imagen. `sw.js` es el más delicado de la lista: si pasara por acá, un
+     * dispositivo sin sesión recibiría un 307 en vez del script y el navegador
+     * jamás llegaría a registrar el service worker.
      */
-    "/((?!_next/static|_next/image|marca/|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2)$).*)",
+    "/((?!_next/static|_next/image|marca/|icons/|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|sw.js|offline.html|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2)$).*)",
   ],
 };

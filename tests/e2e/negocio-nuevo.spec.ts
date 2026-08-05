@@ -21,7 +21,8 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
   await page.getByLabel("Tu nombre").fill("Dueña M4");
   await page.getByLabel("Nombre del negocio").fill(NEGOCIO);
   await page.getByLabel("Correo").fill(CORREO);
-  await page.getByLabel("Contraseña").fill(CLAVE);
+  await page.getByLabel("Contraseña", { exact: true }).fill(CLAVE);
+  await page.getByLabel("Repetir contraseña").fill(CLAVE);
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
   await expect(page).toHaveURL(/\/panel$/);
 
@@ -93,7 +94,7 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
 test("la configuración cambia cómo se factura", async ({ page }) => {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(CORREO);
-  await page.getByLabel("Contraseña").fill(CLAVE);
+  await page.getByLabel("Contraseña", { exact: true }).fill(CLAVE);
   await page.getByRole("button", { name: /ingresar/i }).click();
   // Hay que esperar la navegación: un goto inmediato cancela el envío del
   // formulario y la sesión nunca llega a crearse.

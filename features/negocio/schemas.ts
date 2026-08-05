@@ -74,3 +74,21 @@ export const operacionSchema = z.object({
   receiptHeader: textoOpcional(300),
   receiptFooter: textoOpcional(300),
 });
+
+const casillaModulo = z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean());
+
+export const modulosSchema = z.object({
+  mesasHabilitado: casillaModulo,
+  deliveryEnabled: casillaModulo,
+});
+
+export const turneroSchema = z.object({
+  turneroMediaMode: z.enum(["NONE", "IMAGES", "YOUTUBE"]),
+  turneroImages: z.string().trim(),
+  turneroImageIntervalSeconds: z.preprocess(
+    (v) => (v === "" || v === undefined ? 10 : Number(v)),
+    z.number().int().min(3, "Mínimo 3 segundos.").max(300, "Máximo 300 segundos."),
+  ),
+  turneroYoutubeUrl: textoOpcional(500),
+  turneroBadgePosition: z.enum(["TOP_LEFT", "TOP_RIGHT"]),
+});

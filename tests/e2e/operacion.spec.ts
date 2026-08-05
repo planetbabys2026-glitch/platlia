@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { abrirCaja, dejarCajaCerrada, ingresar } from "./apoyo";
 
 /**
  * El turno completo de un bar: abrir caja, sentar una mesa, cantar productos,
@@ -8,27 +9,6 @@ import { expect, test, type Page } from "@playwright/test";
  * empresa: dos pruebas en paralelo se pisarían el turno.
  */
 test.describe.configure({ mode: "serial" });
-
-const CAJERO = { email: "caja@platlia.com", password: "platlia123" };
-
-async function ingresar(page: Page) {
-  await page.goto("/ingresar");
-  await page.getByLabel("Correo").fill(CAJERO.email);
-  await page.getByLabel("Contraseña").fill(CAJERO.password);
-  await page.getByRole("button", { name: /ingresar/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
-}
-
-/** Deja la caja cerrada, sin importar cómo terminó la prueba anterior. */
-async function dejarCajaCerrada(page: Page) {
-  await page.goto("/caja");
-  const cerrar = page.getByRole("button", { name: /cerrar caja/i });
-  if (await cerrar.isVisible().catch(() => false)) {
-    await page.getByLabel(/cuánto contaste/i).fill("0");
-    await cerrar.click();
-    await expect(page.getByRole("heading", { name: "Caja" })).toBeVisible();
-  }
-}
 
 test.beforeEach(async ({ page }) => {
   await ingresar(page);
@@ -126,9 +106,7 @@ test("un turno completo: abrir caja, cobrar una mesa y cuadrar el cierre", async
 });
 
 test("un gasto de caja baja lo esperado en el cajón", async ({ page }) => {
-  await page.goto("/caja");
-  await page.getByLabel(/base del turno/i).fill("50000");
-  await page.getByRole("button", { name: /abrir caja/i }).click();
+  await abrirCaja(page, "50000");
 
   await page.getByLabel(/monto/i).fill("12000");
   await page.getByLabel(/para qué fue/i).fill("Hielo");
@@ -141,9 +119,7 @@ test("un gasto de caja baja lo esperado en el cajón", async ({ page }) => {
 });
 
 test("no se puede cerrar la caja con un pedido sin cobrar", async ({ page }) => {
-  await page.goto("/caja");
-  await page.getByLabel(/base del turno/i).fill("0");
-  await page.getByRole("button", { name: /abrir caja/i }).click();
+  await abrirCaja(page);
 
   await page.goto("/salon");
   await page.getByRole("button", { name: /abrir pedido en la mesa 2$/i }).click();

@@ -95,6 +95,111 @@ export function correoDeBienvenida(args: {
   return { asunto, html, texto };
 }
 
+/**
+ * Bienvenida a alguien que acaba de sumarse al equipo de superadministración.
+ *
+ * Copia aparte de `correoDeBienvenida`: acá no hay negocio ni rol de producto,
+ * es acceso a toda la plataforma. Tampoco lleva la contraseña, por la misma
+ * razón de siempre: se la entrega quien lo agregó, no un correo.
+ */
+export function correoDeAltaSuperAdmin(args: { nombre: string; urlDeIngreso: string }): Correo {
+  const asunto = "Te sumaron al equipo de superadministración de Platlia";
+
+  const html = marco(`
+    <p style="margin:0 0 12px;font-size:15px">Hola ${escapar(args.nombre)},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.5">
+      Te agregaron a la consola de <strong>superadministración</strong> de Platlia:
+      desde ahí se da soporte a todos los negocios de la plataforma.
+    </p>
+    ${boton(args.urlDeIngreso, "Entrar a la consola")}
+    <p style="margin:12px 0 0;font-size:13px;color:${SUAVE};line-height:1.5">
+      La contraseña te la da quien te agregó: por seguridad no viaja por correo.
+      Si no esperabas este mensaje, ignoralo.
+    </p>
+  `);
+
+  const texto = [
+    `Hola ${args.nombre},`,
+    "",
+    "Te agregaron a la consola de superadministración de Platlia: desde ahí se da",
+    "soporte a todos los negocios de la plataforma.",
+    `Entrá acá: ${args.urlDeIngreso}`,
+    "",
+    "La contraseña te la da quien te agregó: por seguridad no viaja por correo.",
+    "Si no esperabas este mensaje, ignoralo.",
+  ].join("\n");
+
+  return { asunto, html, texto };
+}
+
+/**
+ * Confirmación de correo, al registrarse.
+ *
+ * Sin esto el dueño puede haber escrito mal su propio correo el día que más
+ * apurado estaba, y no lo sabría hasta el día que lo necesite para recuperar la
+ * contraseña —que es justo el día en que ya no puede entrar a corregirlo.
+ */
+export function correoDeVerificacion(args: { nombre: string; urlDeVerificacion: string }): Correo {
+  const asunto = "Confirmá tu correo en Platlia";
+
+  const html = marco(`
+    <p style="margin:0 0 12px;font-size:15px">Hola ${escapar(args.nombre)},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.5">
+      Confirmá que este es tu correo. Es el que vas a usar para entrar y, si algún
+      día olvidás la contraseña, el único lugar donde te podemos mandar cómo
+      recuperarla.
+    </p>
+    ${boton(args.urlDeVerificacion, "Confirmar mi correo")}
+    <p style="margin:12px 0 0;font-size:13px;color:${SUAVE};line-height:1.5">
+      El enlace vale por 7 días. Si no creaste esta cuenta, ignorá este mensaje.
+    </p>
+  `);
+
+  const texto = [
+    `Hola ${args.nombre},`,
+    "",
+    "Confirmá que este es tu correo: es el único lugar donde te podemos mandar cómo",
+    "recuperar tu contraseña si algún día la olvidás.",
+    `Confirmalo acá: ${args.urlDeVerificacion}`,
+    "",
+    "El enlace vale por 7 días. Si no creaste esta cuenta, ignorá este mensaje.",
+  ].join("\n");
+
+  return { asunto, html, texto };
+}
+
+/**
+ * Enlace para restablecer la contraseña.
+ *
+ * NO dice si el correo tiene cuenta o no —eso se decide antes de mandar el
+ * correo, nunca en su contenido— porque este texto es lo único que ve alguien
+ * que escribió un correo ajeno por error o a propósito.
+ */
+export function correoDeRecuperacion(args: { urlDeRestablecer: string }): Correo {
+  const asunto = "Restablecé tu contraseña en Platlia";
+
+  const html = marco(`
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.5">
+      Pediste restablecer la contraseña de tu cuenta en Platlia.
+    </p>
+    ${boton(args.urlDeRestablecer, "Elegir una contraseña nueva")}
+    <p style="margin:12px 0 0;font-size:13px;color:${SUAVE};line-height:1.5">
+      El enlace vale por una hora y sirve una sola vez. Si no lo pediste vos,
+      ignorá este mensaje: tu contraseña sigue siendo la misma.
+    </p>
+  `);
+
+  const texto = [
+    "Pediste restablecer la contraseña de tu cuenta en Platlia.",
+    `Elegí una nueva acá: ${args.urlDeRestablecer}`,
+    "",
+    "El enlace vale por una hora y sirve una sola vez.",
+    "Si no lo pediste vos, ignorá este mensaje: tu contraseña sigue siendo la misma.",
+  ].join("\n");
+
+  return { asunto, html, texto };
+}
+
 /** Aviso de que la licencia está por vencerse. */
 export function correoDeVencimiento(args: {
   negocio: string;
