@@ -122,6 +122,30 @@ export function splitCop(totalCop: Cop, parts: number): Cop[] {
   );
 }
 
+/**
+ * Promedio en pesos enteros: el ticket promedio de la jornada.
+ *
+ * Devuelve 0 cuando no hubo ventas, en vez de NaN: un informe con "NaN" en el
+ * ticket promedio hace dudar del resto de las cifras, aunque estén bien.
+ */
+export function promedioCop(totalCop: Cop, cantidad: number): Cop {
+  assertCop(totalCop);
+  if (!Number.isInteger(cantidad) || cantidad <= 0) return 0;
+  return Math.round(totalCop / cantidad);
+}
+
+/**
+ * Cuánto cambió una cifra respecto de otra, en porcentaje redondeado.
+ *
+ * Devuelve null si la base es cero: pasar de $0 a $500.000 no es "un aumento del
+ * infinito por ciento", es un dato que no admite porcentaje y la pantalla tiene
+ * que decir otra cosa.
+ */
+export function variacionPorcentual(actual: number, anterior: number): number | null {
+  if (anterior === 0) return null;
+  return Math.round(((actual - anterior) / Math.abs(anterior)) * 100);
+}
+
 /** Muestra una tasa en puntos básicos como porcentaje: 800 → "8%", 850 → "8,5%". */
 export function formatRateBp(rateBp: number): string {
   assertCop(rateBp, "la tasa en puntos básicos");

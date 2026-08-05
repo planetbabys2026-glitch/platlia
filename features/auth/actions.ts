@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { rootDb } from "@/lib/db/root";
 import { AppModule, Role, SubscriptionStatus, TaxKind } from "@/generated/prisma/enums";
 import { definePublicAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { hashPassword, hashSenuelo, verifyPassword } from "@/lib/auth/password";
 import {
   createSession,
   destroySession,
@@ -29,21 +29,6 @@ const DIAS_DE_GRACIA = 3;
 /** Tras 10 intentos fallidos la cuenta descansa 15 minutos. */
 const INTENTOS_MAXIMOS = 10;
 const BLOQUEO_MINUTOS = 15;
-
-/**
- * Hash señuelo: cuando el correo no existe se verifica contra él, para que
- * "no hay cuenta" y "contraseña incorrecta" tarden lo mismo y no se pueda
- * averiguar quién tiene cuenta midiendo el tiempo de respuesta.
- *
- * Se calcula de verdad, no es una constante escrita a mano: un hash inválido
- * haría que verifyPassword devolviera false al instante y la diferencia de
- * tiempo volvería a delatar al usuario. Se paga una sola vez por proceso.
- */
-let senuelo: Promise<string> | undefined;
-function hashSenuelo(): Promise<string> {
-  senuelo ??= hashPassword("senuelo-que-jamas-coincide-con-nada");
-  return senuelo;
-}
 
 const CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos.";
 

@@ -39,6 +39,34 @@ export type Contexto = {
   licencia: EstadoLicencia;
 };
 
+/**
+ * Sesión de superadministración.
+ *
+ * Es una puerta aparte: otra cookie (`pl_sa`, con path /superadmin), otro tipo de
+ * sesión y otra verificación. Una sesión del producto NO abre esta puerta por más
+ * que el usuario tenga la marca de superadministrador, y esa separación es a
+ * propósito: quien da soporte entra a propósito, no por arrastre.
+ */
+export const getSuperAdmin = cache(async () => {
+  const sesion = await readSession("SUPERADMIN");
+  if (!sesion) return null;
+
+  const user = await rootDb.user.findUnique({
+    where: { id: sesion.userId },
+    select: { id: true, name: true, email: true, isSuperAdmin: true, status: true },
+  });
+
+  // readSession ya lo verifica, pero esto no se deduce: se comprueba.
+  if (!user?.isSuperAdmin || user.status !== "ACTIVO") return null;
+  return user;
+});
+
+export async function requireSuperAdmin() {
+  const superAdmin = await getSuperAdmin();
+  if (!superAdmin) redirect("/superadmin/ingresar");
+  return superAdmin;
+}
+
 /** Sin empresa seleccionada todavía, o sin sesión. */
 export const getCurrentUser = cache(async () => {
   const sesion = await readSession("APP");

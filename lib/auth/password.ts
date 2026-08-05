@@ -41,3 +41,21 @@ export async function verifyPassword(hashed: string, plain: string): Promise<boo
     return false;
   }
 }
+
+/**
+ * Hash señuelo para cuando el correo no existe.
+ *
+ * Verificar contra él hace que "no hay cuenta" y "contraseña incorrecta" tarden
+ * lo mismo, y así no se puede averiguar quién tiene cuenta midiendo el tiempo de
+ * respuesta.
+ *
+ * Se calcula de verdad y no es una constante escrita a mano: un hash inválido
+ * haría que verifyPassword devolviera false al instante y la diferencia de
+ * tiempo volvería a delatar al usuario. Se paga una sola vez por proceso.
+ */
+let senuelo: Promise<string> | undefined;
+
+export function hashSenuelo(): Promise<string> {
+  senuelo ??= hashPassword("senuelo-que-jamas-coincide-con-nada");
+  return senuelo;
+}

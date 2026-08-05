@@ -5,9 +5,11 @@ import {
   formatCop,
   formatRateBp,
   parseCop,
+  promedioCop,
   roundCopTo,
   splitCop,
   sumCop,
+  variacionPorcentual,
 } from "@/lib/money";
 
 describe("formatCop", () => {
@@ -120,6 +122,34 @@ describe("splitCop", () => {
   it("rechaza divisores inválidos", () => {
     expect(() => splitCop(10000, 0)).toThrow(RangeError);
     expect(() => splitCop(10000, 2.5)).toThrow(RangeError);
+  });
+});
+
+describe("promedioCop", () => {
+  it("calcula el ticket promedio en pesos enteros", () => {
+    expect(promedioCop(150000, 4)).toBe(37500);
+    expect(promedioCop(100000, 3)).toBe(33333);
+  });
+
+  it("sin ventas devuelve 0, no NaN", () => {
+    // Un "NaN" en el informe hace dudar de todas las demás cifras.
+    expect(promedioCop(0, 0)).toBe(0);
+    expect(promedioCop(50000, 0)).toBe(0);
+    expect(promedioCop(50000, -1)).toBe(0);
+  });
+});
+
+describe("variacionPorcentual", () => {
+  it("compara contra el día anterior", () => {
+    expect(variacionPorcentual(150000, 100000)).toBe(50);
+    expect(variacionPorcentual(80000, 100000)).toBe(-20);
+    expect(variacionPorcentual(100000, 100000)).toBe(0);
+  });
+
+  it("con base cero no hay porcentaje que dar", () => {
+    // Pasar de $0 a $500.000 no es un aumento del infinito por ciento.
+    expect(variacionPorcentual(500000, 0)).toBeNull();
+    expect(variacionPorcentual(0, 0)).toBeNull();
   });
 });
 

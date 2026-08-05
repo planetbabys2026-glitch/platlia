@@ -105,6 +105,40 @@ Errores: cualquier excepción dentro de una acción se convierte en un mensaje g
 filtrar detalles del servidor. Para un texto que sí deba leer el usuario ("ese correo ya tiene
 cuenta") se lanza `ErrorDeUsuario`.
 
+## Superadministración
+
+Puerta aparte: cookie `pl_sa` con path `/superadmin`, sesión de tipo `SUPERADMIN` y
+`requireSuperAdmin()`. **Una sesión del producto no abre esta puerta** por más que el usuario
+tenga `isSuperAdmin`: quien da soporte entra a propósito, no por arrastre.
+
+`/pl-bootstrap` crea el superadministrador maestro una sola vez. Responde **404** —no "no
+autorizado"— cuando falta `SUPERADMIN_BOOTSTRAP_TOKEN` o cuando ya existe uno: así es
+indistinguible de una ruta inexistente y no confirma que la puerta exista. El token se compara en
+tiempo constante.
+
+La consola muestra **cuentas, no contenido**: cuántas mesas y cuántos pedidos, nunca qué
+vendieron. Dar soporte no requiere leerle la operación a nadie. Toda acción pide motivo y queda
+en `AuditLog` con quién la hizo.
+
+**En un archivo `"use server"` no pueden vivir los esquemas de zod**: toda función a nivel de
+módulo se compila como Server Action y el build falla con "Server Actions must be async
+functions", que no menciona a zod por ningún lado. Por eso cada feature tiene su `schemas.ts`.
+
+## Equipo y correo
+
+El alta de empleados la hace el dueño en persona: crea la cuenta con una contraseña y se la
+entrega. **La contraseña nunca viaja por correo** —quedaría escrita para siempre en un buzón que
+no controlamos—; el correo solo avisa que lo sumaron y da el enlace de ingreso.
+
+Las reglas de quién puede hacerle qué a quién viven en `lib/auth/reglas-equipo.ts`, puras y con
+tests. Las dos que importan: solo un propietario nombra propietarios (si no, un administrador se
+asciende solo) y no se puede degradar ni dar de baja al último propietario. Dar de baja o
+cambiar una contraseña **revoca las sesiones** de esa persona: si no, dar de baja no es dar de baja.
+
+**Un correo nunca tumba una operación.** `enviarCorreoSinBloquear` registra el fallo y sigue: que
+Resend esté caído no puede impedir que un empleado quede creado. `APP_URL` se normaliza sin barra
+final en `lib/env.ts`, porque todo el código compone `${APP_URL}/algo`.
+
 ## Facturación
 
 Se cobra con Checkout Pro: se crea una preferencia, el cliente paga en MercadoPago y vuelve.
@@ -197,12 +231,21 @@ contra la base sembrada, así que antes va `pnpm seed`.
 Los e2e corren **en serie y con un solo worker**: comparten una base cuyo estado clave es
 singleton —hay una sola caja abierta por empresa— y en paralelo se pisan entre archivos.
 
-Dos trampas que ya costaron tiempo dos veces cada una:
+**No dejes `pnpm dev` corriendo mientras corrés los e2e.** `next dev` vigila el proyecto y
+reescribe el mismo `.next` que usa el build de producción: al tocar cualquier archivo lo corrompe
+y el servidor empieza a responder 500 con `Cannot read properties of undefined (reading 'call')`
+y `Could not find files for /_error`. El síntoma no se parece en nada a la causa.
+
+Tres trampas más, que ya costaron tiempo dos veces cada una:
 
 - **Next inyecta un `role="alert"` vacío** (`#__next-route-announcer__`) para anunciar los
   cambios de ruta. Un `getByRole("alert")` suelto lo agarra a él y falla con `""`. Hay que
   acotar al formulario: `page.locator("form").filter({ has: … }).getByRole("alert")`.
-- **Después de enviar un formulario hay que esperar la navegación** antes del siguiente
-  `goto`, o el `goto` cancela el envío y la acción nunca corre.
+- **Después de enviar un formulario o de hacer clic en un enlace hay que esperar la navegación**
+  (`await expect(page).toHaveURL(...)`) antes de leer la página o de hacer otro `goto`. Sin eso
+  se lee la página vieja, o el `goto` cancela el envío y la acción nunca corre.
+- **Los selectores por texto son ambiguos más seguido de lo que parece**: "Salón" es el `h1` y
+  también un área del seed; "Contraseña" coincide con los campos "Contraseña nueva" de cada
+  miembro del equipo. Conviene acotar con `level`, `exact` o al formulario que corresponde.
 
 El gestor de paquetes es **pnpm**. No hay `package-lock.json`.

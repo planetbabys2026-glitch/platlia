@@ -36,7 +36,11 @@ const schema = z.object({
     }),
   // openssl rand -base64 48
   SESSION_SECRET: z.string().min(32, "debe tener al menos 32 caracteres"),
-  APP_URL: z.url(),
+  // Se le quita la barra final: todo el código compone `${APP_URL}/algo`, y una
+  // barra de más produce enlaces con doble barra en los correos y en la URL que
+  // se le declara al webhook de MercadoPago. Es demasiado fácil de escribir mal
+  // en un panel como para confiar en que nadie lo haga.
+  APP_URL: z.url().transform((valor) => valor.replace(/\/+$/, "")),
 
   // ─── Correo (Resend) ──────────────────────────────────────────────────────
   RESEND_API_KEY: opcional(z.string().min(1)),

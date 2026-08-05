@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 const SECCIONES = [
   { href: "/administracion/carta", label: "Carta" },
   { href: "/administracion/salon", label: "Salón" },
+  { href: "/administracion/equipo", label: "Equipo" },
   { href: "/administracion/configuracion", label: "Configuración" },
 ] as const;
 

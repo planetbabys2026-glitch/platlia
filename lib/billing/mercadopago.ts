@@ -66,8 +66,10 @@ export async function crearPreferenciaDePago(args: {
     },
   });
 
-  const urlDePago =
-    env.NODE_ENV === "production" ? preferencia.init_point : preferencia.sandbox_init_point;
+  // Cuál de las dos URLs sirve lo decide la CREDENCIAL, no el NODE_ENV: con un
+  // token de producción no existe sandbox_init_point, y elegir por entorno dejaba
+  // el checkout sin enlace al probar en local con credenciales reales.
+  const urlDePago = preferencia.init_point ?? preferencia.sandbox_init_point;
 
   if (!preferencia.id || !urlDePago) {
     throw new Error("MercadoPago no devolvió un enlace de pago utilizable.");

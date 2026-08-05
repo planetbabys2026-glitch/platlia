@@ -21,6 +21,9 @@ const PUBLICAS = new Set([
   "/terminos",
   "/privacidad",
   "/pl-bootstrap",
+  // Sin esto, toda ruta /superadmin sin cookie se manda a /superadmin/ingresar,
+  // que tampoco sería pública y se redirigiría a sí misma para siempre.
+  "/superadmin/ingresar",
 ]);
 
 function esPublica(pathname: string): boolean {
@@ -42,9 +45,14 @@ export async function middleware(request: NextRequest) {
 
   if (esPublica(pathname)) {
     // Quien ya entró no tiene por qué volver a ver el formulario de ingreso.
-    if ((pathname === "/ingresar" || pathname === "/registro") && cookie?.value) {
+    const formularioDeIngreso =
+      pathname === "/ingresar" || pathname === "/registro" || pathname === "/superadmin/ingresar";
+
+    if (formularioDeIngreso && cookie?.value) {
       const claims = await verifySessionToken(cookie.value);
-      if (claims) return NextResponse.redirect(new URL("/panel", request.url));
+      if (claims?.kind === (esSuperadmin ? "SUPERADMIN" : "APP")) {
+        return NextResponse.redirect(new URL(esSuperadmin ? "/superadmin" : "/panel", request.url));
+      }
     }
     return NextResponse.next();
   }

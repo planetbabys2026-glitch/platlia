@@ -37,6 +37,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/caja" className="hover:text-primary transition-colors">
                 Caja
               </Link>
+              <Link href="/informes" className="hover:text-primary transition-colors">
+                Informes
+              </Link>
               <Link
                 href="/administracion/carta"
                 className="hover:text-primary transition-colors"
