@@ -60,7 +60,7 @@ const schema = z.object({
 
   // ─── Bootstrap del superadministrador ─────────────────────────────────────
   // Se define únicamente durante el primer despliegue y se borra después. Sin
-  // ella, /__pl/bootstrap responde 404 y es indistinguible de una ruta inexistente.
+  // ella, /pl-bootstrap responde 404 y es indistinguible de una ruta inexistente.
   SUPERADMIN_BOOTSTRAP_TOKEN: opcional(z.string().min(32)),
 });
 

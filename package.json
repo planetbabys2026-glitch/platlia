@@ -6,6 +6,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "dev:https": "next dev --experimental-https",
     "build": "next build",
@@ -22,9 +23,6 @@
     "db:studio": "prisma studio",
     "seed": "tsx --env-file=.env prisma/seed.ts",
     "cron:subs": "tsx --env-file=.env scripts/cron/sweep-subscriptions.ts"
-  },
-  "prisma": {
-    "seed": "tsx --env-file=.env prisma/seed.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.4.1",

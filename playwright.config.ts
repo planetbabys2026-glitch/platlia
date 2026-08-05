@@ -16,7 +16,12 @@ export default defineConfig({
     timezoneId: "America/Bogota",
   },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // `channel: "chrome"` usa el Chrome instalado en la máquina en vez del
+  // Chromium propio de Playwright: evita bajar 130 MB por equipo y por CI, y de
+  // paso se prueba contra el navegador que la gente realmente tiene.
+  projects: [
+    { name: "chrome", use: { ...devices["Desktop Chrome"], channel: "chrome" } },
+  ],
 
   // Los e2e corren contra un build de producción: `next dev` tiene tiempos y
   // comportamientos distintos que producen falsos positivos.

@@ -48,6 +48,15 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
 
+  /* Marca: el verde azulado es el color institucional y la terracota el acento.
+     Van aparte de --primary y de los tokens semánticos porque son identidad, no
+     función: se usan en el logo, en la portada y en lo que firma el producto,
+     nunca para decir "esto está bien" o "esto falló". */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-foreground: var(--brand-accent-foreground);
+
   /* Estados de mesa: se leen de un vistazo sobre la grilla del salón. */
   --color-mesa-libre: var(--mesa-libre);
   --color-mesa-ocupada: var(--mesa-ocupada);
@@ -79,10 +88,21 @@
    restaurantes viven sobre este cromado todo el día, y un tinte cálido les corre
    el color. Los acentos son apagados a propósito, sin neones ni degradados; el
    color se reserva para decir algo (estado de mesa, tiempo de espera, error).
+
+   La marca son dos colores: verde azulado profundo #1D4E51 y terracota cálido
+   #A75F39. En modo claro van tal cual. En modo oscuro no se pueden usar los
+   mismos valores —#1D4E51 sobre #101416 da 1,7:1 y es ilegible—, así que se
+   aclaran conservando el tono hasta pasar 4,5:1 contra el fondo del tema.
    ───────────────────────────────────────────────────────────────────────────── */
 
 :root {
   --radius: 0.5rem;
+
+  /* Marca. Contra blanco: el verde azulado da 9,3:1 y la terracota 4,8:1. */
+  --brand: #1d4e51;
+  --brand-foreground: #ffffff;
+  --brand-accent: #a75f39;
+  --brand-accent-foreground: #ffffff;
 
   --background: #ffffff;
   --foreground: #12171a;
@@ -91,15 +111,16 @@
   --popover: #ffffff;
   --popover-foreground: #12171a;
 
-  /* Petróleo profundo: serio sin ser azul corporativo, y sobrio en pantalla. */
-  --primary: #0e5b54;
+  /* El primario ES el color de marca: lo que el usuario toca todo el día tiene
+     que ser el mismo verde azulado del logo, no un primo cercano. */
+  --primary: #1d4e51;
   --primary-foreground: #ffffff;
   --secondary: #eaeff0;
   --secondary-foreground: #12171a;
   --muted: #f4f6f7;
   --muted-foreground: #59656d;
   --accent: #eaeff0;
-  --accent-foreground: #0e5b54;
+  --accent-foreground: #1d4e51;
 
   --destructive: #a32f2f;
   --destructive-foreground: #ffffff;
@@ -112,7 +133,7 @@
 
   --border: #dde3e6;
   --input: #dde3e6;
-  --ring: #0e5b54;
+  --ring: #1d4e51;
 
   --mesa-libre: #2f7d4f;
   --mesa-ocupada: #b0651a;
@@ -125,20 +146,21 @@
   --espera-demora: #c05621;
   --espera-critico: #a32f2f;
 
-  --chart-1: #0e5b54;
-  --chart-2: #1c6c9c;
-  --chart-3: #b0651a;
+  /* Las dos primeras series de cualquier gráfico son los dos colores de marca. */
+  --chart-1: #1d4e51;
+  --chart-2: #a75f39;
+  --chart-3: #1c6c9c;
   --chart-4: #6b5fa8;
   --chart-5: #2f7d4f;
 
   --sidebar: #f4f6f7;
   --sidebar-foreground: #12171a;
-  --sidebar-primary: #0e5b54;
+  --sidebar-primary: #1d4e51;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #eaeff0;
-  --sidebar-accent-foreground: #0e5b54;
+  --sidebar-accent-foreground: #1d4e51;
   --sidebar-border: #dde3e6;
-  --sidebar-ring: #0e5b54;
+  --sidebar-ring: #1d4e51;
 }
 
 /* Los bares trabajan a media luz y la caja suele estar en penumbra: el modo
@@ -151,14 +173,22 @@
   --popover: #1e262a;
   --popover-foreground: #e9edee;
 
-  --primary: #2e9186;
-  --primary-foreground: #06201d;
+  /* Marca aclarada para el fondo oscuro, mismo tono: 5,9:1 el verde azulado y
+     5,1:1 la terracota contra #101416. Los valores de modo claro acá no se
+     pueden usar. */
+  --brand: #3e9ea2;
+  --brand-foreground: #06201f;
+  --brand-accent: #c8855f;
+  --brand-accent-foreground: #1a1008;
+
+  --primary: #3e9ea2;
+  --primary-foreground: #06201f;
   --secondary: #1e262a;
   --secondary-foreground: #e9edee;
   --muted: #1a2124;
   --muted-foreground: #97a3a9;
   --accent: #1e262a;
-  --accent-foreground: #4fb3a6;
+  --accent-foreground: #57b4b8;
 
   --destructive: #d05a5a;
   --destructive-foreground: #1a0d0d;
@@ -171,7 +201,7 @@
 
   --border: #2a3438;
   --input: #313c41;
-  --ring: #2e9186;
+  --ring: #3e9ea2;
 
   --mesa-libre: #4e9d6d;
   --mesa-ocupada: #d08a3c;
@@ -184,20 +214,20 @@
   --espera-demora: #dd7748;
   --espera-critico: #d05a5a;
 
-  --chart-1: #2e9186;
-  --chart-2: #4a94c4;
-  --chart-3: #d08a3c;
+  --chart-1: #3e9ea2;
+  --chart-2: #c8855f;
+  --chart-3: #4a94c4;
   --chart-4: #8e83c4;
   --chart-5: #4e9d6d;
 
   --sidebar: #171d20;
   --sidebar-foreground: #e9edee;
-  --sidebar-primary: #2e9186;
-  --sidebar-primary-foreground: #06201d;
+  --sidebar-primary: #3e9ea2;
+  --sidebar-primary-foreground: #06201f;
   --sidebar-accent: #1e262a;
-  --sidebar-accent-foreground: #4fb3a6;
+  --sidebar-accent-foreground: #57b4b8;
   --sidebar-border: #2a3438;
-  --sidebar-ring: #2e9186;
+  --sidebar-ring: #3e9ea2;
 }
 
 @layer base {

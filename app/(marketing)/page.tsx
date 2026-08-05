@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/marca/logo";
 import { Button } from "@/components/ui/button";
 
 // Los estados reales del salón. Aparecen acá porque son la interfaz que el
@@ -14,9 +15,9 @@ export default function LandingPage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-12 px-6 py-16">
       <div className="max-w-2xl space-y-5 text-center">
-        <p className="text-muted-foreground font-mono text-xs tracking-[0.2em] uppercase">
-          Platlia
-        </p>
+        {/* Con bajada y a este tamaño: por debajo de ~80px la línea "Gestión de
+            Restaurantes y Bares" deja de leerse y sobra. */}
+        <Logo priority className="mx-auto h-20 sm:h-28" />
         <h1 className="text-4xl leading-[1.05] font-semibold text-balance sm:text-6xl">
           Tu restaurante, ordenado de principio a fin
         </h1>
@@ -38,7 +39,9 @@ export default function LandingPage() {
         <p className="text-muted-foreground text-sm">
           al mes por negocio · 1 sucursal incluida
         </p>
-        <p className="text-primary text-sm font-medium">
+        {/* La terracota es el segundo color de marca y acá tiene su lugar: la
+            línea que empuja a probar el producto. */}
+        <p className="text-brand-accent text-sm font-medium">
           Los primeros 7 días son gratis
         </p>
       </div>

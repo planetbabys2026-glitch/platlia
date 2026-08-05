@@ -1,0 +1,878 @@
+// Modelo de datos de Platlia.
+//
+// Convenciones que valen para todo el archivo:
+//
+//  · Los nombres de modelos y campos van en inglés; los valores de los enums van
+//    en español porque son vocabulario del producto: aparecen tal cual en la
+//    interfaz y algunos ya tienen token de diseño (bg-mesa-libre, bg-mesa-ocupada).
+//  · El dinero es `Int` en pesos colombianos enteros, sufijo `Cop`. Ni Decimal ni
+//    BigInt: ninguno de los dos cruza el límite RSC → Client Component.
+//  · Las tasas de impuesto son `Int` en puntos básicos: 800 = 8%, 1900 = 19%.
+//  · Todo instante es `@db.Timestamptz(3)`. La única excepción es `businessDate`,
+//    que es `@db.Date` porque representa un día de calendario, no un instante:
+//    se calcula siempre en la aplicación con lib/time.ts y viaja como parámetro.
+//    Está prohibido derivarlo en SQL con CURRENT_DATE o now()::date.
+//  · La unidad de tenencia es `Business` = una sucursal. El precio es por negocio
+//    con una sucursal incluida, así que un segundo local es otro Business (y otra
+//    suscripción) del mismo dueño, unidos por sus Membership. Por eso no existe
+//    un modelo Branch: agregarlo obligaría a llevar branchId en cada consulta y a
+//    duplicar el scoping que tenantDb() ya resuelve con businessId solo.
+//  · Todo modelo con `businessId` es un modelo de inquilino y se consulta con
+//    tenantDb(businessId), nunca con el cliente base.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  PROPIETARIO
+  ADMINISTRADOR
+  CAJERO
+  MESERO
+  COCINA
+}
+
+/// Los módulos se activan y desactivan por empresa: un bar sin cocina no debería
+/// ver la pantalla de comandas. No son un plan de precios —todos están incluidos—
+/// sino la superficie que cada negocio decide usar. Los verifica requireModule().
+enum AppModule {
+  MESAS
+  PEDIDOS
+  COCINA
+  CAJA
+  INFORMES
+  INVENTARIO
+}
+
+enum BusinessStatus {
+  ACTIVO
+  SUSPENDIDO
+  CANCELADO
+}
+
+enum UserStatus {
+  ACTIVO
+  SUSPENDIDO
+}
+
+enum SessionKind {
+  APP
+  SUPERADMIN
+}
+
+enum SubscriptionStatus {
+  PRUEBA
+  ACTIVA
+  VENCIDA
+  SUSPENDIDA
+  CANCELADA
+}
+
+enum PaymentStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  REEMBOLSADO
+  CONTRACARGO
+}
+
+/// En Colombia un restaurante o bar cobra impuesto al consumo (8%) y queda
+/// excluido de IVA sobre esa misma venta. Los negocios que no están en el régimen
+/// simple pueden facturar IVA (19%), y hay productos exentos.
+enum TaxKind {
+  IMPOCONSUMO
+  IVA
+  EXENTO
+}
+
+enum TableStatus {
+  LIBRE
+  OCUPADA
+  CUENTA_PEDIDA
+  RESERVADA
+  INACTIVA
+}
+
+enum OrderType {
+  MESA
+  LLEVAR
+  DOMICILIO
+}
+
+enum OrderStatus {
+  ABIERTA
+  CUENTA_PEDIDA
+  PAGADA
+  ANULADA
+}
+
+enum OrderItemStatus {
+  PENDIENTE
+  EN_PREPARACION
+  LISTO
+  ENTREGADO
+  ANULADO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  NEQUI
+  DAVIPLATA
+  TRANSFERENCIA
+  BONO
+  OTRO
+}
+
+enum CashSessionStatus {
+  ABIERTA
+  CERRADA
+}
+
+enum CashMovementType {
+  INGRESO
+  EGRESO
+  RETIRO
+  AJUSTE
+}
+
+enum ReceiptWidth {
+  MM55
+  MM80
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tenencia
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Business {
+  id     String         @id @default(cuid())
+  /// Aparece en URLs y en el nombre de la carpeta de Cloudinary. Inmutable en la
+  /// práctica: cambiarlo rompe enlaces guardados y mueve archivos ya subidos.
+  slug   String         @unique
+  name   String
+  status BusinessStatus @default(ACTIVO)
+
+  /// Datos que salen impresos en el tiquete. El NIT es opcional porque muchos
+  /// negocios se registran antes de tenerlo a mano.
+  legalName String?
+  taxId     String?
+  address   String?
+  phone     String?
+  email     String?
+  logoUrl   String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  settings      BusinessSettings?
+  subscription  Subscription?
+  modules       BusinessModule[]
+  taxRates      TaxRate[]
+  memberships   Membership[]
+  sessions      Session[]
+  categories    Category[]
+  products      Product[]
+  variants      ProductVariant[]
+  areas         Area[]
+  tables        Table[]
+  orders        Order[]
+  orderItems    OrderItem[]
+  orderPayments OrderPayment[]
+  cashSessions  CashSession[]
+  cashMovements CashMovement[]
+  payments      SubscriptionPayment[]
+  auditLogs     AuditLog[]
+
+  @@index([status])
+}
+
+/// Parámetros de operación. Ningún valor de negocio vive como constante global:
+/// todo lo que un dueño podría querer distinto está acá, con el valor por defecto
+/// colombiano.
+model BusinessSettings {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Zona horaria IANA. Todo cálculo de día pasa por lib/time.ts con este valor.
+  timeZone String @default("America/Bogota")
+
+  /// Minutos después de medianoche en que empieza el día de negocio. Un bar que
+  /// cierra a las 3 a.m. tiene que ver esas ventas en el día anterior, o el cierre
+  /// de caja nunca cuadra. 300 = 5:00 a.m.
+  businessDayStartMinutes Int @default(300)
+
+  /// En Colombia la carta se publica con el impuesto incluido. Si esto es true,
+  /// `Product.priceCop` es el precio final y el impuesto se desagrega hacia atrás.
+  pricesIncludeTax Boolean @default(true)
+
+  /// La propina es voluntaria y por ley hay que preguntarla antes de sumarla.
+  /// Acá solo se define la sugerencia que muestra la pantalla de cobro.
+  tipSuggestionEnabled Boolean @default(true)
+  tipSuggestionRateBp  Int     @default(1000)
+
+  /// El efectivo se redondea al múltiplo más cercano porque no circulan monedas
+  /// por debajo de $50. Solo afecta al pago en efectivo, nunca al total facturado.
+  cashRoundingCop Int @default(50)
+
+  /// Numeración de pedidos y de turnos: reinician cada día de negocio.
+  orderNumberResetsDaily Boolean @default(true)
+  turnNumberMax          Int     @default(99)
+
+  /// Si está en true, no se puede abrir un pedido sin una caja abierta. Se apaga
+  /// en negocios donde el mesero toma pedidos antes de que llegue el cajero.
+  requireOpenCashSession Boolean @default(true)
+
+  /// Impresión térmica. El ancho decide el @page de app/imprimir.
+  receiptWidth  ReceiptWidth @default(MM80)
+  receiptHeader String?
+  receiptFooter String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model BusinessModule {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  module  AppModule
+  enabled Boolean   @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([businessId, module])
+}
+
+/// El impuesto es dato, no código. Cada producto apunta a una tarifa y el valor
+/// se congela en el OrderItem al agregarlo, para que un recibo viejo se reimprima
+/// idéntico aunque la tarifa cambie después.
+model TaxRate {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name      String
+  kind      TaxKind @default(IMPOCONSUMO)
+  /// Puntos básicos: 800 = 8%.
+  rateBp    Int     @default(800)
+  isDefault Boolean @default(false)
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  products Product[]
+
+  @@unique([businessId, name])
+  @@index([businessId, active])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identidad y acceso
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// El usuario es global, no por empresa: la misma persona puede ser dueña de un
+/// bar y cajera en otro. El vínculo con el negocio y el rol viven en Membership.
+model User {
+  id String @id @default(cuid())
+
+  /// Se normaliza a minúsculas antes de escribir, siempre. La unicidad de
+  /// PostgreSQL distingue mayúsculas y sin normalizar entrarían dos cuentas para
+  /// la misma persona.
+  email        String  @unique
+  passwordHash String
+  name         String
+  phone        String?
+
+  status       UserStatus @default(ACTIVO)
+  /// Un superadministrador no pertenece a ninguna empresa y entra por una cookie
+  /// distinta (pl_sa, con path /superadmin), para que una sesión de soporte nunca
+  /// se confunda con la sesión normal del producto.
+  isSuperAdmin Boolean    @default(false)
+
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  lastLoginAt     DateTime? @db.Timestamptz(3)
+
+  /// Freno a la fuerza bruta. Se limpian al primer inicio de sesión correcto.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  memberships        Membership[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  ordersOpened       Order[]        @relation("OrderOpenedBy")
+  ordersClosed       Order[]        @relation("OrderClosedBy")
+  ordersCanceled     Order[]        @relation("OrderCanceledBy")
+  orderItemsCreated  OrderItem[]    @relation("OrderItemCreatedBy")
+  orderItemsCanceled OrderItem[]    @relation("OrderItemCanceledBy")
+  paymentsReceived   OrderPayment[] @relation("OrderPaymentReceivedBy")
+  cashSessionsOpened CashSession[]  @relation("CashSessionOpenedBy")
+  cashSessionsClosed CashSession[]  @relation("CashSessionClosedBy")
+  cashMovements      CashMovement[] @relation("CashMovementCreatedBy")
+
+  @@index([isSuperAdmin])
+}
+
+model Membership {
+  id String @id @default(cuid())
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  role   Role
+  active Boolean @default(true)
+
+  /// PIN corto para el cambio rápido de operario en la tablet del salón, sin
+  /// volver a escribir la contraseña. Se guarda hasheado igual que la contraseña.
+  pinHash String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, businessId])
+  @@index([businessId, active])
+}
+
+/// La sesión se guarda en base aunque la cookie sea un JWT firmado: el middleware
+/// hace el chequeo optimista sin tocar la base, pero el DAL valida contra esta
+/// tabla, que es lo que permite revocar una sesión de verdad (empleado despedido,
+/// dispositivo perdido).
+model Session {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Empresa activa de la sesión. Nula en sesiones de superadministrador y
+  /// mientras el usuario todavía no eligió negocio.
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  kind SessionKind @default(APP)
+
+  expiresAt  DateTime  @db.Timestamptz(3)
+  revokedAt  DateTime? @db.Timestamptz(3)
+  lastSeenAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  ip        String?
+  userAgent String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, kind])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Licencia y facturación
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Subscription {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  status   SubscriptionStatus @default(PRUEBA)
+  /// Precio vigente para esta empresa. Se guarda acá y no como constante para
+  /// poder respetar el precio de los primeros clientes cuando la lista suba.
+  priceCop Int                @default(50000)
+
+  trialEndsAt        DateTime? @db.Timestamptz(3)
+  currentPeriodStart DateTime? @db.Timestamptz(3)
+  currentPeriodEnd   DateTime? @db.Timestamptz(3)
+  /// Días de gracia después del vencimiento: la app sigue funcionando pero avisa.
+  /// requireActiveLicense() compara contra esta fecha, no contra currentPeriodEnd.
+  graceUntil         DateTime? @db.Timestamptz(3)
+  canceledAt         DateTime? @db.Timestamptz(3)
+
+  /// Suscripción automática de MercadoPago, cuando el cliente la autoriza.
+  mpPreapprovalId String? @unique
+  mpPayerId       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  payments SubscriptionPayment[]
+
+  @@index([status, currentPeriodEnd])
+}
+
+model SubscriptionPayment {
+  id String @id @default(cuid())
+
+  businessId     String
+  business       Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  amountCop Int
+  status    PaymentStatus @default(PENDIENTE)
+
+  /// Único: es la llave de idempotencia contra los reenvíos del webhook, que
+  /// MercadoPago hace varias veces por el mismo pago.
+  mpPaymentId    String? @unique
+  mpPreferenceId String?
+  mpStatusDetail String?
+  method         String?
+
+  periodStart DateTime? @db.Timestamptz(3)
+  periodEnd   DateTime? @db.Timestamptz(3)
+  paidAt      DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([businessId, createdAt])
+  @@index([subscriptionId, status])
+}
+
+/// Bitácora cruda de notificaciones de MercadoPago. Existe para dos cosas: cortar
+/// el reproceso de un evento repetido y poder reconstruir qué llegó exactamente
+/// cuando un cobro se discute.
+model MpWebhookEvent {
+  id String @id @default(cuid())
+
+  /// El `id` de la notificación. Único: la segunda entrega del mismo evento se
+  /// rechaza en el índice, no en la lógica.
+  mpEventId String @unique
+  type      String
+
+  payload     Json
+  processedAt DateTime? @db.Timestamptz(3)
+  error       String?
+
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([type, receivedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Catálogo
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Category {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name      String
+  sortOrder Int     @default(0)
+  color     String?
+  imageUrl  String?
+  active    Boolean @default(true)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  products Product[]
+
+  @@unique([businessId, name])
+  @@index([businessId, active, sortOrder])
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name        String
+  description String?
+  sku         String?
+  imageUrl    String?
+
+  /// Precio de lista. Si BusinessSettings.pricesIncludeTax es true, ya incluye
+  /// el impuesto y lib/tax.ts lo desagrega.
+  priceCop Int
+
+  taxRateId String
+  taxRate   TaxRate @relation(fields: [taxRateId], references: [id], onDelete: Restrict)
+
+  sortOrder   Int     @default(0)
+  active      Boolean @default(true)
+  /// `active` es catálogo (el producto existe); `isAvailable` es hoy (se acabó).
+  isAvailable Boolean @default(true)
+
+  /// Inventario opcional: la mayoría de los bares no lo lleva y no hay que
+  /// obligarlos. Cuando trackStock es false, stockQty se ignora.
+  trackStock Boolean @default(false)
+  stockQty   Int     @default(0)
+
+  /// Estación de la pantalla de cocina: "Cocina", "Barra", "Parrilla".
+  kitchenStation     String?
+  preparationMinutes Int?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  variants   ProductVariant[]
+  orderItems OrderItem[]
+
+  @@unique([businessId, sku])
+  @@index([businessId, categoryId, sortOrder])
+  @@index([businessId, active, isAvailable])
+}
+
+/// Presentaciones con precio propio: "Botella", "Jarra", "Media". El precio es
+/// absoluto, no un delta, porque un delta obliga a recalcular todas las variantes
+/// cada vez que se corrige el precio base y esa cuenta siempre se hace mal.
+model ProductVariant {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name      String
+  priceCop  Int
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  orderItems OrderItem[]
+
+  @@unique([productId, name])
+  @@index([businessId, productId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Salón
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Area {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name      String
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  tables Table[]
+  orders Order[]
+
+  @@unique([businessId, name])
+  @@index([businessId, active, sortOrder])
+}
+
+model Table {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  areaId String?
+  area   Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  /// Etiqueta visible: "12", "Barra 3". Es texto porque no todas las mesas se
+  /// numeran.
+  name      String
+  capacity  Int         @default(4)
+  status    TableStatus @default(LIBRE)
+  sortOrder Int         @default(0)
+
+  /// Posición en el plano del salón, en porcentaje del contenedor. Nulas mientras
+  /// el dueño no acomode el mapa.
+  posX Int?
+  posY Int?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  orders Order[]
+
+  @@unique([businessId, name])
+  @@index([businessId, status])
+  @@index([businessId, areaId, sortOrder])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pedidos
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Order {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Consecutivo visible, reiniciable por día de negocio. `businessDate` lo
+  /// calcula lib/time.ts con la zona horaria y el corte de día de la empresa y
+  /// llega siempre como parámetro.
+  code         Int
+  businessDate DateTime @db.Date
+
+  /// Número que se canta y se muestra en el televisor del salón. Rota al llegar
+  /// a BusinessSettings.turnNumberMax. Solo para pedidos que se esperan.
+  turnNumber Int?
+
+  type   OrderType   @default(MESA)
+  status OrderStatus @default(ABIERTA)
+
+  tableId String?
+  table   Table?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  areaId  String?
+  area    Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  cashSessionId String?
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  guestsCount     Int?
+  customerName    String?
+  customerPhone   String?
+  deliveryAddress String?
+  notes           String?
+
+  /// Totales denormalizados. Se recalculan enteros en cada cambio de ítem, dentro
+  /// de la misma transacción: los informes no pueden depender de sumar renglones
+  /// en el momento de leer.
+  subtotalCop Int @default(0)
+  discountCop Int @default(0)
+  taxCop      Int @default(0)
+  tipCop      Int @default(0)
+  totalCop    Int @default(0)
+  paidCop     Int @default(0)
+
+  openedById String
+  openedBy   User    @relation("OrderOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedById String?
+  closedBy   User?   @relation("OrderClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+
+  canceledById   String?
+  canceledBy     User?     @relation("OrderCanceledBy", fields: [canceledById], references: [id], onDelete: SetNull)
+  canceledReason String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+
+  openedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  billRequestedAt DateTime? @db.Timestamptz(3)
+  closedAt        DateTime? @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  items    OrderItem[]
+  payments OrderPayment[]
+
+  @@unique([businessId, businessDate, code])
+  @@unique([businessId, businessDate, turnNumber])
+  @@index([businessId, status])
+  @@index([businessId, businessDate])
+  @@index([businessId, tableId, status])
+  @@index([businessId, cashSessionId])
+}
+
+/// El renglón congela nombre, precio e impuesto en el momento de agregarlo. Un
+/// tiquete reimpreso seis meses después tiene que salir idéntico al original,
+/// aunque el producto haya subido de precio o cambiado de tarifa.
+model OrderItem {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  /// Instantáneas. `nameSnapshot` incluye la variante: "Cerveza (Jarra)".
+  nameSnapshot        String
+  unitPriceCop        Int
+  taxRateBpSnapshot   Int
+  taxRateNameSnapshot String
+  /// También se congela: si mañana el negocio cambia a precios sin impuesto
+  /// incluido, este renglón tiene que seguir desagregándose como se cobró.
+  taxIncludedSnapshot Boolean
+
+  quantity    Int @default(1)
+  discountCop Int @default(0)
+
+  /// Calculados con lib/tax.ts y redondeados POR LÍNEA, nunca sobre el total.
+  lineSubtotalCop Int
+  lineTaxCop      Int
+  lineTotalCop    Int
+
+  status OrderItemStatus @default(PENDIENTE)
+  notes  String?
+
+  createdById String
+  createdBy   User   @relation("OrderItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  canceledById   String?
+  canceledBy     User?     @relation("OrderItemCanceledBy", fields: [canceledById], references: [id], onDelete: SetNull)
+  canceledReason String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  sentToKitchenAt DateTime? @db.Timestamptz(3)
+  readyAt         DateTime? @db.Timestamptz(3)
+  deliveredAt     DateTime? @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([businessId, orderId])
+  @@index([businessId, status, createdAt])
+  @@index([businessId, productId])
+}
+
+model OrderPayment {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  cashSessionId String?
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  method    PaymentMethod
+  amountCop Int
+
+  /// Con cuánto pagó y cuánto se le devolvió. Solo aplican al efectivo y quedan
+  /// guardados porque el cierre de caja los necesita para explicar diferencias.
+  tenderedCop Int?
+  changeCop   Int?
+
+  /// Referencia externa: últimos dígitos del datáfono, número de aprobación de
+  /// Nequi, etc.
+  reference String?
+
+  receivedById String
+  receivedBy   User   @relation("OrderPaymentReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+
+  voidedAt     DateTime? @db.Timestamptz(3)
+  voidedReason String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, orderId])
+  @@index([businessId, cashSessionId, method])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Caja
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CashSession {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  code         Int
+  businessDate DateTime          @db.Date
+  status       CashSessionStatus @default(ABIERTA)
+
+  /// Base con la que se abre la caja.
+  openingFloatCop Int @default(0)
+
+  /// Se llenan al cerrar: lo que el sistema calculó, lo que la persona contó y la
+  /// diferencia. Se guarda la diferencia y no se recalcula al leer, porque el
+  /// cálculo esperado depende de datos que después se pueden corregir.
+  expectedCashCop Int?
+  countedCashCop  Int?
+  differenceCop   Int?
+
+  notes String?
+
+  openedById String
+  openedBy   User    @relation("CashSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedById String?
+  closedBy   User?   @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+
+  openedAt  DateTime  @default(now()) @db.Timestamptz(3)
+  closedAt  DateTime? @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  orders    Order[]
+  payments  OrderPayment[]
+  movements CashMovement[]
+
+  @@unique([businessId, businessDate, code])
+  @@index([businessId, status])
+}
+
+/// Entradas y salidas que no son ventas: pagar el domicilio del hielo, retirar
+/// efectivo a la caja fuerte, corregir un faltante.
+model CashMovement {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  cashSessionId String
+  cashSession   CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+
+  type       CashMovementType
+  amountCop  Int
+  concept    String
+  /// Foto del recibo del gasto, subida a Cloudinary.
+  receiptUrl String?
+
+  createdById String
+  createdBy   User   @relation("CashMovementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, cashSessionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auditoría
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Rastro de lo que no se puede discutir después: anulaciones, descuentos,
+/// cambios de precio, cierres de caja con diferencia. `businessId` y `userId` son
+/// opcionales porque también se registran acciones de superadministrador y
+/// eventos del sistema.
+model AuditLog {
+  id String @id @default(cuid())
+
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action   String
+  entity   String
+  entityId String?
+  metadata Json?
+
+  ip        String?
+  userAgent String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entity, entityId])
+  @@index([userId, createdAt])
+}
