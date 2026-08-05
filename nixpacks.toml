@@ -44,11 +44,21 @@ cmds = [
 [phases.build]
 # Los estáticos se copian ACÁ y no al arrancar: así el contenedor de runtime no
 # necesita pnpm ni bash, solo node, y cada reinicio es instantáneo.
+#
+# @node-rs/argon2 se copia aparte porque el rastreador de archivos de
+# `output: standalone` no lo detecta: el binding nativo se elige con un
+# `require()` condicional según plataforma dentro de su loader, y esa rama
+# dinámica no la sigue el análisis estático. Sin esto, el hash de contraseñas
+# revienta en producción con "Failed to load native binding" aunque el build
+# haya terminado sin ningún error. `-L` para copiar el archivo real: en pnpm
+# `node_modules/@node-rs` son symlinks al store, y ese store no viaja al
+# standalone.
 cmds = [
   "/usr/local/bin/pnpm run build",
-  "mkdir -p .next/standalone/public .next/standalone/.next/static",
+  "mkdir -p .next/standalone/public .next/standalone/.next/static .next/standalone/node_modules/@node-rs",
   "cp -r public/. .next/standalone/public/",
   "cp -r .next/static/. .next/standalone/.next/static/",
+  "cp -rL node_modules/@node-rs/. .next/standalone/node_modules/@node-rs/",
 ]
 
 [start]
