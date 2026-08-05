@@ -1,0 +1,68 @@
+import "server-only";
+import { tenantDb } from "@/lib/db/tenant";
+
+/**
+ * La carta como la ve quien administra: incluye lo agotado y lo que está fuera de
+ * la carta del día, que es justo lo que hay que poder tocar. Lo archivado no
+ * aparece: para eso está la historia de los pedidos.
+ */
+export async function getCartaAdmin(businessId: string) {
+  return tenantDb(businessId).category.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      sortOrder: true,
+      active: true,
+      products: {
+        where: { deletedAt: null },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          priceCop: true,
+          active: true,
+          isAvailable: true,
+          kitchenStation: true,
+          taxRate: { select: { name: true, rateBp: true } },
+          variants: {
+            where: { active: true },
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+            select: { id: true, name: true, priceCop: true },
+          },
+        },
+      },
+    },
+  });
+}
+
+/** Las tarifas de impuesto de la empresa, para el selector del producto. */
+export async function getTarifas(businessId: string) {
+  return tenantDb(businessId).taxRate.findMany({
+    where: { active: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, rateBp: true, isDefault: true },
+  });
+}
+
+/** Áreas y mesas para la pantalla de administración del salón. */
+export async function getSalonAdmin(businessId: string) {
+  const db = tenantDb(businessId);
+
+  const [areas, mesas] = await Promise.all([
+    db.area.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, sortOrder: true },
+    }),
+    db.table.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, capacity: true, status: true, areaId: true },
+    }),
+  ]);
+
+  return { areas, mesas };
+}

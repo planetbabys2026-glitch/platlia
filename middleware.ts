@@ -27,7 +27,10 @@ function esPublica(pathname: string): boolean {
   if (PUBLICAS.has(pathname)) return true;
   // El health check lo consulta el monitoreo externo, sin cookie.
   if (pathname === "/api/health") return true;
-  // Las rutas de impresión abren en una ventana nueva y las protege el DAL.
+  // Los webhooks los llama un servidor ajeno, que no tiene sesión ni la va a
+  // tener. Se autentican con su firma, no con una cookie: si el middleware los
+  // mandara al login, MercadoPago recibiría un 307 y el pago nunca se aplicaría.
+  if (pathname.startsWith("/api/webhooks/")) return true;
   return false;
 }
 

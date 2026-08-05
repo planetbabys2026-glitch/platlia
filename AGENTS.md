@@ -105,6 +105,28 @@ Errores: cualquier excepción dentro de una acción se convierte en un mensaje g
 filtrar detalles del servidor. Para un texto que sí deba leer el usuario ("ese correo ya tiene
 cuenta") se lanza `ErrorDeUsuario`.
 
+## Facturación
+
+Se cobra con Checkout Pro: se crea una preferencia, el cliente paga en MercadoPago y vuelve.
+Nunca vemos ni guardamos un dato de tarjeta.
+
+El webhook (`/api/webhooks/mercadopago`) es una URL pública que mueve el estado de la licencia,
+así que se defiende en tres capas:
+
+1. **Firma** (`lib/billing/firma.ts`): HMAC-SHA256 del manifiesto `id:…;request-id:…;ts:…;`,
+   comparación en tiempo constante y ventana de 5 minutos contra reenvíos. Sin secreto
+   configurado **falla cerrado**. Solo se apaga con `MP_SIGNATURE_ENFORCE=false`, en staging.
+2. **Idempotencia de entrega**: `MpWebhookEvent.mpEventId` único.
+3. **Idempotencia de negocio**: `SubscriptionPayment.mpPaymentId` único, y el mes se suma
+   **solo cuando la fila se creó en esa pasada**. Diez reenvíos suman un mes, no diez.
+
+El estado del pago **se pregunta a la API**, nunca se lee del cuerpo del aviso: creerle a quien
+avisa es creerle a cualquiera. Y el webhook está en la lista pública del middleware —MercadoPago
+no tiene cookie— junto con `/api/health`.
+
+`estadoSegunFechas` no revive lo cancelado ni lo suspendido a mano: eso son decisiones, no
+accidentes de cobro. El cron `pnpm cron:subs` solo escribe lo que el reloj ya volvió cierto.
+
 ## Despliegue (VPS con Dokploy / nixpacks)
 
 `nixpacks.toml` manda; sin él nixpacks adivina y se equivoca en tres cosas, todas verificadas
@@ -171,5 +193,16 @@ pnpm dev:https    # necesario para probar la PWA en local
 Los e2e usan el **Chrome instalado en la máquina** (`channel: "chrome"`), no el Chromium de
 Playwright: no hay que bajar 130 MB y se prueba contra el navegador que la gente usa. Corren
 contra la base sembrada, así que antes va `pnpm seed`.
+
+Los e2e corren **en serie y con un solo worker**: comparten una base cuyo estado clave es
+singleton —hay una sola caja abierta por empresa— y en paralelo se pisan entre archivos.
+
+Dos trampas que ya costaron tiempo dos veces cada una:
+
+- **Next inyecta un `role="alert"` vacío** (`#__next-route-announcer__`) para anunciar los
+  cambios de ruta. Un `getByRole("alert")` suelto lo agarra a él y falla con `""`. Hay que
+  acotar al formulario: `page.locator("form").filter({ has: … }).getByRole("alert")`.
+- **Después de enviar un formulario hay que esperar la navegación** antes del siguiente
+  `goto`, o el `goto` cancela el envío y la acción nunca corre.
 
 El gestor de paquetes es **pnpm**. No hay `package-lock.json`.

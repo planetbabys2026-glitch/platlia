@@ -61,9 +61,20 @@ export default async function PedidoPage({
             {pedido.openedBy.name}
           </p>
         </div>
-        <Link href="/salon" className="text-primary text-sm font-medium hover:underline">
-          ← Volver al salón
-        </Link>
+        <div className="flex items-center gap-4">
+          {/* Ventana nueva: la impresión no puede sacar al cajero de la cuenta. */}
+          <a
+            href={`/imprimir/pedido/${pedido.id}`}
+            target="_blank"
+            rel="noopener"
+            className="text-primary text-sm font-medium hover:underline"
+          >
+            Imprimir cuenta
+          </a>
+          <Link href="/salon" className="text-primary text-sm font-medium hover:underline">
+            ← Volver al salón
+          </Link>
+        </div>
       </div>
 
       {pedido.status === "ANULADA" && pedido.canceledReason && (

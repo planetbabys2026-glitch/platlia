@@ -218,6 +218,10 @@ export const agregarItem = defineAction({
           lineTotalCop: linea.lineTotalCop,
           notes: input.notes ?? null,
           createdById: ctx.user.id,
+          // El renglón sale hacia la estación en el momento en que se canta: en un
+          // bar no hay un paso aparte de "enviar comanda", el mesero toca y la
+          // cocina lo ve. De acá salen los tiempos de espera de la pantalla.
+          sentToKitchenAt: new Date(),
         },
       });
 

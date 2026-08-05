@@ -138,7 +138,10 @@ async function main() {
     update: {},
     create: {
       businessId: business.id,
-      receiptHeader: `${NEGOCIO.name}\nNIT ${NEGOCIO.taxId}\n${NEGOCIO.address}`,
+      // El encabezado es texto ADICIONAL: el nombre, el NIT y la dirección los
+      // imprime el tiquete desde los datos del negocio. Repetirlos acá los
+      // duplicaba en el papel.
+      receiptHeader: "Régimen simple de tributación",
       receiptFooter: "¡Gracias por su visita!\nLa propina es voluntaria.",
     },
   });
