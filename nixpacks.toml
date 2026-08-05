@@ -1,0 +1,55 @@
+# Cómo se construye y arranca Platlia en el VPS (Dokploy / nixpacks).
+#
+# Sin este archivo, nixpacks adivina, y adivina mal tres cosas:
+#
+#  1. Elige el pnpm que le parece —eligió 9.15.9— mientras el repo se desarrolla
+#     con pnpm 11. `pnpm-workspace.yaml` usa `allowBuilds`, sintaxis de pnpm 10+,
+#     y con pnpm 9 el install muere con "packages field missing or empty" antes de
+#     compilar nada. (Mover ese ajuste a package.json no es opción: pnpm 11 lo
+#     ignora y responde ERR_PNPM_IGNORED_BUILDS.)
+#  2. Arranca con `next start`, que NO sirve con `output: "standalone"` —Next mismo
+#     lo avisa— y deja la aplicación sin sus archivos estáticos.
+#  3. El servidor standalone escucha en localhost, que detrás de un proxy equivale
+#     a no escuchar en ninguna parte: por eso HOSTNAME=0.0.0.0.
+#
+# pnpm se instala con npm y se invoca por ruta absoluta a propósito. Ni corepack
+# ni el PATH: en esta imagen Node vive en el store de nix, que es de solo lectura,
+# así que `corepack enable` y `npm -g` sin prefijo fallan, y el pnpm 9 que deja nix
+# quedaría primero en el PATH pisando al que acabamos de instalar.
+#
+# ── Variables que el panel tiene que inyectar EN EL BUILD, no solo en runtime ──
+#
+#   DATABASE_URL     SESSION_SECRET     APP_URL
+#
+# No es opcional: `next build` importa lib/env.ts al recolectar las rutas y aborta
+# con "Configuración de entorno inválida" si falta alguna. Las demás (Resend,
+# Cloudinary, MercadoPago) sí pueden faltar: cada integración avisa el día que se
+# use sin configurar.
+#
+# Las migraciones NO corren solas acá. Se aplican aparte con `pnpm db:deploy`
+# apuntando a la base del VPS, para que un despliegue nunca cambie el esquema por
+# accidente mientras hay gente cobrando.
+
+providers = ["node"]
+
+[phases.install]
+# La versión sale del campo packageManager del package.json, que es la misma con
+# la que se desarrolla. El postinstall corre `prisma generate`, que ya no necesita
+# base de datos.
+cmds = [
+  "npm install -g --prefix /usr/local pnpm@11.14.0",
+  "/usr/local/bin/pnpm install --frozen-lockfile",
+]
+
+[phases.build]
+# Los estáticos se copian ACÁ y no al arrancar: así el contenedor de runtime no
+# necesita pnpm ni bash, solo node, y cada reinicio es instantáneo.
+cmds = [
+  "/usr/local/bin/pnpm run build",
+  "mkdir -p .next/standalone/public .next/standalone/.next/static",
+  "cp -r public/. .next/standalone/public/",
+  "cp -r .next/static/. .next/standalone/.next/static/",
+]
+
+[start]
+cmd = "HOSTNAME=0.0.0.0 node .next/standalone/server.js"

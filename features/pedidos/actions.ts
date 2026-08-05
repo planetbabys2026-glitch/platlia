@@ -15,7 +15,6 @@ import {
   propinaSchema,
 } from "@/features/pedidos/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { roundCopTo } from "@/lib/money";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import { siguienteTurno } from "@/lib/turns";

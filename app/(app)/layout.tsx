@@ -19,9 +19,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-border bg-card sticky top-0 z-10 border-b">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4">
-          <Link href="/panel" aria-label="Ir al panel">
-            <Logotipo className="h-7" />
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link href="/panel" aria-label="Ir al panel">
+              <Logotipo className="h-7" />
+            </Link>
+
+            {/* Los tres lugares donde se trabaja. Los enlaces se pintan siempre:
+                si el módulo está apagado o el rol no alcanza, la página responde
+                404 por su cuenta. */}
+            <nav className="hidden items-center gap-4 text-sm sm:flex">
+              <Link href="/salon" className="hover:text-primary transition-colors">
+                Salón
+              </Link>
+              <Link href="/caja" className="hover:text-primary transition-colors">
+                Caja
+              </Link>
+            </nav>
+          </div>
 
           <div className="flex items-center gap-3">
             {user && (

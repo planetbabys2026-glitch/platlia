@@ -1,4 +1,4 @@
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 /**
  * Configuración de la CLI de Prisma.
@@ -15,12 +15,23 @@ try {
   // Sin .env: se asume que DATABASE_URL ya está en el entorno.
 }
 
+/**
+ * `prisma generate` NO necesita base de datos: solo lee el schema. Pero el
+ * ayudante `env()` de Prisma revienta si la variable falta, y en un build de
+ * despliegue (nixpacks, Docker) las variables de runtime todavía no existen
+ * cuando corre `pnpm install` y su postinstall. Con eso, el despliegue moría en
+ * la fase de instalación con un error que no dice nada del build.
+ *
+ * Con el marcador de abajo, `generate` funciona sin configuración y cualquier
+ * comando que SÍ necesite conectarse —migrate, studio— falla nombrando en el
+ * host exactamente lo que falta.
+ */
+const url = process.env.DATABASE_URL ?? "postgresql://falta-DATABASE_URL";
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
 
-  datasource: {
-    url: env("DATABASE_URL"),
-  },
+  datasource: { url },
 
   migrations: {
     path: "prisma/migrations",

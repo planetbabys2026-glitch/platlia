@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { requireActiveLicense } from "@/lib/auth/dal";
 import { tenantDb } from "@/lib/db/tenant";
@@ -59,6 +61,15 @@ export default async function PanelPage() {
           valor={cajaAbierta ? "Abierta" : "Cerrada"}
           detalle={cajaAbierta ? "Hay un turno en curso" : "Sin turno abierto"}
         />
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Button asChild size="lg">
+          <Link href="/salon">Ir al salón</Link>
+        </Button>
+        <Button asChild size="lg" variant="outline">
+          <Link href="/caja">{cajaAbierta ? "Ver la caja" : "Abrir la caja"}</Link>
+        </Button>
       </div>
     </div>
   );

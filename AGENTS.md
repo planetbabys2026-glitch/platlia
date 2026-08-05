@@ -105,6 +105,29 @@ Errores: cualquier excepción dentro de una acción se convierte en un mensaje g
 filtrar detalles del servidor. Para un texto que sí deba leer el usuario ("ese correo ya tiene
 cuenta") se lanza `ErrorDeUsuario`.
 
+## Despliegue (VPS con Dokploy / nixpacks)
+
+`nixpacks.toml` manda; sin él nixpacks adivina y se equivoca en tres cosas, todas verificadas
+contra el build real:
+
+1. **La versión de pnpm.** Nixpacks eligió 9.15.9 y el repo usa 11. `pnpm-workspace.yaml` está
+   escrito con `allowBuilds` (pnpm 10+) y pnpm 9 muere ahí con *"packages field missing or
+   empty"*, antes de compilar. Mover ese ajuste a `package.json` **no** es alternativa: pnpm 11
+   lo ignora y responde `ERR_PNPM_IGNORED_BUILDS`. Por eso el install trae pnpm por `npm -g`
+   con `--prefix /usr/local` y lo invoca por ruta absoluta: Node vive en el store de nix, que
+   es de solo lectura, así que `corepack enable` y `npm -g` sin prefijo fallan ahí.
+2. **El arranque.** Con `output: "standalone"` no sirve `next start`. Se arranca
+   `node .next/standalone/server.js`, y los estáticos se copian en la fase de build para que el
+   runtime no necesite ni pnpm ni bash.
+3. **`HOSTNAME=0.0.0.0`.** El servidor standalone escucha en localhost, que detrás de un proxy
+   es no escuchar.
+
+**`DATABASE_URL`, `SESSION_SECRET` y `APP_URL` tienen que estar en el BUILD**, no solo en
+runtime: `next build` importa `lib/env.ts` al recolectar las rutas y aborta sin ellas.
+
+Las migraciones no corren en el despliegue. Se aplican aparte con `pnpm db:deploy` contra la
+base del VPS, para que un deploy no cambie el esquema mientras hay gente cobrando.
+
 ## Marca
 
 Dos colores: verde azulado profundo **`#1D4E51`** y terracota cálido **`#A75F39`**. Están en

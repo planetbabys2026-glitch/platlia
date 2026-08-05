@@ -92,6 +92,32 @@ export async function getResumenCaja(
   };
 }
 
+/**
+ * El último turno cerrado.
+ *
+ * La pantalla de caja lo muestra cuando no hay turno abierto, y no es un adorno:
+ * al cerrar, la tarjeta del formulario desaparece con su mensaje adentro, y la
+ * diferencia es exactamente la cifra que hay que poder mirar después. También
+ * sirve para que el dueño vea de una cómo cerró anoche.
+ */
+export async function getUltimoCierre(businessId: string) {
+  return tenantDb(businessId).cashSession.findFirst({
+    where: { status: "CERRADA" },
+    orderBy: { closedAt: "desc" },
+    select: {
+      id: true,
+      code: true,
+      businessDate: true,
+      closedAt: true,
+      expectedCashCop: true,
+      countedCashCop: true,
+      differenceCop: true,
+      notes: true,
+      closedBy: { select: { name: true } },
+    },
+  });
+}
+
 export async function getMovimientos(businessId: string, cashSessionId: string) {
   return tenantDb(businessId).cashMovement.findMany({
     where: { cashSessionId },

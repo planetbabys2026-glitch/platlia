@@ -87,7 +87,9 @@ test("el registro crea negocio, licencia de prueba y deja adentro", async ({ pag
   await expect(page).toHaveURL(/\/panel$/);
   await expect(page.getByRole("heading", { name: `Bar de Prueba ${sufijo}` })).toBeVisible();
 
-  // Negocio nuevo: sin mesas ni productos, y con la caja cerrada.
+  // Negocio nuevo: sin mesas ni productos, y con la caja cerrada. Los
+  // indicadores se buscan por su tarjeta y no por texto suelto: "Caja" también
+  // es un enlace de la barra superior.
   await expect(page.getByText("Mesas").locator("..")).toContainText("0");
-  await expect(page.getByText("Caja").locator("..")).toContainText("Cerrada");
+  await expect(page.getByText("Sin turno abierto").locator("..")).toContainText("Cerrada");
 });
