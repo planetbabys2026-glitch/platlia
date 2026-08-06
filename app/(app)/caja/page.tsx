@@ -2,16 +2,20 @@ import type { Metadata } from "next";
 import { AppModule } from "@/generated/prisma/enums";
 import {
   getCajaAbierta,
+  getCuentasPorCobrar,
   getMovimientos,
   getResumenCaja,
   getUltimoCierre,
 } from "@/features/caja/queries";
+import { getSettings } from "@/features/negocio/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireModule } from "@/lib/auth/dal";
 import { tenantDb } from "@/lib/db/tenant";
 import { formatCop } from "@/lib/money";
-import { formatDateTimeInTimeZone } from "@/lib/time";
+import { currentBusinessDate, formatDateTimeInTimeZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
+
+import { CuentasPorCobrar } from "./cuentas-por-cobrar";
 import { AbrirCaja, CerrarCaja, Movimiento } from "./formularios";
 
 export const metadata: Metadata = { title: "Caja" };
@@ -26,6 +30,8 @@ const TIPO: Record<string, string> = {
 
 export default async function CajaPage() {
   const ctx = await requireModule(AppModule.CAJA);
+  const settings = await getSettings(ctx.business.id);
+  const businessDate = currentBusinessDate(settings);
   const caja = await getCajaAbierta(ctx.business.id);
 
   if (!caja) {
@@ -81,9 +87,10 @@ export default async function CajaPage() {
   }
 
   const db = tenantDb(ctx.business.id);
-  const [resumen, movimientos] = await Promise.all([
+  const [resumen, movimientos, cuentas] = await Promise.all([
     getResumenCaja(db, caja.id),
     getMovimientos(ctx.business.id, caja.id),
+    getCuentasPorCobrar(ctx.business.id, businessDate),
   ]);
 
   return (
@@ -95,6 +102,8 @@ export default async function CajaPage() {
           {formatDateTimeInTimeZone(caja.openedAt, ctx.business.timeZone)}
         </p>
       </div>
+
+      <CuentasPorCobrar cuentas={cuentas} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-6">

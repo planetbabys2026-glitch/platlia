@@ -5,31 +5,49 @@ import { tenantDb } from "@/lib/db/tenant";
 // porque la pantalla lo necesita en el navegador. Se reexporta por comodidad.
 export { MINUTOS_POR_DEFECTO } from "@/features/cocina/constantes";
 
+export type ComandaItem = {
+  id: string;
+  nameSnapshot: string;
+  quantity: number;
+  notes: string | null;
+  status: string;
+  preparationMinutes: number | null;
+};
+
+export type ComandaOrden = {
+  id: string;
+  orderId: string;
+  code: number;
+  mesa: string | null;
+  turno: number | null;
+  type: string;
+  desde: number;
+  items: ComandaItem[];
+};
+
+export type EstacionGroup = {
+  nombre: string;
+  comandas: ComandaOrden[];
+};
+
 /**
- * Las comandas vivas, agrupadas por estación.
+ * Las comandas vivas, agrupadas por estación y por pedido/mesa.
  *
- * Incluye las que ya están LISTAS: si desaparecieran al marcarlas, nadie podría
- * marcarlas entregadas y el plato quedaría para siempre "listo" en la base. Lo
- * entregado sí desaparece, porque una pantalla de cocina que acumula historia
- * deja de servir a los quince minutos.
+ * Junta todos los productos de la misma mesa/pedido en 1 sola comanda para la cocina,
+ * mostrando claramente las notas por producto y permitiendo gestionar el avance.
  */
-export async function getComandas(businessId: string, businessDate: Date) {
+export async function getComandas(businessId: string, businessDate: Date): Promise<EstacionGroup[]> {
   const items = await tenantDb(businessId).orderItem.findMany({
     where: {
       status: { in: ["PENDIENTE", "EN_PREPARACION", "LISTO"] },
-      // Solo la jornada en curso: un renglón de anteayer no es trabajo de la
-      // cocina de hoy, es basura que tapa lo que sí hay que cocinar.
       order: {
         businessDate,
         OR: [
           { status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
-          // Para llevar se paga por adelantado y la comida sigue en el fuego. En
-          // mesa se paga al final: si el pedido está pagado, ya comieron.
           { status: "PAGADA", type: { not: "MESA" } },
         ],
       },
     },
-    // El más viejo primero: en una cocina se despacha por orden de llegada.
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -52,16 +70,53 @@ export async function getComandas(businessId: string, businessDate: Date) {
     },
   });
 
-  const estaciones = new Map<string, typeof items>();
+  const estacionesMap = new Map<string, Map<string, ComandaOrden>>();
+
   for (const item of items) {
     const estacion = item.product.kitchenStation?.trim() || "Sin estación";
-    const actual = estaciones.get(estacion) ?? [];
-    actual.push(item);
-    estaciones.set(estacion, actual);
+    let ordenesMap = estacionesMap.get(estacion);
+    if (!ordenesMap) {
+      ordenesMap = new Map<string, ComandaOrden>();
+      estacionesMap.set(estacion, ordenesMap);
+    }
+
+    const orderId = item.order.id;
+    let comandaOrden = ordenesMap.get(orderId);
+    const itemDesde = (item.sentToKitchenAt ?? item.createdAt).getTime();
+
+    if (!comandaOrden) {
+      comandaOrden = {
+        id: `${estacion}-${orderId}`,
+        orderId: item.order.id,
+        code: item.order.code,
+        mesa: item.order.table?.name ?? null,
+        turno: item.order.turnNumber,
+        type: item.order.type,
+        desde: itemDesde,
+        items: [],
+      };
+      ordenesMap.set(orderId, comandaOrden);
+    } else {
+      if (itemDesde < comandaOrden.desde) {
+        comandaOrden.desde = itemDesde;
+      }
+    }
+
+    comandaOrden.items.push({
+      id: item.id,
+      nameSnapshot: item.nameSnapshot,
+      quantity: item.quantity,
+      notes: item.notes,
+      status: item.status,
+      preparationMinutes: item.product.preparationMinutes,
+    });
   }
 
-  return [...estaciones.entries()]
-    .map(([nombre, comandas]) => ({ nombre, comandas }))
+  return [...estacionesMap.entries()]
+    .map(([nombre, ordenesMap]) => ({
+      nombre,
+      comandas: [...ordenesMap.values()],
+    }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
 

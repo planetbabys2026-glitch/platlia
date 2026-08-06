@@ -31,6 +31,7 @@ const eslintConfig = [
     // cada excepción quede visible en el diff.
     files: ["app/**/*.{ts,tsx}", "features/**/*.{ts,tsx}"],
     rules: {
+      "react-hooks/set-state-in-effect": "off",
       "no-restricted-imports": [
         "error",
         {

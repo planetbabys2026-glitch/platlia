@@ -133,3 +133,50 @@ export async function getMovimientos(businessId: string, cashSessionId: string) 
     take: 100,
   });
 }
+
+/**
+ * Trae las cuentas y pedidos pendientes de cobro para la caja.
+ *
+ * Las que tienen `CUENTA_PEDIDA` salen arriba de todo con prioridad para que el
+ * cajero las cobre y libere las mesas de forma ágil.
+ */
+export async function getCuentasPorCobrar(businessId: string, businessDate: Date) {
+  return tenantDb(businessId).order.findMany({
+    where: {
+      businessDate,
+      status: { in: ["ABIERTA", "CUENTA_PEDIDA"] },
+      items: { some: { status: { not: "ANULADO" } } },
+    },
+    orderBy: [
+      { status: "asc" },
+      { billRequestedAt: "desc" },
+      { openedAt: "desc" },
+    ],
+    select: {
+      id: true,
+      code: true,
+      type: true,
+      turnNumber: true,
+      status: true,
+      totalCop: true,
+      paidCop: true,
+      subtotalCop: true,
+      taxCop: true,
+      tipCop: true,
+      customerName: true,
+      billRequestedAt: true,
+      openedAt: true,
+      table: { select: { id: true, name: true } },
+      openedBy: { select: { name: true } },
+      items: {
+        where: { status: { not: "ANULADO" } },
+        select: {
+          id: true,
+          nameSnapshot: true,
+          quantity: true,
+          lineTotalCop: true,
+        },
+      },
+    },
+  });
+}

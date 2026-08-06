@@ -14,6 +14,7 @@ export type Turno = {
   orderId: string;
   turno: number;
   nombre: string | null;
+  isMesa: boolean;
   /** Desde cuándo está listo o esperando, en milisegundos de época. */
   desde: number;
 };
@@ -27,12 +28,13 @@ export async function getTurnero(businessId: string, businessDate: Date): Promis
   const pedidos = await tenantDb(businessId).order.findMany({
     where: {
       businessDate,
-      turnNumber: { not: null },
       status: { in: ["ABIERTA", "CUENTA_PEDIDA", "PAGADA"] },
     },
     orderBy: { openedAt: "asc" },
     select: {
       id: true,
+      code: true,
+      type: true,
       turnNumber: true,
       customerName: true,
       openedAt: true,
@@ -57,10 +59,13 @@ export async function getTurnero(businessId: string, businessDate: Date): Promis
       (i) => i.status === "LISTO" || i.status === "ENTREGADO",
     );
 
+    const turnoNumero = pedido.turnNumber ?? pedido.code;
+
     const turno: Turno = {
       orderId: pedido.id,
-      turno: pedido.turnNumber!,
+      turno: turnoNumero,
       nombre: pedido.customerName,
+      isMesa: pedido.type === "MESA",
       desde: pedido.openedAt.getTime(),
     };
 

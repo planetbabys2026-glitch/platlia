@@ -100,14 +100,16 @@ export const abrirPedido = defineAction({
           select: { code: true },
         });
 
-        // El turno NO se reparte acá. Se asigna recién cuando el pedido se cobra
-        // (registrarPago): en un mostrador de venta rápida, el turnero no tiene
-        // por qué gritar un número por algo que el cliente ni siquiera terminó de
-        // pedir, ni por un pedido que se anula antes de pagarse.
+        const turnNumber =
+          input.type !== "MESA"
+            ? await siguienteTurnoLibre(tx, businessDate, settings.turnNumberMax)
+            : null;
+
         const pedido = await tx.order.create({
           data: {
             businessId: ctx.business.id,
             code: (ultimo?.code ?? 0) + 1,
+            turnNumber,
             businessDate,
             type: input.type,
             tableId: input.tableId ?? null,
@@ -132,6 +134,7 @@ export const abrirPedido = defineAction({
       }),
     ).then((pedido) => {
       revalidatePath("/salon");
+      revalidatePath("/turnero");
       revalidatePath(`/pedido/${pedido.id}`);
       return pedido;
     });
@@ -250,6 +253,9 @@ export const agregarItem = defineAction({
     });
 
     revalidatePath(`/pedido/${input.orderId}`);
+    revalidatePath("/salon");
+    revalidatePath("/turnero");
+    revalidatePath("/cocina");
   },
 });
 
@@ -502,6 +508,8 @@ export const pedirCuenta = defineAction({
     });
 
     revalidatePath("/salon");
+    revalidatePath("/caja");
+    revalidatePath("/turnero");
     revalidatePath(`/pedido/${pedido.id}`);
   },
 });
@@ -631,6 +639,7 @@ export const registrarPago = defineAction({
 
     revalidatePath("/salon");
     revalidatePath("/caja");
+    revalidatePath("/turnero");
     revalidatePath(`/pedido/${input.orderId}`);
     return resultado;
   },
@@ -709,5 +718,68 @@ export const anularPedido = defineAction({
 
     revalidatePath("/salon");
     revalidatePath(`/pedido/${input.orderId}`);
+  },
+});
+
+export const confirmarPedido = defineAction({
+  schema: pedidoSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx, db }) {
+    const settings = await getSettings(ctx.business.id);
+
+    const resultado = await db.$transaction(async (tx) => {
+      const pedido = await tx.order.findFirst({
+        where: { id: input.orderId },
+        select: {
+          id: true,
+          type: true,
+          turnNumber: true,
+          businessDate: true,
+          status: true,
+          items: {
+            where: { status: { not: "ANULADO" } },
+            select: { id: true },
+          },
+        },
+      });
+
+      if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
+      if (pedido.status === "PAGADA" || pedido.status === "ANULADA") {
+        throw new ErrorDeUsuario("El pedido ya está cerrado.");
+      }
+      if (pedido.items.length === 0) {
+        throw new ErrorDeUsuario(
+          "El pedido no tiene productos. Agregá productos a la comanda antes de enviarla a cocina.",
+        );
+      }
+
+      let turnNumber = pedido.turnNumber;
+      if (turnNumber === null) {
+        turnNumber = await siguienteTurnoLibre(tx, pedido.businessDate, settings.turnNumberMax);
+      }
+
+      await tx.order.update({
+        where: { id: pedido.id },
+        data: {
+          turnNumber,
+          items: {
+            updateMany: {
+              where: { status: "PENDIENTE" },
+              data: { sentToKitchenAt: new Date() },
+            },
+          },
+        },
+      });
+
+      return { turnNumber };
+    });
+
+    revalidatePath("/salon");
+    revalidatePath("/cocina");
+    revalidatePath("/turnero");
+    revalidatePath(`/pedido/${input.orderId}`);
+
+    return resultado;
   },
 });

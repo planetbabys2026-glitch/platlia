@@ -57,6 +57,7 @@ export const avanzarComanda = defineAction({
     });
 
     revalidatePath("/cocina");
+    revalidatePath("/turnero");
     revalidatePath(`/pedido/${item.orderId}`);
     return { status: siguiente };
   },

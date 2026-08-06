@@ -43,19 +43,21 @@ function normalizar(texto: string): string {
 }
 
 function TarjetaProducto({ orderId, producto }: { orderId: string; producto: ProductoDeCarta }) {
-  const [estado, accion] = useActionState(agregarItem, ESTADO_INICIAL);
+  const [estado, accion, isPending] = useActionState(agregarItem, ESTADO_INICIAL);
 
   return (
-    <li className="border-border bg-card overflow-hidden rounded-xl border">
+    <li className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card transition-all duration-300 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10 hover:-translate-y-1 active:scale-[0.98]">
       <form action={accion} className="contents">
         <input type="hidden" name="orderId" value={orderId} />
         <input type="hidden" name="productId" value={producto.id} />
-        <ImagenProducto
-          nombre={producto.name}
-          imageUrl={producto.imageUrl}
-          className="aspect-square w-full object-cover"
-        />
-        <Boton nombre={producto.name} precio={producto.priceCop} disponible={producto.isAvailable} />
+        <div className="overflow-hidden">
+          <ImagenProducto
+            nombre={producto.name}
+            imageUrl={producto.imageUrl}
+            className="aspect-square w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          />
+        </div>
+        <Boton nombre={producto.name} precio={producto.priceCop} disponible={producto.isAvailable} isPending={isPending} />
       </form>
 
       {!estado.ok && estado.error && (
@@ -69,27 +71,33 @@ function Boton({
   nombre,
   precio,
   disponible,
+  isPending,
 }: {
   nombre: string;
   precio: number;
   disponible: boolean;
+  isPending?: boolean;
 }) {
   const { pending } = useFormStatus();
+  const cargando = pending || isPending;
+
   return (
     <button
       type="submit"
-      disabled={pending || !disponible}
+      disabled={cargando || !disponible}
       className={cn(
-        "flex w-full flex-col gap-0.5 p-2 text-left transition-colors",
-        "hover:bg-accent focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
+        "flex w-full flex-col gap-0.5 p-2.5 text-left transition-colors duration-200",
+        "group-hover:bg-accent/70 focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
         "disabled:pointer-events-none disabled:opacity-40",
       )}
     >
-      <span className="text-sm leading-tight font-medium">{nombre}</span>
-      <span className="numeral text-muted-foreground text-xs">
+      <span className="text-sm leading-tight font-semibold tracking-tight transition-colors duration-200 group-hover:text-brand">
+        {nombre}
+      </span>
+      <span className="numeral text-muted-foreground text-xs font-medium transition-colors duration-200 group-hover:text-foreground">
         {disponible ? formatCop(precio) : "Agotado"}
       </span>
-      <span className="sr-only">{pending ? "Agregando" : "Agregar al pedido"}</span>
+      <span className="sr-only">{cargando ? "Agregando" : "Agregar al pedido"}</span>
     </button>
   );
 }

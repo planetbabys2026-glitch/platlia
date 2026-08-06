@@ -35,26 +35,9 @@ export default async function CocinaPage() {
             {estacion.nombre} · {estacion.comandas.length}
           </h2>
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {estacion.comandas.map((item) => (
-              <li key={item.id}>
-                <Comanda
-                  comanda={{
-                    id: item.id,
-                    nombre: item.nameSnapshot,
-                    cantidad: item.quantity,
-                    notas: item.notes,
-                    estado: item.status,
-                    // Se manda como número: un Date cruza el límite RSC, pero un
-                    // número no deja lugar a sorpresas de zona horaria.
-                    desde: (item.sentToKitchenAt ?? item.createdAt).getTime(),
-                    minutosEstimados: item.product.preparationMinutes,
-                    pedido: {
-                      code: item.order.code,
-                      mesa: item.order.table?.name ?? null,
-                      turno: item.order.turnNumber,
-                    },
-                  }}
-                />
+            {estacion.comandas.map((comanda) => (
+              <li key={comanda.id}>
+                <Comanda comanda={comanda} />
               </li>
             ))}
           </ul>

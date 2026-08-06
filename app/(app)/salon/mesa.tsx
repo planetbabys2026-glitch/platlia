@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { abrirPedido } from "@/features/pedidos/actions";
 import type { MesaDelSalon } from "@/features/salon/queries";
+import { PantallaCargando } from "@/components/ui/cargando-overlay";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -43,17 +44,23 @@ function Cuadro({
       type={props.type ?? "button"}
       {...props}
       className={cn(
-        "border-border bg-card relative flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-xl border p-2 text-center transition-colors",
-        "hover:bg-accent focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
+        "group relative flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-2xl border border-border/80 bg-card p-2 text-center overflow-hidden",
+        "transition-all duration-300 ease-out hover:border-brand/50 hover:shadow-xl hover:shadow-brand/10 hover:-translate-y-1.5 hover:scale-[1.04] active:scale-[0.96]",
+        "focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
         "disabled:pointer-events-none disabled:opacity-50",
         props.className,
       )}
     >
       <span
         aria-hidden
-        className={cn("absolute top-2 right-2 size-2.5 rounded-full", COLOR[mesa.status])}
+        className={cn(
+          "absolute top-2.5 right-2.5 size-3 rounded-full transition-transform duration-300 group-hover:scale-125 shadow-xs",
+          COLOR[mesa.status],
+        )}
       />
-      <span className="numeral text-2xl leading-none font-semibold">{mesa.name}</span>
+      <span className="numeral text-2xl leading-none font-bold tracking-tight transition-transform duration-300 group-hover:scale-110 group-hover:text-brand">
+        {mesa.name}
+      </span>
       {children}
     </button>
   );
@@ -61,11 +68,9 @@ function Cuadro({
 
 export function Mesa({ mesa }: { mesa: MesaDelSalon }) {
   const router = useRouter();
-  const [estado, accion] = useActionState(abrirPedido, ESTADO_INICIAL);
+  const [estado, accion, isPending] = useActionState(abrirPedido, ESTADO_INICIAL);
   const pedido = mesa.orders[0];
 
-  // Al abrir el pedido se entra directo a su cuenta: el mesero ya está parado al
-  // lado de la mesa esperando para cantar el primer producto.
   useEffect(() => {
     if (estado.ok && estado.data?.id) router.push(`/pedido/${estado.data.id}`);
   }, [estado, router]);
@@ -89,25 +94,29 @@ export function Mesa({ mesa }: { mesa: MesaDelSalon }) {
     <form action={accion}>
       <input type="hidden" name="type" value="MESA" />
       <input type="hidden" name="tableId" value={mesa.id} />
-      <BotonAbrir mesa={mesa} error={!estado.ok ? estado.error : undefined} />
+      <BotonAbrir mesa={mesa} error={!estado.ok ? estado.error : undefined} isPending={isPending} />
     </form>
   );
 }
 
-function BotonAbrir({ mesa, error }: { mesa: MesaDelSalon; error?: string }) {
+function BotonAbrir({ mesa, error, isPending }: { mesa: MesaDelSalon; error?: string; isPending?: boolean }) {
   const { pending } = useFormStatus();
+  const cargando = pending || isPending;
 
   return (
-    <Cuadro
-      mesa={mesa}
-      type="submit"
-      disabled={pending || mesa.status === "INACTIVA"}
-      title={error}
-      aria-label={`Abrir pedido en la mesa ${mesa.name}`}
-    >
-      <span className="text-muted-foreground text-[0.65rem]">
-        {pending ? "Abriendo…" : (error ?? ETIQUETA[mesa.status])}
-      </span>
-    </Cuadro>
+    <>
+      <PantallaCargando forcePending={cargando} />
+      <Cuadro
+        mesa={mesa}
+        type="submit"
+        disabled={cargando || mesa.status === "INACTIVA"}
+        title={error}
+        aria-label={`Abrir pedido en la mesa ${mesa.name}`}
+      >
+        <span className="text-muted-foreground text-[0.65rem]">
+          {cargando ? "Abriendo…" : (error ?? ETIQUETA[mesa.status])}
+        </span>
+      </Cuadro>
+    </>
   );
 }

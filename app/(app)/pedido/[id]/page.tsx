@@ -7,11 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireModule, tieneRol } from "@/lib/auth/dal";
 import { formatCop, formatRateBp } from "@/lib/money";
+import { formatTurno } from "@/lib/turns";
 import { Carta } from "./carta";
 import {
   AnularPedido,
   AnularRenglon,
-  Cobrar,
+  ConfirmarPedido,
   ControlCantidad,
   NotaRenglon,
   PedirCuenta,
@@ -71,7 +72,12 @@ export default async function PedidoPage({
           </div>
           <p className="text-muted-foreground text-sm">
             Pedido {pedido.code}
-            {pedido.turnNumber !== null && ` · turno ${pedido.turnNumber}`}
+            {pedido.turnNumber !== null && (
+              <span className="font-semibold text-foreground">
+                {" · Turno "}
+                {formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")}
+              </span>
+            )}
             {pedido.guestsCount ? ` · ${pedido.guestsCount} personas` : ""} · abrió{" "}
             {pedido.openedBy.name}
           </p>
@@ -109,6 +115,14 @@ export default async function PedidoPage({
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          {editable && renglones.length > 0 && (
+            <ConfirmarPedido
+              orderId={pedido.id}
+              hasItems={renglones.length > 0}
+              turnNumber={pedido.turnNumber}
+              isMesa={pedido.type === "MESA"}
+            />
+          )}
           <Card>
             <CardContent className="space-y-4">
               <h2 className="font-medium">La cuenta</h2>
@@ -177,7 +191,7 @@ export default async function PedidoPage({
           </Card>
 
           {pedido.status === "ABIERTA" && renglones.length > 0 && (
-            <PedirCuenta orderId={pedido.id} />
+            <PedirCuenta orderId={pedido.id} esMesa={pedido.type === "MESA"} />
           )}
 
           {editable && puedeCobrar && (
@@ -192,14 +206,7 @@ export default async function PedidoPage({
             </Card>
           )}
 
-          {editable && puedeCobrar && renglones.length > 0 && (
-            <Card>
-              <CardContent>
-                <h2 className="mb-3 font-medium">Cobrar</h2>
-                <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
-              </CardContent>
-            </Card>
-          )}
+
 
           {pedido.payments.length > 0 && (
             <Card>

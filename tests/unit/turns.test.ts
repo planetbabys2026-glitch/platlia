@@ -48,4 +48,9 @@ describe("formatTurno", () => {
     expect(formatTurno(7, 999)).toBe("007");
     expect(formatTurno(7, 9)).toBe("7");
   });
+
+  it("agrega el prefijo M si es un turno de mesa", () => {
+    expect(formatTurno(7, 99, true)).toBe("M07");
+    expect(formatTurno(47, 99, true)).toBe("M47");
+  });
 });

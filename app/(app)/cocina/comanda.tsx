@@ -5,33 +5,11 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { avanzarComanda } from "@/features/cocina/actions";
 import { MINUTOS_POR_DEFECTO } from "@/features/cocina/constantes";
+import { ComandaItem, ComandaOrden } from "@/features/cocina/queries";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 
-/**
- * Una comanda en la pantalla de cocina.
- *
- * La pantalla se mira de lejos y con las manos ocupadas: cifras grandes, un solo
- * botón por comanda y color que dice cuánto lleva esperando sin tener que leer.
- */
-
-export type ComandaEnPantalla = {
-  id: string;
-  nombre: string;
-  cantidad: number;
-  notas: string | null;
-  estado: string;
-  /** Milisegundos desde época: se serializa sin problema al cliente. */
-  desde: number;
-  minutosEstimados: number | null;
-  pedido: { code: number; mesa: string | null; turno: number | null };
-};
-
-/**
- * El color sale de comparar la espera contra lo que ese plato debería tardar, no
- * contra un número fijo: un cóctel de 6 minutos y una bandeja paisa de 25 no se
- * ponen en rojo al mismo tiempo.
- */
 function colorDeEspera(minutos: number, estimado: number): string {
   if (minutos <= estimado) return "bg-espera-ok";
   if (minutos <= estimado * 1.5) return "bg-espera-atencion";
@@ -39,7 +17,6 @@ function colorDeEspera(minutos: number, estimado: number): string {
   return "bg-espera-critico";
 }
 
-/** Minutos transcurridos, actualizados cada 15 segundos. */
 function useMinutos(desde: number): number {
   const [ahora, setAhora] = useState(() => Date.now());
 
@@ -57,7 +34,7 @@ const SIGUIENTE_PASO: Record<string, string> = {
   LISTO: "Entregar",
 };
 
-function Boton({ estado }: { estado: string }) {
+function BotonRenglon({ estado }: { estado: string }) {
   const { pending } = useFormStatus();
 
   return (
@@ -65,10 +42,12 @@ function Boton({ estado }: { estado: string }) {
       type="submit"
       disabled={pending}
       className={cn(
-        "focus-visible:ring-ring w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:opacity-50",
+        "rounded-md px-2.5 py-1 text-xs font-semibold transition-all focus-visible:outline-none disabled:opacity-50",
         estado === "PENDIENTE"
           ? "bg-secondary text-secondary-foreground hover:bg-accent"
-          : "bg-primary text-primary-foreground hover:bg-primary/80",
+          : estado === "EN_PREPARACION"
+            ? "bg-brand text-brand-foreground hover:bg-brand/80"
+            : "bg-emerald-600 text-white hover:bg-emerald-700",
       )}
     >
       {pending ? "…" : (SIGUIENTE_PASO[estado] ?? "Avanzar")}
@@ -76,67 +55,90 @@ function Boton({ estado }: { estado: string }) {
   );
 }
 
-export function Comanda({ comanda }: { comanda: ComandaEnPantalla }) {
+function RenglonComanda({ item }: { item: ComandaItem }) {
   const [estado, accion] = useActionState(avanzarComanda, ESTADO_INICIAL);
-  const minutos = useMinutos(comanda.desde);
-  const estimado = comanda.minutosEstimados ?? MINUTOS_POR_DEFECTO;
 
   return (
-    <article
-      className={cn(
-        "border-border bg-card space-y-2 rounded-xl border p-3",
-        comanda.estado === "EN_PREPARACION" && "border-primary",
-        // Lo listo se apaga: ya no es trabajo de la cocina, solo falta que
-        // alguien lo lleve.
-        comanda.estado === "LISTO" && "border-espera-ok opacity-70",
-      )}
-    >
+    <div className="border-border/60 space-y-1.5 border-b py-2.5 last:border-b-0 last:pb-0">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-muted-foreground text-xs">
-          {comanda.pedido.mesa
-            ? `Mesa ${comanda.pedido.mesa}`
-            : comanda.pedido.turno !== null
-              ? `Turno ${comanda.pedido.turno}`
-              : `Pedido ${comanda.pedido.code}`}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className={cn("size-2.5 rounded-full", colorDeEspera(minutos, estimado))}
-          />
-          <span className="numeral text-xs">{minutos} min</span>
-        </span>
+        <div className="space-y-0.5">
+          <p className="text-base font-semibold leading-snug">
+            <span className="text-brand font-bold mr-1">{item.quantity}x</span> {item.nameSnapshot}
+          </p>
+          {item.notes && (
+            <div className="mt-1 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+              <span className="shrink-0">📝</span>
+              <span className="leading-tight">{item.notes}</span>
+            </div>
+          )}
+        </div>
+
+        <form action={accion} className="shrink-0">
+          <input type="hidden" name="itemId" value={item.id} />
+          <BotonRenglon estado={item.status} />
+        </form>
       </div>
-
-      <p className="text-lg leading-tight font-semibold">
-        <span className="numeral">{comanda.cantidad}</span> {comanda.nombre}
-      </p>
-
-      {comanda.notas && (
-        <p className="text-espera-demora text-sm font-medium">{comanda.notas}</p>
-      )}
-
-      <form action={accion}>
-        <input type="hidden" name="itemId" value={comanda.id} />
-        <Boton estado={comanda.estado} />
-      </form>
 
       {!estado.ok && estado.error && (
         <p className="text-destructive text-xs">{estado.error}</p>
       )}
+    </div>
+  );
+}
+
+export function Comanda({ comanda }: { comanda: ComandaOrden }) {
+  const minutos = useMinutos(comanda.desde);
+  const maxEstimado = Math.max(
+    ...comanda.items.map((i) => i.preparationMinutes ?? MINUTOS_POR_DEFECTO),
+    MINUTOS_POR_DEFECTO,
+  );
+
+  const tituloMesaOOrder = comanda.mesa
+    ? `Mesa ${comanda.mesa}${comanda.turno !== null ? ` · ${formatTurno(comanda.turno, 99, true)}` : ""}`
+    : comanda.turno !== null
+      ? `Turno ${formatTurno(comanda.turno, 99, false)}`
+      : `Pedido #${comanda.code}`;
+
+  return (
+    <article
+      className={cn(
+        "border-border bg-card space-y-3 rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:shadow-md",
+        comanda.items.some((i) => i.status === "EN_PREPARACION") && "border-brand/60 ring-1 ring-brand/20",
+        comanda.items.every((i) => i.status === "LISTO") && "border-emerald-500/40 bg-emerald-500/5 opacity-80",
+      )}
+    >
+      {/* Header de la Comanda por Mesa / Pedido */}
+      <div className="border-border/80 flex items-center justify-between border-b pb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-foreground text-sm font-bold tracking-tight">
+            {tituloMesaOOrder}
+          </span>
+          {comanda.items.every((i) => i.status === "LISTO") && (
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+              ✔ LISTO
+            </span>
+          )}
+        </div>
+        <span className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className={cn("size-2.5 rounded-full animate-pulse", colorDeEspera(minutos, maxEstimado))}
+          />
+          <span className="numeral text-xs font-semibold">{minutos} min</span>
+        </span>
+      </div>
+
+      {/* Lista de Productos de la Comanda */}
+      <div className="space-y-1">
+        {comanda.items.map((item) => (
+          <RenglonComanda key={item.id} item={item} />
+        ))}
+      </div>
     </article>
   );
 }
 
-/**
- * Trae las comandas nuevas sin que nadie toque nada.
- *
- * Es un sondeo, no un stream: quince segundos de retraso en una cocina no se
- * notan, y el SSE de verdad —con su reconexión, su latido y su proxy que lo
- * bufferea— es una pieza que se justifica cuando la pantalla la miren varios
- * negocios a la vez, no antes.
- */
-export function RefrescoAutomatico({ segundos = 15 }: { segundos?: number }) {
+export function RefrescoAutomatico({ segundos = 10 }: { segundos?: number }) {
   const router = useRouter();
 
   useEffect(() => {

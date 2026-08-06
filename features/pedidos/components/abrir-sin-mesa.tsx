@@ -10,12 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 
-function Enviar() {
+import { PantallaCargando } from "@/components/ui/cargando-overlay";
+
+function Enviar({ isPending }: { isPending?: boolean }) {
   const { pending } = useFormStatus();
+  const cargando = pending || isPending;
   return (
-    <Button type="submit" variant="outline" disabled={pending}>
-      {pending ? "Abriendo…" : "Nuevo pedido"}
-    </Button>
+    <>
+      <PantallaCargando forcePending={cargando} />
+      <Button type="submit" variant="outline" disabled={cargando}>
+        {cargando ? "Abriendo…" : "Nuevo pedido"}
+      </Button>
+    </>
   );
 }
 

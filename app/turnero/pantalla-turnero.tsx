@@ -9,6 +9,7 @@ type TurnoItem = {
   orderId: string;
   turno: number;
   nombre: string | null;
+  isMesa?: boolean;
   listoAt?: Date | null;
 };
 
@@ -113,41 +114,68 @@ export function PantallaTurnero({
     return () => clearInterval(interval);
   }, [mediaMode, images, imageIntervalSeconds]);
 
-  // Alerta sonora y animación cuando aparece o cambia el turno listo más reciente
+  // Refs de temporizadores que persisten a través de re-renders de sondeo
+  const timerTransicionRef = useRef<NodeJS.Timeout | null>(null);
+  const timerFinalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Alerta sonora y animación cuando aparece un pedido verdaderamente NUEVO
   useEffect(() => {
     if (listos.length === 0) {
       prevListosIdRef.current = "";
+      if (timerTransicionRef.current) clearTimeout(timerTransicionRef.current);
+      if (timerFinalRef.current) clearTimeout(timerFinalRef.current);
+      setNuevoTurnoDestacado(null);
+      setAnimandoHaciaEsquina(false);
       return;
     }
 
     const masReciente = listos[0];
     const currentId = masReciente.orderId;
 
+    // Solo se dispara si cambia el ID del pedido listo en el tope de la lista
     if (prevListosIdRef.current !== currentId) {
       prevListosIdRef.current = currentId;
       playChimeSound();
 
-      // Disparar Modal Central Destacado
+      if (timerTransicionRef.current) clearTimeout(timerTransicionRef.current);
+      if (timerFinalRef.current) clearTimeout(timerFinalRef.current);
+
       setNuevoTurnoDestacado(masReciente);
       setAnimandoHaciaEsquina(false);
 
-      // Transición hacia la esquina a los 3.5 segundos
-      const timerTransicion = setTimeout(() => {
+      // A los 4.0s inicia transición de encogimiento hacia esquina
+      timerTransicionRef.current = setTimeout(() => {
         setAnimandoHaciaEsquina(true);
-      }, 3500);
+      }, 4000);
 
-      // Finalizar animación central a los 4.2 segundos
-      const timerFinal = setTimeout(() => {
+      // A los 5.0s desactiva completamente el modal y remueve el blur
+      timerFinalRef.current = setTimeout(() => {
         setNuevoTurnoDestacado(null);
         setAnimandoHaciaEsquina(false);
-      }, 4200);
-
-      return () => {
-        clearTimeout(timerTransicion);
-        clearTimeout(timerFinal);
-      };
+      }, 5000);
     }
   }, [listos]);
+
+  // Desbloquear audio en el primer clic o toque de la pantalla si el navegador bloquea autoplay
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const dummyCtx = new AudioCtx();
+          if (dummyCtx.state === "suspended") void dummyCtx.resume();
+        }
+      } catch {}
+    };
+    window.addEventListener("click", unlockAudio, { once: true });
+    window.addEventListener("touchstart", unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+    };
+  }, []);
 
   // Determinar la clase de posicionamiento del recuadro sobrepuesto
   const isTopLeft = badgePosition === "TOP_LEFT";
@@ -155,7 +183,7 @@ export function PantallaTurnero({
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-neutral-950 text-white font-sans select-none">
-      <RefrescoDeTelevisor segundos={8} />
+      <RefrescoDeTelevisor segundos={4} />
       <PantallaSiempreEncendida />
 
       {/* ─────────────────────────────────────────────────────────────
@@ -207,7 +235,13 @@ export function PantallaTurnero({
           capa 2: MODAL SOBREPUESTO CENTRAL (Alerta de Nuevo Turno Listo)
           ───────────────────────────────────────────────────────────── */}
       {nuevoTurnoDestacado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md transition-all duration-700 ease-in-out">
+        <div
+          onClick={() => {
+            setNuevoTurnoDestacado(null);
+            setAnimandoHaciaEsquina(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md cursor-pointer transition-all duration-700 ease-in-out"
+        >
           <div
             className={`flex flex-col items-center justify-center rounded-3xl border-4 border-emerald-500 bg-gradient-to-b from-neutral-900 to-neutral-950 p-10 text-center shadow-2xl shadow-emerald-500/30 transition-all duration-700 ease-in-out ${
               animandoHaciaEsquina
@@ -221,7 +255,7 @@ export function PantallaTurnero({
 
             <div className="my-4 flex items-center justify-center rounded-2xl bg-emerald-500 px-8 py-4 text-white shadow-lg">
               <span className="numeral text-8xl font-black leading-none tracking-tight sm:text-9xl">
-                {formatTurno(nuevoTurnoDestacado.turno, turnNumberMax)}
+                {formatTurno(nuevoTurnoDestacado.turno, turnNumberMax, nuevoTurnoDestacado.isMesa)}
               </span>
             </div>
 
@@ -241,12 +275,12 @@ export function PantallaTurnero({
       {/* ─────────────────────────────────────────────────────────────
           capa 3: RECUADRO SOBREPUESTO EN ESQUINA (Turnos Listos)
           ───────────────────────────────────────────────────────────── */}
-      <div className={`fixed z-30 ${posClass} max-w-sm sm:max-w-md w-full`}>
-        <div className="rounded-3xl border border-white/15 bg-neutral-950/85 backdrop-blur-xl p-5 shadow-2xl space-y-4">
+      <div className={`fixed z-30 ${posClass} max-w-md sm:max-w-lg w-full`}>
+        <div className="rounded-3xl border border-white/15 bg-neutral-950/90 backdrop-blur-2xl p-6 shadow-2xl space-y-4">
           
           {/* Header con Logotipo y Nombre del Negocio */}
           <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-            <Logotipo className="h-6 opacity-90" />
+            <Logotipo className="h-7 opacity-90" />
             <span className="truncate text-sm font-semibold tracking-wider text-neutral-300 uppercase">
               {businessName}
             </span>
@@ -255,37 +289,45 @@ export function PantallaTurnero({
           {/* Encabezado del Recuadro */}
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold tracking-[0.2em] text-emerald-400 uppercase flex items-center gap-2">
-              <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="size-2.5 rounded-full bg-emerald-500 animate-ping" />
               Órdenes Listas ({listos.length})
             </h2>
           </div>
 
-          {/* Lista de Números Listos */}
+          {/* Lista de Números Listos (Hasta 4 pedidos perfectamente ajustados sin scrollbar) */}
           {listos.length === 0 ? (
-            <div className="py-6 text-center text-neutral-500 font-medium text-sm">
+            <div className="py-8 text-center text-neutral-500 font-medium text-sm">
               Esperando pedidos listos...
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto pr-1">
-              {listos.map((turno, idx) => (
-                <div
-                  key={turno.orderId}
-                  className={`flex flex-col items-center justify-center rounded-2xl p-4 transition-all duration-300 ${
-                    idx === 0
-                      ? "bg-gradient-to-br from-emerald-600 to-emerald-800 text-white shadow-lg ring-2 ring-emerald-400 scale-[1.02]"
-                      : "bg-neutral-900/90 text-neutral-200 border border-white/10"
-                  }`}
-                >
-                  <span className="numeral text-4xl font-extrabold leading-none sm:text-5xl">
-                    {formatTurno(turno.turno, turnNumberMax)}
-                  </span>
-                  {turno.nombre && (
-                    <span className="mt-1 truncate max-w-full text-xs font-medium opacity-90">
-                      {turno.nombre}
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3.5 p-1">
+                {listos.slice(0, 4).map((turno, idx) => (
+                  <div
+                    key={turno.orderId}
+                    className={`flex flex-col items-center justify-center rounded-2xl p-4 sm:p-5 transition-all duration-300 ${
+                      idx === 0
+                        ? "bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 text-white shadow-xl shadow-emerald-950/50 ring-2 ring-emerald-400"
+                        : "bg-neutral-900/95 text-neutral-200 border border-white/10"
+                    }`}
+                  >
+                    <span className="numeral text-4xl font-black leading-none tracking-tight sm:text-5xl">
+                      {formatTurno(turno.turno, turnNumberMax, turno.isMesa)}
                     </span>
-                  )}
+                    {turno.nombre && (
+                      <span className="mt-1.5 truncate max-w-full text-xs font-medium opacity-90">
+                        {turno.nombre}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {listos.length > 4 && (
+                <div className="text-center text-xs font-semibold text-emerald-400/90 pt-1">
+                  + {listos.length - 4} {listos.length - 4 === 1 ? "pedido más listo" : "pedidos más listos"}
                 </div>
-              ))}
+              )}
             </div>
           )}
 

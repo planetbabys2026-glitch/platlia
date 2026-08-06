@@ -36,6 +36,11 @@ export function siguienteTurno(ultimo: number | null, max = TURNO_MAXIMO_POR_DEF
  * Con ceros a la izquierda hasta el ancho del tope: en el televisor las cifras
  * quedan alineadas y no saltan de lugar al pasar de 9 a 10.
  */
-export function formatTurno(turno: number, max = TURNO_MAXIMO_POR_DEFECTO): string {
-  return turno.toString().padStart(max.toString().length, "0");
+export function formatTurno(
+  turno: number,
+  max = TURNO_MAXIMO_POR_DEFECTO,
+  isMesa = false,
+): string {
+  const base = turno.toString().padStart(max.toString().length, "0");
+  return isMesa ? `M${base}` : base;
 }
