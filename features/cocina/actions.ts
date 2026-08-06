@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppModule, OrderItemStatus, Role } from "@/generated/prisma/enums";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { publishTurneroUpdate } from "@/lib/redis";
+import { publishCocinaUpdate, publishTurneroUpdate } from "@/lib/redis";
 import { id } from "@/lib/validaciones";
 
 /**
@@ -61,6 +61,7 @@ export const avanzarComanda = defineAction({
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${item.orderId}`);
 
+    void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
 
     return { status: siguiente };

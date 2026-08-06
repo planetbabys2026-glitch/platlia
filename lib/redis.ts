@@ -59,3 +59,18 @@ export async function publishTurneroUpdate(businessId: string): Promise<void> {
     // Falla tolerante: si Redis Pub/Sub no responde, la app sigue funcionando.
   }
 }
+
+/**
+ * Publica un evento de actualización de la pantalla de cocina para una sucursal en Redis Pub/Sub.
+ */
+export async function publishCocinaUpdate(businessId: string): Promise<void> {
+  const pub = getRedisPublisher();
+  if (!pub) return;
+
+  try {
+    const channel = `cocina:${businessId}`;
+    await pub.publish(channel, JSON.stringify({ type: "update", timestamp: Date.now() }));
+  } catch {
+    // Falla tolerante: si Redis Pub/Sub no responde, la app sigue funcionando.
+  }
+}

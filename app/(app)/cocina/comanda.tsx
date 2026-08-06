@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { avanzarComanda } from "@/features/cocina/actions";
 import { MINUTOS_POR_DEFECTO } from "@/features/cocina/constantes";
@@ -128,6 +127,14 @@ export function Comanda({ comanda }: { comanda: ComandaOrden }) {
         </span>
       </div>
 
+      {/* Nota General de la Comanda (si aplica) */}
+      {comanda.notes && (
+        <div className="flex items-start gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200">
+          <span className="shrink-0">📌 Nota:</span>
+          <span className="leading-tight">{comanda.notes}</span>
+        </div>
+      )}
+
       {/* Lista de Productos de la Comanda */}
       <div className="space-y-1">
         {comanda.items.map((item) => (
@@ -138,13 +145,4 @@ export function Comanda({ comanda }: { comanda: ComandaOrden }) {
   );
 }
 
-export function RefrescoAutomatico({ segundos = 10 }: { segundos?: number }) {
-  const router = useRouter();
 
-  useEffect(() => {
-    const id = window.setInterval(() => router.refresh(), segundos * 1000);
-    return () => window.clearInterval(id);
-  }, [router, segundos]);
-
-  return null;
-}

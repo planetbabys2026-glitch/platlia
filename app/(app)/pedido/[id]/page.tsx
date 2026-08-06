@@ -12,6 +12,7 @@ import { Carta } from "./carta";
 import {
   AnularPedido,
   AnularRenglon,
+  Cobrar,
   ConfirmarPedido,
   ControlCantidad,
   NotaRenglon,
@@ -190,8 +191,30 @@ export default async function PedidoPage({
             </CardContent>
           </Card>
 
-          {pedido.status === "ABIERTA" && renglones.length > 0 && (
-            <PedirCuenta orderId={pedido.id} esMesa={pedido.type === "MESA"} />
+          {/* Botón para imprimir ticket con el turno asignado */}
+          <a
+            href={`/imprimir/pedido/${pedido.id}`}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-all shadow-sm"
+          >
+            🖨️ Imprimir ticket {pedido.turnNumber !== null ? `(Turno ${formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")})` : ""}
+          </a>
+
+          {pedido.status === "ABIERTA" && renglones.length > 0 && pedido.type === "MESA" && (
+            <PedirCuenta orderId={pedido.id} esMesa={true} />
+          )}
+
+          {/* En modo POS (pedido rápido), se permite facturar/cobrar directamente sin enviar a caja */}
+          {editable && renglones.length > 0 && pedido.type !== "MESA" && (
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="pt-4 space-y-3">
+                <h2 className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">
+                  💳 Facturar y cobrar pedido (POS)
+                </h2>
+                <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
+              </CardContent>
+            </Card>
           )}
 
           {editable && puedeCobrar && (

@@ -100,6 +100,7 @@ export async function getPedidoParaTiquete(businessId: string, orderId: string) 
               receiptHeader: true,
               receiptFooter: true,
               pricesIncludeTax: true,
+              turnNumberMax: true,
             },
           },
         },

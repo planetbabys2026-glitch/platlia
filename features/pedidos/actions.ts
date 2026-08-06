@@ -18,7 +18,7 @@ import {
   quitarItemSchema,
 } from "@/features/pedidos/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { publishTurneroUpdate } from "@/lib/redis";
+import { publishCocinaUpdate, publishTurneroUpdate } from "@/lib/redis";
 import { tieneRol } from "@/lib/auth/reglas";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
@@ -206,7 +206,7 @@ export const agregarItem = defineAction({
           lineTotalCop: linea.lineTotalCop,
           notes: input.notes ?? null,
           createdById: ctx.user.id,
-          sentToKitchenAt: new Date(),
+          sentToKitchenAt: null,
         },
       });
 
@@ -257,7 +257,6 @@ export const agregarItem = defineAction({
     revalidatePath(`/pedido/${input.orderId}`);
     revalidatePath("/salon");
     revalidatePath("/turnero");
-    revalidatePath("/cocina");
     void publishTurneroUpdate(ctx.business.id);
   },
 });
@@ -336,7 +335,7 @@ export const ponerNotaItem = defineAction({
   schema: ponerNotaItemSchema,
   roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
-  async handler({ input, db }) {
+  async handler({ input, db, ctx }) {
     const item = await db.orderItem.findFirst({
       where: { id: input.itemId },
       select: { id: true, orderId: true, status: true, order: { select: { status: true } } },
@@ -353,6 +352,8 @@ export const ponerNotaItem = defineAction({
     });
 
     revalidatePath(`/pedido/${item.orderId}`);
+    revalidatePath("/cocina");
+    void publishCocinaUpdate(ctx.business.id);
   },
 });
 
@@ -644,7 +645,9 @@ export const registrarPago = defineAction({
     revalidatePath("/salon");
     revalidatePath("/caja");
     revalidatePath("/turnero");
+    revalidatePath("/cocina");
     revalidatePath(`/pedido/${input.orderId}`);
+    void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
     return resultado;
   },
@@ -784,6 +787,7 @@ export const confirmarPedido = defineAction({
     revalidatePath("/cocina");
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${input.orderId}`);
+    void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
 
     return resultado;
