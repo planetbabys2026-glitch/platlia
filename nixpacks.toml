@@ -65,8 +65,15 @@ cmds = [
 #     en producción. El glob evita fijar a mano la plataforma o la versión.
 #     `-L` en ambos para copiar el archivo real: son symlinks al store, y ese
 #     store no viaja al standalone.
+#
+# El `rm -rf` previo no es limpieza cosmética: el tracer de `output: standalone`
+# a veces deja su propio rastro parcial en esa misma ruta (un archivo suelto
+# donde después hace falta un directorio), y ahí `cp -rL` revienta con
+# "cannot overwrite non-directory ... with directory" aunque el build de antes
+# hubiera terminado bien. Empezar de cero saca esa carrera de en medio.
 cmds = [
   "/usr/local/bin/pnpm run build",
+  "rm -rf .next/standalone/node_modules/@node-rs",
   "mkdir -p .next/standalone/public .next/standalone/.next/static .next/standalone/node_modules/@node-rs",
   "cp -r public/. .next/standalone/public/",
   "cp -r .next/static/. .next/standalone/.next/static/",
