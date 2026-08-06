@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppModule, OrderItemStatus, Role } from "@/generated/prisma/enums";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { publishTurneroUpdate } from "@/lib/redis";
 import { id } from "@/lib/validaciones";
 
 /**
@@ -31,7 +32,7 @@ export const avanzarComanda = defineAction({
   schema: z.object({ itemId: id }),
   roles: [Role.COCINA, Role.MESERO, Role.CAJERO, Role.ADMINISTRADOR],
   modulo: AppModule.COCINA,
-  async handler({ input, db }) {
+  async handler({ input, db, ctx }) {
     const item = await db.orderItem.findFirst({
       where: { id: input.itemId },
       select: { id: true, status: true, orderId: true, nameSnapshot: true },
@@ -59,6 +60,9 @@ export const avanzarComanda = defineAction({
     revalidatePath("/cocina");
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${item.orderId}`);
+
+    void publishTurneroUpdate(ctx.business.id);
+
     return { status: siguiente };
   },
 });

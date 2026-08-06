@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Logotipo } from "@/components/marca/logo";
 import { formatTurno } from "@/lib/turns";
-import { RefrescoDeTelevisor, PantallaSiempreEncendida } from "./pantalla";
+import { PantallaSiempreEncendida } from "./pantalla";
 
 type TurnoItem = {
   orderId: string;
@@ -87,7 +87,7 @@ function playChimeSound() {
 export function PantallaTurnero({
   businessName,
   turnNumberMax,
-  listos,
+  listos: initialListos,
   mediaMode,
   imagesRaw,
   imageIntervalSeconds,
@@ -96,6 +96,42 @@ export function PantallaTurnero({
 }: TurneroProps) {
   const images = parseImageUrls(imagesRaw);
   const youtubeId = extractYoutubeId(youtubeUrl);
+
+  // Estado local de turnos listos (se actualiza vía SSE Redis Pub/Sub sin polling)
+  const [listos, setListos] = useState<TurnoItem[]>(initialListos);
+
+  // Sincronizar estado inicial
+  useEffect(() => {
+    setListos(initialListos);
+  }, [initialListos]);
+
+  // Conexión SSE en tiempo real usando Redis Pub/Sub
+  useEffect(() => {
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource("/api/turnero/stream");
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (
+            (data.type === "init" || data.type === "update") &&
+            Array.isArray(data.listos)
+          ) {
+            setListos(data.listos);
+          }
+        } catch {
+          // Ignorar errores de sintaxis en el stream
+        }
+      };
+    } catch {
+      // Si el navegador no soporta EventSource
+    }
+
+    return () => {
+      if (es) es.close();
+    };
+  }, []);
 
   // Estado del carrusel de imágenes
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
@@ -114,7 +150,7 @@ export function PantallaTurnero({
     return () => clearInterval(interval);
   }, [mediaMode, images, imageIntervalSeconds]);
 
-  // Refs de temporizadores que persisten a través de re-renders de sondeo
+  // Refs de temporizadores que persisten a través de re-renders
   const timerTransicionRef = useRef<NodeJS.Timeout | null>(null);
   const timerFinalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -183,7 +219,7 @@ export function PantallaTurnero({
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-neutral-950 text-white font-sans select-none">
-      <RefrescoDeTelevisor segundos={4} />
+      <PantallaSiempreEncendida />
       <PantallaSiempreEncendida />
 
       {/* ─────────────────────────────────────────────────────────────

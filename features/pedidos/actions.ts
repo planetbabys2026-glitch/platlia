@@ -18,6 +18,7 @@ import {
   quitarItemSchema,
 } from "@/features/pedidos/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { publishTurneroUpdate } from "@/lib/redis";
 import { tieneRol } from "@/lib/auth/reglas";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
@@ -136,6 +137,7 @@ export const abrirPedido = defineAction({
       revalidatePath("/salon");
       revalidatePath("/turnero");
       revalidatePath(`/pedido/${pedido.id}`);
+      void publishTurneroUpdate(ctx.business.id);
       return pedido;
     });
   },
@@ -256,6 +258,7 @@ export const agregarItem = defineAction({
     revalidatePath("/salon");
     revalidatePath("/turnero");
     revalidatePath("/cocina");
+    void publishTurneroUpdate(ctx.business.id);
   },
 });
 
@@ -484,7 +487,7 @@ export const pedirCuenta = defineAction({
   schema: pedidoSchema,
   roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
-  async handler({ input, db }) {
+  async handler({ input, db, ctx }) {
     const pedido = await db.order.findFirst({
       where: { id: input.orderId },
       select: { id: true, status: true, tableId: true },
@@ -511,6 +514,7 @@ export const pedirCuenta = defineAction({
     revalidatePath("/caja");
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${pedido.id}`);
+    void publishTurneroUpdate(ctx.business.id);
   },
 });
 
@@ -641,6 +645,7 @@ export const registrarPago = defineAction({
     revalidatePath("/caja");
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${input.orderId}`);
+    void publishTurneroUpdate(ctx.business.id);
     return resultado;
   },
 });
@@ -779,6 +784,7 @@ export const confirmarPedido = defineAction({
     revalidatePath("/cocina");
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${input.orderId}`);
+    void publishTurneroUpdate(ctx.business.id);
 
     return resultado;
   },
