@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bike,
   BookOpen,
   Boxes,
   Calculator,
@@ -116,6 +117,12 @@ export function AppShell({
       titulo: "Caja",
       href: "/caja",
       icono: CreditCard,
+      categoria: "OPERACION" as const,
+    },
+    {
+      titulo: "Domicilios",
+      href: "/domicilios",
+      icono: Bike,
       categoria: "OPERACION" as const,
     },
     {

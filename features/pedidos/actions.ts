@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AppModule, Role } from "@/generated/prisma/enums";
+import { AppModule, OrderChannel, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { recalcularTotales } from "@/features/pedidos/totales";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
@@ -113,6 +113,7 @@ export const abrirPedido = defineAction({
             turnNumber,
             businessDate,
             type: input.type,
+            channel: input.type === "MESA" ? OrderChannel.MESERO : OrderChannel.POS,
             tableId: input.tableId ?? null,
             cashSessionId: caja?.id ?? null,
             guestsCount: input.guestsCount ?? null,

@@ -1,9 +1,11 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { AppModule, Role } from "@/generated/prisma/enums";
-import { datosNegocioSchema, modulosSchema, operacionSchema, turneroSchema } from "@/features/negocio/schemas";
+import { datosNegocioSchema, modulosSchema, operacionSchema, qrMenuSchema, turneroSchema } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
 
 /**
@@ -157,5 +159,58 @@ export const guardarTurneroSettings = defineAction({
 
     revalidatePath("/administracion/configuracion");
     revalidatePath("/turnero");
+  },
+});
+
+export const guardarQrMenuSettings = defineAction({
+  schema: qrMenuSchema,
+  roles: ADMINISTRAN,
+  async handler({ input, ctx, db }) {
+    await db.businessSettings.updateMany({
+      where: { businessId: ctx.business.id },
+      data: {
+        qrMenuEnabled: input.qrMenuEnabled,
+        qrMenuBgMode: input.qrMenuBgMode,
+        qrMenuBgColor: input.qrMenuBgColor,
+        qrMenuBgGradient: input.qrMenuBgGradient,
+        qrMenuBgImageUrl: input.qrMenuBgImageUrl ?? null,
+        qrMenuLogoUrl: input.qrMenuLogoUrl ?? null,
+        qrMenuHeaderTitle: input.qrMenuHeaderTitle ?? null,
+        qrMenuHeaderSubtitle: input.qrMenuHeaderSubtitle ?? null,
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
+  },
+});
+
+export const subirImagenQrMenu = defineAction({
+  schema: z.object({
+    tipo: z.enum(["logo", "fondo"]),
+    file: z.instanceof(File, { message: "Seleccioná un archivo de imagen." }),
+  }),
+  roles: ADMINISTRAN,
+  async handler({ input, ctx, db }) {
+    if (input.file.size > 5 * 1024 * 1024) {
+      throw new ErrorDeUsuario("La imagen debe pesar menos de 5 MB.");
+    }
+    const buffer = Buffer.from(await input.file.arrayBuffer());
+    const folder = `platlia/${ctx.business.slug}/qrmenu`;
+    const url = await subirImagen(buffer, folder);
+
+    if (input.tipo === "logo") {
+      await db.businessSettings.updateMany({
+        where: { businessId: ctx.business.id },
+        data: { qrMenuLogoUrl: url },
+      });
+    } else {
+      await db.businessSettings.updateMany({
+        where: { businessId: ctx.business.id },
+        data: { qrMenuBgImageUrl: url, qrMenuBgMode: "PATTERN_IMAGE" },
+      });
+    }
+
+    revalidatePath("/administracion/configuracion");
+    return { url };
   },
 });

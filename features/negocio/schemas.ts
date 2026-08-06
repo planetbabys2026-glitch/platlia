@@ -97,3 +97,14 @@ export const turneroSchema = z.object({
   turneroYoutubeUrl: textoOpcional(500),
   turneroBadgePosition: z.enum(["TOP_LEFT", "TOP_RIGHT"]),
 });
+
+export const qrMenuSchema = z.object({
+  qrMenuEnabled: casilla,
+  qrMenuBgMode: z.enum(["SOLID", "GRADIENT", "PATTERN_IMAGE"]),
+  qrMenuBgColor: z.string().trim().default("#101416"),
+  qrMenuBgGradient: z.string().trim().default("linear-gradient(135deg, #101416 0%, #1D4E51 100%)"),
+  qrMenuBgImageUrl: textoOpcional(500),
+  qrMenuLogoUrl: textoOpcional(500),
+  qrMenuHeaderTitle: textoOpcional(120),
+  qrMenuHeaderSubtitle: textoOpcional(200),
+});

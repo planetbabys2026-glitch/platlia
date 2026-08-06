@@ -74,3 +74,18 @@ export async function publishCocinaUpdate(businessId: string): Promise<void> {
     // Falla tolerante: si Redis Pub/Sub no responde, la app sigue funcionando.
   }
 }
+
+/**
+ * Publica un evento de actualización del panel de domicilios para una sucursal en Redis Pub/Sub.
+ */
+export async function publishDomiciliosUpdate(businessId: string): Promise<void> {
+  const pub = getRedisPublisher();
+  if (!pub) return;
+
+  try {
+    const channel = `domicilios:${businessId}`;
+    await pub.publish(channel, JSON.stringify({ type: "update", timestamp: Date.now() }));
+  } catch {
+    // Falla tolerante: si Redis Pub/Sub no responde, la app sigue funcionando.
+  }
+}

@@ -5,6 +5,7 @@ import {
   Blocks,
   Building2,
   Crown,
+  QrCode,
   SlidersHorizontal,
   Tv,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import {
   FormularioLicencia,
   FormularioModulos,
   FormularioOperacion,
+  FormularioQrMenu,
   FormularioTurnero,
 } from "./formularios";
 
@@ -49,6 +51,14 @@ type PanelConfiguracionProps = {
     receiptWidth: ReceiptWidth;
     receiptHeader: string | null;
     receiptFooter: string | null;
+    qrMenuEnabled: boolean;
+    qrMenuBgMode: string;
+    qrMenuBgColor: string;
+    qrMenuBgGradient: string;
+    qrMenuBgImageUrl: string | null;
+    qrMenuLogoUrl: string | null;
+    qrMenuHeaderTitle: string | null;
+    qrMenuHeaderSubtitle: string | null;
   };
   facturacion: {
     suscripcion: {
@@ -65,9 +75,11 @@ type PanelConfiguracionProps = {
   } | null;
   mesasHabilitado: boolean;
   esPropietario: boolean;
+  slug: string;
+  mesas: { id: string; name: string }[];
 };
 
-type TabId = "datos" | "modulos" | "turnero" | "operacion" | "licencia";
+type TabId = "datos" | "modulos" | "turnero" | "qr" | "operacion" | "licencia";
 
 export function PanelConfiguracion({
   negocio,
@@ -75,6 +87,8 @@ export function PanelConfiguracion({
   facturacion,
   mesasHabilitado,
   esPropietario,
+  slug,
+  mesas,
 }: PanelConfiguracionProps) {
   const [tabActiva, setTabActiva] = useState<TabId>("datos");
 
@@ -82,6 +96,7 @@ export function PanelConfiguracion({
     { id: "datos" as TabId, label: "Datos del negocio", icono: Building2 },
     { id: "modulos" as TabId, label: "Módulos", icono: Blocks },
     { id: "turnero" as TabId, label: "Turnero TV", icono: Tv },
+    { id: "qr" as TabId, label: "Menú Digital QR", icono: QrCode },
     { id: "operacion" as TabId, label: "Operación y Recibos", icono: SlidersHorizontal },
     ...(esPropietario && facturacion
       ? [{ id: "licencia" as TabId, label: "Licencia y Sucursales", icono: Crown }]
@@ -169,6 +184,33 @@ export function PanelConfiguracion({
                 turneroImageIntervalSeconds: settings.turneroImageIntervalSeconds,
                 turneroYoutubeUrl: settings.turneroYoutubeUrl,
                 turneroBadgePosition: settings.turneroBadgePosition,
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {tabActiva === "qr" && (
+        <Card className="shadow-sm">
+          <CardContent className="space-y-4 pt-6">
+            <div>
+              <h2 className="font-semibold text-lg">Menú Digital QR y Tarjetas de Mesas</h2>
+              <p className="text-muted-foreground text-xs">
+                Personalizá el diseño del menú público para clientes y generá códigos QR para tus mesas o pedidos a domicilio.
+              </p>
+            </div>
+            <FormularioQrMenu
+              settings={{
+                qrMenuEnabled: settings.qrMenuEnabled,
+                qrMenuBgMode: settings.qrMenuBgMode,
+                qrMenuBgColor: settings.qrMenuBgColor,
+                qrMenuBgGradient: settings.qrMenuBgGradient,
+                qrMenuBgImageUrl: settings.qrMenuBgImageUrl,
+                qrMenuLogoUrl: settings.qrMenuLogoUrl,
+                qrMenuHeaderTitle: settings.qrMenuHeaderTitle,
+                qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
+                slug,
+                mesas,
               }}
             />
           </CardContent>

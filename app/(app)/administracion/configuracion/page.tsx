@@ -12,11 +12,13 @@ export const dynamic = "force-dynamic";
 export default async function ConfiguracionPage() {
   const ctx = await requireRole(Role.ADMINISTRADOR);
   const esPropietario = ctx.role === Role.PROPIETARIO;
+  const db = tenantDb(ctx.business.id);
 
-  const [negocio, settings, facturacion] = await Promise.all([
-    tenantDb(ctx.business.id).business.findFirstOrThrow({
+  const [negocio, settings, facturacion, mesas] = await Promise.all([
+    db.business.findFirstOrThrow({
       select: {
         name: true,
+        slug: true,
         legalName: true,
         taxId: true,
         address: true,
@@ -26,6 +28,10 @@ export default async function ConfiguracionPage() {
     }),
     getSettings(ctx.business.id),
     esPropietario ? getFacturacion(ctx.business.id) : Promise.resolve(null),
+    db.table.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   return (
@@ -43,6 +49,8 @@ export default async function ConfiguracionPage() {
         facturacion={facturacion}
         mesasHabilitado={ctx.modules.has(AppModule.MESAS)}
         esPropietario={esPropietario}
+        slug={negocio.slug}
+        mesas={mesas}
       />
     </div>
   );

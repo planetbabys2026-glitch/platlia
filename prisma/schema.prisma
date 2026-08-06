@@ -113,6 +113,13 @@ enum OrderType {
   DOMICILIO
 }
 
+enum OrderChannel {
+  POS
+  MESERO
+  MESA_QR
+  DOMICILIO_QR
+}
+
 enum OrderStatus {
   ABIERTA
   CUENTA_PEDIDA
@@ -275,6 +282,16 @@ model BusinessSettings {
   /// Módulos de Inventario y Recetas / Escandallos
   inventoryEnabled Boolean @default(false)
   recipesEnabled   Boolean @default(false)
+
+  /// Configuración del Menú Digital QR
+  qrMenuEnabled        Boolean @default(true)
+  qrMenuBgMode         String  @default("SOLID")
+  qrMenuBgColor        String  @default("#101416")
+  qrMenuBgGradient     String  @default("linear-gradient(135deg, #101416 0%, #1D4E51 100%)")
+  qrMenuBgImageUrl     String?
+  qrMenuLogoUrl        String?
+  qrMenuHeaderTitle    String?
+  qrMenuHeaderSubtitle String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -703,8 +720,9 @@ model Order {
   /// `abrirPedido`, que saltea los turnos que siguen en el televisor.
   turnNumber Int?
 
-  type   OrderType   @default(MESA)
-  status OrderStatus @default(ABIERTA)
+  type    OrderType    @default(MESA)
+  channel OrderChannel @default(POS)
+  status  OrderStatus  @default(ABIERTA)
 
   tableId String?
   table   Table?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
@@ -718,6 +736,9 @@ model Order {
   customerName    String?
   customerPhone   String?
   deliveryAddress String?
+  docType         String?
+  docNumber       String?
+  deliveryStatus  String  @default("PENDIENTE")
   notes           String?
 
   /// Totales denormalizados. Se recalculan enteros en cada cambio de ítem, dentro
