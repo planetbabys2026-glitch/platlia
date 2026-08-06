@@ -15,16 +15,6 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "2mb" },
   },
 
-  // @node-rs/argon2 es un binario nativo y el tracing de `standalone` no siempre
-  // lo detecta: el login funciona en local y se rompe en producción. Con pnpm el
-  // binario vive dentro de .pnpm/, no en node_modules/@node-rs/ directamente.
-  outputFileTracingIncludes: {
-    "/**": [
-      "./node_modules/.pnpm/@node-rs+argon2*/**",
-      "./node_modules/@node-rs/**",
-    ],
-  },
-
   async headers() {
     return [
       {
