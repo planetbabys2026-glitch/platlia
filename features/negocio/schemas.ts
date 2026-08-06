@@ -108,3 +108,9 @@ export const qrMenuSchema = z.object({
   qrMenuHeaderTitle: textoOpcional(120),
   qrMenuHeaderSubtitle: textoOpcional(200),
 });
+
+export const crearSucursalSchema = z.object({
+  name: z.string().trim().min(2, "Escribí el nombre de la sucursal.").max(120),
+  address: textoOpcional(200),
+  phone: textoOpcional(40),
+});

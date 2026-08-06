@@ -30,12 +30,18 @@ const PUBLICAS = new Set([
 
 function esPublica(pathname: string): boolean {
   if (PUBLICAS.has(pathname)) return true;
+  // Menú Digital QR público para clientes (mesas y domicilios)
+  if (pathname.startsWith("/m/")) return true;
+  // Pantalla del televisor del salón (Turnero TV)
+  if (pathname === "/turnero" || pathname.startsWith("/turnero/")) return true;
   // El health check lo consulta el monitoreo externo, sin cookie.
   if (pathname === "/api/health") return true;
   // Los webhooks los llama un servidor ajeno, que no tiene sesión ni la va a
   // tener. Se autentican con su firma, no con una cookie: si el middleware los
   // mandara al login, MercadoPago recibiría un 307 y el pago nunca se aplicaría.
   if (pathname.startsWith("/api/webhooks/")) return true;
+  // Streams SSE para actualización en tiempo real de domicilios y turnero
+  if (pathname.startsWith("/api/domicilios/stream") || pathname.startsWith("/api/turnero/stream")) return true;
   return false;
 }
 

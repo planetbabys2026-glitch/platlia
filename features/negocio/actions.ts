@@ -2,11 +2,13 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { AppModule, Role } from "@/generated/prisma/enums";
-import { datosNegocioSchema, modulosSchema, operacionSchema, qrMenuSchema, turneroSchema } from "@/features/negocio/schemas";
+import { AppModule, Role, SubscriptionStatus, TaxKind } from "@/generated/prisma/enums";
+import { crearSucursalSchema, datosNegocioSchema, modulosSchema, operacionSchema, qrMenuSchema, turneroSchema } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
+// eslint-disable-next-line no-restricted-imports -- Crear sucursal adicional requiere crear la fila de Business inicial
+import { rootDb } from "@/lib/db/root";
 
 /**
  * Configuración del negocio.
@@ -212,5 +214,79 @@ export const subirImagenQrMenu = defineAction({
 
     revalidatePath("/administracion/configuracion");
     return { url };
+  },
+});
+
+function aSlug(texto: string): string {
+  const limpio = texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return limpio || "sucursal";
+}
+
+async function slugSucursalLibre(base: string): Promise<string> {
+  const candidato = aSlug(base);
+  for (let i = 0; i < 50; i++) {
+    const intento = i === 0 ? candidato : `${candidato}-${i + 1}`;
+    const tomado = await rootDb.business.findUnique({
+      where: { slug: intento },
+      select: { id: true },
+    });
+    if (!tomado) return intento;
+  }
+  return `${candidato}-${Date.now().toString(36)}`;
+}
+
+export const crearSucursalAdicional = defineAction({
+  schema: crearSucursalSchema,
+  roles: [Role.PROPIETARIO],
+  async handler({ input, ctx }) {
+    const slug = await slugSucursalLibre(input.name);
+    const DIA_MS = 24 * 60 * 60 * 1000;
+    const finPrueba = new Date(Date.now() + 7 * DIA_MS);
+
+    const sucursal = await rootDb.business.create({
+      data: {
+        name: input.name,
+        slug,
+        address: input.address ?? null,
+        phone: input.phone ?? null,
+        settings: { create: {} },
+        memberships: { create: { userId: ctx.user.id, role: Role.PROPIETARIO } },
+        modules: { create: Object.values(AppModule).map((module) => ({ module })) },
+        taxRates: {
+          create: [
+            {
+              name: "Impuesto al consumo",
+              kind: TaxKind.IMPOCONSUMO,
+              rateBp: 800,
+              isDefault: true,
+            },
+            { name: "IVA", kind: TaxKind.IVA, rateBp: 1900 },
+            { name: "Exento", kind: TaxKind.EXENTO, rateBp: 0 },
+          ],
+        },
+        subscription: {
+          create: {
+            status: SubscriptionStatus.PRUEBA,
+            trialEndsAt: finPrueba,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: finPrueba,
+            graceUntil: finPrueba,
+          },
+        },
+      },
+      select: { id: true, name: true, slug: true },
+    });
+
+    revalidatePath("/elegir-negocio");
+    revalidatePath("/administracion/configuracion");
+    revalidatePath("/facturacion");
+
+    return sucursal;
   },
 });

@@ -286,17 +286,17 @@ export function Pricing() {
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-foreground">
                   {[
                     `${sucursales} ${sucursales === 1 ? "Sucursal completa incluida" : "Sucursales incluidas"}`,
-                    "Mesas y mapas de salón ilimitados",
-                    "Usuarios, meseros y cajeros ilimitados",
-                    "Módulo de Cocina KDS y Turnero TV",
-                    "Caja, turnos e Impuesto Consumo 8%",
-                    "Inventario automático por recetas",
-                    "Impresión de tiquetes 55mm / 80mm",
-                    "Informes por jornada nocturna",
-                    "Soporte técnico preferencial en Colombia",
-                    "Actualizaciones sin costo adicional",
+                    "📱 Menú Digital QR con autopedido (Colores, Logos, Cloudinary)",
+                    "🛵 Domicilios con trazabilidad Redis SSE y WhatsApp",
+                    "💰 Caja Dividida en 2 módulos (Cobros + Movimientos & Cierre)",
+                    "👨‍🍳 Comandas KDS a cocina con notas e integración Turnero TV",
+                    "📊 Inventario automático por costo de recetas",
+                    "🪑 Mesas, salones y usuarios ilimitados",
+                    "🖨️ Impresión de tiquetes térmicos y tarjetas QR",
+                    "🌙 Informes por jornada nocturna (corte 5:00 a.m.)",
+                    "🇨🇴 Soporte técnico preferencial en Colombia",
                   ].map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-xs sm:text-sm">
+                    <li key={idx} className="flex items-center gap-2 text-xs sm:text-sm font-medium">
                       <Check className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>{item}</span>
                     </li>

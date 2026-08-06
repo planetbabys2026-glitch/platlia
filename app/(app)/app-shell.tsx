@@ -20,6 +20,7 @@ import {
   MonitorPlay,
   Settings,
   SlidersHorizontal,
+  Store,
   Users,
   X,
 } from "lucide-react";
@@ -343,34 +344,62 @@ export function AppShell({
           </div>
         </nav>
 
-        {/* Footer de la Barra Lateral (Usuario y Salir) */}
-        <div className="border-t border-border/80 p-3 bg-muted/20">
+        {/* Footer de la Barra Lateral (Usuario, Cambiar Sucursal y Salir) */}
+        <div className="border-t border-border/80 p-3 bg-muted/20 space-y-2">
+          {!collapsed && businessName && (
+            <Link
+              href="/elegir-negocio"
+              className="flex items-center justify-between p-2 rounded-xl bg-card border border-border/80 hover:border-brand hover:bg-brand/5 transition-all text-xs"
+              title="Cambiar de sucursal / Ver mis locales"
+            >
+              <div className="flex items-center gap-2 truncate">
+                <Store className="size-3.5 text-brand dark:text-brand-accent shrink-0" />
+                <span className="font-bold text-foreground truncate">{businessName}</span>
+              </div>
+              <span className="text-[10px] font-bold bg-brand/10 text-brand px-1.5 py-0.5 rounded shrink-0">
+                Cambiar 🔄
+              </span>
+            </Link>
+          )}
+
           <div className={cn("flex items-center gap-2", collapsed ? "justify-center" : "justify-between")}>
             {user && !collapsed && (
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand font-bold text-xs uppercase border border-brand/30">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand font-bold text-xs uppercase border border-brand/30">
                   {user.name.slice(0, 2)}
                 </div>
                 <div className="truncate text-xs">
                   <p className="font-semibold truncate text-foreground">{user.name}</p>
-                  {businessName && (
-                    <p className="text-[11px] text-muted-foreground truncate">{businessName}</p>
-                  )}
                 </div>
               </div>
             )}
 
-            <form action={salir}>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon"
-                title="Cerrar sesión"
-                className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </form>
+            <div className="flex items-center gap-1">
+              {collapsed && (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="icon"
+                  title="Cambiar sucursal"
+                  className="h-8 w-8 text-muted-foreground hover:text-brand"
+                >
+                  <Link href="/elegir-negocio">
+                    <Store className="h-4 w-4" />
+                  </Link>
+                </Button>
+              )}
+              <form action={salir}>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon"
+                  title="Cerrar sesión"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
           </div>
         </div>
       </aside>
@@ -397,12 +426,19 @@ export function AppShell({
             </Link>
           </div>
 
-          <div className="flex items-center gap-2">
-            {user && (
-              <span className="text-xs font-semibold text-muted-foreground max-w-[120px] truncate">
-                {user.name}
-              </span>
-            )}
+          <div className="flex items-center gap-1.5">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-8 text-[11px] px-2 gap-1 rounded-lg border-brand/40 text-brand dark:text-brand-accent font-bold"
+              title="Cambiar sucursal"
+            >
+              <Link href="/elegir-negocio">
+                <Store className="size-3.5" />
+                <span className="max-w-[80px] truncate">{businessName || "Sucursales"}</span>
+              </Link>
+            </Button>
             <form action={salir}>
               <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                 <LogOut className="h-4 w-4" />
