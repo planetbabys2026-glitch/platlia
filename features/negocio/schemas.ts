@@ -84,9 +84,12 @@ export const modulosSchema = z.object({
 
 export const turneroSchema = z.object({
   turneroMediaMode: z.enum(["NONE", "IMAGES", "YOUTUBE"]),
-  turneroImages: z.string().trim(),
+  turneroImages: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim() : ""),
+    z.string(),
+  ),
   turneroImageIntervalSeconds: z.preprocess(
-    (v) => (v === "" || v === undefined ? 10 : Number(v)),
+    (v) => (v === "" || v === undefined || v === null ? 10 : Number(v)),
     z.number().int().min(3, "Mínimo 3 segundos.").max(300, "Máximo 300 segundos."),
   ),
   turneroYoutubeUrl: textoOpcional(500),

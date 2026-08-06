@@ -137,8 +137,9 @@ export const guardarModulos = defineAction({
 export const guardarTurneroSettings = defineAction({
   schema: turneroSchema,
   roles: ADMINISTRAN,
-  async handler({ input, db }) {
+  async handler({ input, ctx, db }) {
     await db.businessSettings.updateMany({
+      where: { businessId: ctx.business.id },
       data: {
         turneroMediaMode: input.turneroMediaMode,
         turneroImages: input.turneroImages,

@@ -305,83 +305,159 @@ export type TurneroSettingsProps = {
 export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps }) {
   const [estado, accion] = useActionState(guardarTurneroSettings, ESTADO_INICIAL);
   const [modo, setModo] = useState(settings.turneroMediaMode);
+  const [images, setImages] = useState(settings.turneroImages ?? "");
+  const [interval, setIntervalVal] = useState(settings.turneroImageIntervalSeconds ?? 10);
+  const [youtubeUrl, setYoutubeUrl] = useState(settings.turneroYoutubeUrl ?? "");
+  const [copiado, setCopiado] = useState(false);
+
+  const copiarUrl = () => {
+    if (typeof window !== "undefined") {
+      const url = `${window.location.origin}/turnero`;
+      navigator.clipboard.writeText(url);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 3000);
+    }
+  };
 
   return (
-    <form action={accion} className="space-y-4">
-      <Resultado estado={estado} />
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="turneroMediaMode">Fondo / Multimedia del Televisor</Label>
-          <select
-            id="turneroMediaMode"
-            name="turneroMediaMode"
-            value={modo}
-            onChange={(e) => setModo(e.target.value)}
-            className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
-          >
-            <option value="NONE">Sin multimedia (Fondo Oscuro Estándar)</option>
-            <option value="IMAGES">Carrusel de Imágenes Publicitarias</option>
-            <option value="YOUTUBE">Video de YouTube (Embed)</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="turneroBadgePosition">Posición del Recuadro de Turnos Listos</Label>
-          <select
-            id="turneroBadgePosition"
-            name="turneroBadgePosition"
-            defaultValue={settings.turneroBadgePosition}
-            className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
-          >
-            <option value="TOP_RIGHT">Esquina Superior Derecha</option>
-            <option value="TOP_LEFT">Esquina Superior Izquierda</option>
-          </select>
-        </div>
-      </div>
-
-      {modo === "IMAGES" && (
-        <div className="space-y-4 pt-2 border-t border-border">
-          <div className="space-y-1.5">
-            <Label htmlFor="turneroImages">URLs de Imágenes Publicitarias (Una por línea o separadas por coma)</Label>
-            <textarea
-              id="turneroImages"
-              name="turneroImages"
-              rows={3}
-              defaultValue={settings.turneroImages}
-              placeholder="https://ejemplo.com/promo1.jpg&#10;https://ejemplo.com/promo2.jpg"
-              className="border-input bg-card focus-visible:ring-ring w-full rounded-lg border p-3 text-sm focus-visible:ring-3 focus-visible:outline-none font-mono text-xs"
-            />
-            <p className="text-muted-foreground text-xs">
-              Ingresá enlaces directos de imágenes promocionales para proyectar en el salón.
+    <div className="space-y-6">
+      {/* Caja con el Enlace Directo al Turnero del Salón */}
+      <div className="p-4 rounded-xl border border-brand/20 bg-brand/5 dark:bg-brand/10 space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              Enlace del Turnero para la TV del Salón
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Abrí esta URL en el navegador de la TV o tablet del negocio para proyectar los turnos listos.
             </p>
           </div>
 
-          <Campo
-            label="Intervalo de rotación de imágenes (segundos)"
-            name="turneroImageIntervalSeconds"
-            type="number"
-            min={3}
-            max={300}
-            defaultValue={settings.turneroImageIntervalSeconds}
-            ayuda="Cada cuántos segundos cambia automáticamente la imagen del carrusel."
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={copiarUrl}
+              className="text-xs h-8"
+            >
+              {copiado ? "✓ ¡Copiado!" : "Copiar Enlace"}
+            </Button>
+            <Button
+              asChild
+              variant="default"
+              size="sm"
+              className="text-xs h-8 bg-brand hover:bg-brand/90 text-brand-foreground"
+            >
+              <a href="/turnero" target="_blank" rel="noopener noreferrer">
+                Abrir Turnero ↗
+              </a>
+            </Button>
+          </div>
         </div>
-      )}
+      </div>
 
-      {modo === "YOUTUBE" && (
-        <div className="space-y-2 pt-2 border-t border-border">
-          <Campo
-            label="Enlace o ID del Video de YouTube"
-            name="turneroYoutubeUrl"
-            defaultValue={settings.turneroYoutubeUrl ?? ""}
-            placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-            ayuda="El video se reproducirá automáticamente en bucle como fondo del turnero."
-          />
+      <form action={accion} className="space-y-4">
+        <Resultado estado={estado} />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="turneroMediaMode">Fondo / Multimedia del Televisor</Label>
+            <select
+              id="turneroMediaMode"
+              name="turneroMediaMode"
+              value={modo}
+              onChange={(e) => setModo(e.target.value)}
+              className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+            >
+              <option value="NONE">Sin multimedia (Fondo Oscuro Estándar)</option>
+              <option value="IMAGES">Carrusel de Imágenes Publicitarias</option>
+              <option value="YOUTUBE">Video de YouTube (Embed)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="turneroBadgePosition">Posición del Recuadro de Turnos Listos</Label>
+            <select
+              id="turneroBadgePosition"
+              name="turneroBadgePosition"
+              defaultValue={settings.turneroBadgePosition}
+              className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+            >
+              <option value="TOP_RIGHT">Esquina Superior Derecha</option>
+              <option value="TOP_LEFT">Esquina Superior Izquierda</option>
+            </select>
+          </div>
         </div>
-      )}
 
-      <Enviar>Guardar configuración de turnero</Enviar>
-    </form>
+        {/* Inputs Ocultos para asegurar transmisión continua a FormData */}
+        {modo !== "IMAGES" && (
+          <>
+            <input type="hidden" name="turneroImages" value={images} />
+            <input type="hidden" name="turneroImageIntervalSeconds" value={interval} />
+          </>
+        )}
+        {modo !== "YOUTUBE" && (
+          <input type="hidden" name="turneroYoutubeUrl" value={youtubeUrl} />
+        )}
+
+        {modo === "IMAGES" && (
+          <div className="space-y-4 pt-2 border-t border-border">
+            <div className="space-y-1.5">
+              <Label htmlFor="turneroImages">URLs de Imágenes Publicitarias (Una por línea o separadas por coma)</Label>
+              <textarea
+                id="turneroImages"
+                name="turneroImages"
+                rows={3}
+                value={images}
+                onChange={(e) => setImages(e.target.value)}
+                placeholder="https://ejemplo.com/promo1.jpg&#10;https://ejemplo.com/promo2.jpg"
+                className="border-input bg-card focus-visible:ring-ring w-full rounded-lg border p-3 text-sm focus-visible:ring-3 focus-visible:outline-none font-mono text-xs"
+              />
+              <p className="text-muted-foreground text-xs">
+                Ingresá enlaces directos de imágenes promocionales para proyectar en el salón.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="turneroImageIntervalSeconds">Intervalo de rotación de imágenes (segundos)</Label>
+              <Input
+                id="turneroImageIntervalSeconds"
+                name="turneroImageIntervalSeconds"
+                type="number"
+                min={3}
+                max={300}
+                value={interval}
+                onChange={(e) => setIntervalVal(Number(e.target.value))}
+              />
+              <p className="text-muted-foreground text-xs">
+                Cada cuántos segundos cambia automáticamente la imagen del carrusel.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {modo === "YOUTUBE" && (
+          <div className="space-y-2 pt-2 border-t border-border">
+            <div className="space-y-1.5">
+              <Label htmlFor="turneroYoutubeUrl">Enlace o ID del Video de YouTube</Label>
+              <Input
+                id="turneroYoutubeUrl"
+                name="turneroYoutubeUrl"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+              />
+              <p className="text-muted-foreground text-xs">
+                El video se reproducirá automáticamente en bucle como fondo del turnero.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <Enviar>Guardar configuración de turnero</Enviar>
+      </form>
+    </div>
   );
 }

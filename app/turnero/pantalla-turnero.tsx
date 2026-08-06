@@ -185,14 +185,14 @@ export function PantallaTurnero({
 
       {/* B: Video Embed de YouTube */}
       {mediaMode === "YOUTUBE" && youtubeId && (
-        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 z-0 flex items-center justify-center bg-black pointer-events-none overflow-hidden">
           <iframe
             src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&loop=1&playlist=${youtubeId}&controls=0&showinfo=0&autohide=1&modestbranding=1&rel=0`}
-            className="w-full h-full scale-125 object-cover opacity-80"
+            className="w-full h-full border-0 pointer-events-none opacity-95"
             allow="autoplay; encrypted-media"
             title="Fondo Turnero"
           />
-          <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px]" />
+          <div className="absolute inset-0 bg-black/15 pointer-events-none" />
         </div>
       )}
 
