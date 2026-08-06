@@ -46,6 +46,9 @@ export default async function PedidoPage({
   // negocio no aparece: es un 404 igual que uno inexistente.
   if (!pedido) notFound();
 
+  // Sin mesas, /salon no existe: el mismo criterio que ya usa el shell de la
+  // app para decidir entre "Salón" y "POS" en la barra de navegación.
+  const usaMesas = ctx.modules.has(AppModule.MESAS);
   const editable = pedido.status === "ABIERTA" || pedido.status === "CUENTA_PEDIDA";
   const renglones = pedido.items.filter((i) => i.status !== "ANULADO");
   const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);
@@ -83,8 +86,11 @@ export default async function PedidoPage({
           >
             Imprimir cuenta
           </a>
-          <Link href="/salon" className="text-primary text-sm font-medium hover:underline">
-            ← Volver al salón
+          <Link
+            href={usaMesas ? "/salon" : "/pos"}
+            className="text-primary text-sm font-medium hover:underline"
+          >
+            {usaMesas ? "← Volver al salón" : "← Volver al POS"}
           </Link>
         </div>
       </div>
