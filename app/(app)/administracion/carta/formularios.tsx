@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   archivarCategoria,
@@ -10,6 +10,7 @@ import {
   guardarPresentacion,
   guardarProducto,
 } from "@/features/carta/actions";
+import { SubirImagen } from "@/features/carta/components/subir-imagen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,24 +48,106 @@ function Error({ estado }: { estado: { ok: boolean; error?: string } }) {
   );
 }
 
-export function NuevaCategoria() {
+/**
+ * Crea una categoría. Empieza colapsada en un enlace "+ Nueva categoría" —no
+ * hace falta plantarle un formulario completo a alguien que solo quiere ver su
+ * carta— salvo que `destacada` la abra de entrada: así se usa en el estado
+ * vacío, donde crear la primera categoría es lo único que hay para hacer.
+ */
+export function NuevaCategoria({ destacada = false }: { destacada?: boolean }) {
   const [estado, accion] = useActionState(guardarCategoria, ESTADO_INICIAL);
+  const [abierta, setAbierta] = useState(destacada);
+
+  // Se colapsa sola después de crear, salvo que sea la destacada del estado
+  // vacío: ahí no hay a qué volver.
+  useEffect(() => {
+    if (estado.ok && !destacada) setAbierta(false);
+  }, [estado, destacada]);
+
+  if (!abierta) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierta(true)}
+        className="text-primary text-sm font-medium hover:underline"
+      >
+        + Nueva categoría
+      </button>
+    );
+  }
 
   return (
-    <form action={accion} className="space-y-3">
+    <form action={accion} className={destacada ? "mx-auto max-w-sm space-y-3" : "space-y-2"}>
       <Error estado={estado} />
       <div className="flex gap-2">
-        <Input name="name" placeholder="Nombre de la categoría" required aria-label="Nombre de la categoría" />
         <Input
-          name="sortOrder"
-          type="number"
-          min={0}
-          defaultValue={0}
-          className="w-20"
-          aria-label="Orden"
+          name="name"
+          placeholder="Cervezas, Picadas…"
+          required
+          aria-label="Nombre de la categoría"
+          autoFocus
         />
-        <Enviar>Agregar</Enviar>
+        <Enviar size={destacada ? "default" : "sm"}>Crear</Enviar>
+        {!destacada && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setAbierta(false)}>
+            Cancelar
+          </Button>
+        )}
       </div>
+      <input type="hidden" name="sortOrder" value={0} />
+    </form>
+  );
+}
+
+/** Renombrar corrige un error de tipeo; no es un campo que se edite seguido. */
+export function RenombrarCategoria({ id, name }: { id: string; name: string }) {
+  const [estado, accion] = useActionState(guardarCategoria, ESTADO_INICIAL);
+  const [editando, setEditando] = useState(false);
+
+  useEffect(() => {
+    if (estado.ok) setEditando(false);
+  }, [estado]);
+
+  if (!editando) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditando(true)}
+        aria-label={`Renombrar "${name}"`}
+        className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted underline-offset-2"
+      >
+        Renombrar
+      </button>
+    );
+  }
+
+  return (
+    <form action={accion} className="flex items-center gap-1.5">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="sortOrder" value={0} />
+      <Input
+        name="name"
+        defaultValue={name}
+        required
+        autoFocus
+        aria-label="Nuevo nombre de la categoría"
+        className="h-7 text-xs"
+      />
+      <Enviar size="sm" className="h-7 shrink-0 text-xs">
+        Guardar
+      </Enviar>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 shrink-0 text-xs"
+        onClick={() => setEditando(false)}
+      >
+        Cancelar
+      </Button>
+      {!estado.ok && estado.error && (
+        <span className="text-destructive text-xs">{estado.error}</span>
+      )}
     </form>
   );
 }
@@ -89,17 +172,31 @@ export function ArchivarCategoria({ id, name }: { id: string; name: string }) {
 export function NuevoProducto({
   categoryId,
   tarifas,
+  estaciones,
 }: {
   categoryId: string;
   tarifas: Tarifa[];
+  /** Estaciones que ya usa este negocio, para no fragmentar "Cocina"/"cocina". */
+  estaciones: string[];
 }) {
   const [estado, accion] = useActionState(guardarProducto, ESTADO_INICIAL);
   const campos = !estado.ok ? estado.campos : undefined;
+  const listaEstaciones = `estaciones-${categoryId}`;
+
+  // El reset nativo del form limpia los campos no controlados, pero SubirImagen
+  // guarda su preview y su URL en estado de React: sin este remount, agregar un
+  // segundo producto seguido heredaba en silencio la foto del primero.
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (estado.ok) setVersion((v) => v + 1);
+  }, [estado]);
 
   return (
-    <form action={accion} className="border-border space-y-3 rounded-lg border border-dashed p-3">
+    <form action={accion} className="border-border space-y-4 rounded-lg border border-dashed p-3">
       <Error estado={estado} />
       <input type="hidden" name="categoryId" value={categoryId} />
+
+      <SubirImagen key={version} />
 
       <div className="grid gap-2 sm:grid-cols-[1fr_8rem]">
         <div className="space-y-1">
@@ -144,30 +241,25 @@ export function NuevoProducto({
         </div>
         <div className="space-y-1">
           <Label htmlFor={`estacion-${categoryId}`} className="text-xs">
-            Estación
+            Estación de cocina
           </Label>
           <Input
             id={`estacion-${categoryId}`}
             name="kitchenStation"
-            placeholder="Cocina, Barra…"
+            placeholder="Cocina, Barra, Parrilla…"
+            list={estaciones.length > 0 ? listaEstaciones : undefined}
           />
+          {estaciones.length > 0 && (
+            <datalist id={listaEstaciones}>
+              {estaciones.map((estacion) => (
+                <option key={estacion} value={estacion} />
+              ))}
+            </datalist>
+          )}
+          <p className="text-muted-foreground text-xs">
+            En qué pantalla de cocina aparece este producto. Vacío si no aplica.
+          </p>
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <Label htmlFor={`imagen-${categoryId}`} className="text-xs">
-          URL de la imagen
-        </Label>
-        <Input
-          id={`imagen-${categoryId}`}
-          name="imageUrl"
-          type="url"
-          placeholder="https://res.cloudinary.com/…"
-        />
-        <p className="text-muted-foreground text-xs">
-          Opcional. Sin imagen, el POS muestra la inicial del producto.
-        </p>
-        {campos?.imageUrl && <p className="text-destructive text-xs">{campos.imageUrl[0]}</p>}
       </div>
 
       <Enviar size="sm">Agregar producto</Enviar>

@@ -8,8 +8,10 @@ import {
   disponibilidadSchema,
   presentacionSchema,
   productoSchema,
+  subirImagenSchema,
 } from "@/features/carta/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { subirImagen } from "@/lib/images/cloudinary";
 
 /**
  * Administración de la carta.
@@ -78,6 +80,22 @@ export const archivarCategoria = defineAction({
     });
 
     revalidatePath("/administracion/carta");
+  },
+});
+
+/**
+ * Sube la foto de un producto y devuelve la URL. No toca el producto: guardarla
+ * es responsabilidad de `guardarProducto`, al que el formulario le pasa la URL
+ * que esta acción devolvió, en un campo más.
+ */
+export const subirImagenProducto = defineAction({
+  schema: subirImagenSchema,
+  roles: ADMINISTRAN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx }) {
+    const buffer = Buffer.from(await input.file.arrayBuffer());
+    const url = await subirImagen(buffer, `platlia/${ctx.business.slug}/productos`);
+    return { url };
   },
 });
 

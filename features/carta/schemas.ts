@@ -29,8 +29,8 @@ export const productoSchema = z.object({
   name: nombre,
   description: textoOpcional(500),
   sku: textoOpcional(40),
-  // Por ahora se pega la URL a mano (por ejemplo, subida aparte a Cloudinary):
-  // el widget de subida directa desde acá es un paso siguiente, no este.
+  // La llena el widget de subida (subirImagenProducto) con la URL que devuelve
+  // Cloudinary. El producto en sí no sabe de dónde salió: solo guarda el string.
   imageUrl: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.url("Pegá una URL de imagen válida.").max(500).optional(),
@@ -47,6 +47,16 @@ export const productoSchema = z.object({
     (v) => (v === "" || v === undefined ? 0 : Number(v)),
     z.number().int().min(0).max(999).default(0),
   ),
+});
+
+export const subirImagenSchema = z.object({
+  file: z
+    .instanceof(File, { error: "Elegí una imagen." })
+    .refine((f) => f.size > 0, "Elegí una imagen.")
+    .refine((f) => f.type.startsWith("image/"), "Eso no es una imagen.")
+    // El límite real de la Server Action es más generoso; este es el corte de
+    // sentido común para lo que llega ya comprimido desde el navegador.
+    .refine((f) => f.size <= 8 * 1024 * 1024, "La imagen pesa demasiado (máximo 8 MB)."),
 });
 
 export const presentacionSchema = z.object({

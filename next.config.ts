@@ -12,7 +12,10 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
-    serverActions: { bodySizeLimit: "2mb" },
+    // 8mb por la foto de producto: el navegador la comprime antes de subirla,
+    // pero el tope real de esa compresión lo pone el dispositivo de quien la
+    // toma, no el código.
+    serverActions: { bodySizeLimit: "8mb" },
   },
 
   async headers() {
