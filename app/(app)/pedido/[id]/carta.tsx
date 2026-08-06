@@ -14,9 +14,10 @@ import { cn } from "@/lib/utils";
  *
  * Es la misma para una mesa de restaurante y para un mostrador de venta
  * rápida: lo que cambia es quién la mira y qué tan apurado está, no cómo se
- * agrega un producto. Un producto sin presentaciones se agrega de un toque; uno
- * con presentaciones se expande ahí mismo para elegir cuál, sin tapar el resto
- * de la carta con un modal.
+ * agrega un producto. Un toque, un renglón: no hay presentaciones que elegir
+ * primero —"Cerveza (Botella)" y "Cerveza (Litro)" son dos productos, no uno
+ * con una bifurcación adentro—, así que no hace falta ni un acordeón ni un
+ * modal en el medio.
  */
 
 export type ProductoDeCarta = {
@@ -25,7 +26,6 @@ export type ProductoDeCarta = {
   priceCop: number;
   isAvailable: boolean;
   imageUrl: string | null;
-  variants: { id: string; name: string; priceCop: number }[];
 };
 
 export type CategoriaDeCarta = {
@@ -42,106 +42,55 @@ function normalizar(texto: string): string {
     .toLowerCase();
 }
 
-function Enviar({ children, disabled }: { children: React.ReactNode; disabled?: boolean }) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending || disabled}
-      className={cn(
-        "w-full rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
-        "bg-secondary hover:bg-primary hover:text-primary-foreground",
-        "disabled:pointer-events-none disabled:opacity-40",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function TarjetaProducto({
-  orderId,
-  producto,
-  expandido,
-  onTocar,
-}: {
-  orderId: string;
-  producto: ProductoDeCarta;
-  expandido: boolean;
-  onTocar: () => void;
-}) {
+function TarjetaProducto({ orderId, producto }: { orderId: string; producto: ProductoDeCarta }) {
   const [estado, accion] = useActionState(agregarItem, ESTADO_INICIAL);
-  const tieneVariantes = producto.variants.length > 0;
 
   return (
-    <li
-      className={cn(
-        "border-border bg-card overflow-hidden rounded-xl border transition-shadow",
-        expandido && "ring-primary/40 ring-2",
-      )}
-    >
-      {tieneVariantes ? (
-        <button
-          type="button"
-          onClick={onTocar}
-          disabled={!producto.isAvailable}
-          className="flex w-full flex-col text-left disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ImagenProducto
-            nombre={producto.name}
-            imageUrl={producto.imageUrl}
-            className="aspect-square w-full object-cover"
-          />
-          <span className="space-y-0.5 p-2">
-            <span className="block text-sm leading-tight font-medium">{producto.name}</span>
-            <span className="numeral text-muted-foreground block text-xs">
-              {producto.isAvailable
-                ? `Desde ${formatCop(Math.min(...producto.variants.map((v) => v.priceCop)))}`
-                : "Agotado"}
-            </span>
-          </span>
-        </button>
-      ) : (
-        <form action={accion} className="contents">
-          <input type="hidden" name="orderId" value={orderId} />
-          <input type="hidden" name="productId" value={producto.id} />
-          <ImagenProducto
-            nombre={producto.name}
-            imageUrl={producto.imageUrl}
-            className="aspect-square w-full object-cover"
-          />
-          <button
-            type="submit"
-            disabled={!producto.isAvailable}
-            className="flex w-full flex-col gap-0.5 p-2 text-left transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-          >
-            <span className="text-sm leading-tight font-medium">{producto.name}</span>
-            <span className="numeral text-muted-foreground text-xs">
-              {producto.isAvailable ? formatCop(producto.priceCop) : "Agotado"}
-            </span>
-          </button>
-        </form>
-      )}
-
-      {expandido && tieneVariantes && (
-        <div className="space-y-1 border-t border-border p-2">
-          {producto.variants.map((variante) => (
-            <form key={variante.id} action={accion}>
-              <input type="hidden" name="orderId" value={orderId} />
-              <input type="hidden" name="productId" value={producto.id} />
-              <input type="hidden" name="variantId" value={variante.id} />
-              <Enviar>
-                {variante.name} · <span className="numeral">{formatCop(variante.priceCop)}</span>
-              </Enviar>
-            </form>
-          ))}
-        </div>
-      )}
+    <li className="border-border bg-card overflow-hidden rounded-xl border">
+      <form action={accion} className="contents">
+        <input type="hidden" name="orderId" value={orderId} />
+        <input type="hidden" name="productId" value={producto.id} />
+        <ImagenProducto
+          nombre={producto.name}
+          imageUrl={producto.imageUrl}
+          className="aspect-square w-full object-cover"
+        />
+        <Boton nombre={producto.name} precio={producto.priceCop} disponible={producto.isAvailable} />
+      </form>
 
       {!estado.ok && estado.error && (
         <p className="text-destructive px-2 pb-2 text-xs">{estado.error}</p>
       )}
     </li>
+  );
+}
+
+function Boton({
+  nombre,
+  precio,
+  disponible,
+}: {
+  nombre: string;
+  precio: number;
+  disponible: boolean;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending || !disponible}
+      className={cn(
+        "flex w-full flex-col gap-0.5 p-2 text-left transition-colors",
+        "hover:bg-accent focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
+        "disabled:pointer-events-none disabled:opacity-40",
+      )}
+    >
+      <span className="text-sm leading-tight font-medium">{nombre}</span>
+      <span className="numeral text-muted-foreground text-xs">
+        {disponible ? formatCop(precio) : "Agotado"}
+      </span>
+      <span className="sr-only">{pending ? "Agregando" : "Agregar al pedido"}</span>
+    </button>
   );
 }
 
@@ -156,20 +105,13 @@ export function Carta({
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
-  const [expandido, setExpandido] = useState<string | null>(null);
 
   const buscando = busqueda.trim().length > 0;
 
   const resultados = useMemo(() => {
     if (!buscando) return null;
     const q = normalizar(busqueda);
-    return categorias
-      .flatMap((c) => c.products)
-      .filter(
-        (p) =>
-          normalizar(p.name).includes(q) ||
-          p.variants.some((v) => normalizar(v.name).includes(q)),
-      );
+    return categorias.flatMap((c) => c.products).filter((p) => normalizar(p.name).includes(q));
   }, [busqueda, buscando, categorias]);
 
   if (!editable) {
@@ -232,13 +174,7 @@ export function Carta({
         resultados && resultados.length > 0 ? (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {resultados.map((producto) => (
-              <TarjetaProducto
-                key={producto.id}
-                orderId={orderId}
-                producto={producto}
-                expandido={expandido === producto.id}
-                onTocar={() => setExpandido(expandido === producto.id ? null : producto.id)}
-              />
+              <TarjetaProducto key={producto.id} orderId={orderId} producto={producto} />
             ))}
           </ul>
         ) : (
@@ -257,13 +193,7 @@ export function Carta({
               )}
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {categoria.products.map((producto) => (
-                  <TarjetaProducto
-                    key={producto.id}
-                    orderId={orderId}
-                    producto={producto}
-                    expandido={expandido === producto.id}
-                    onTocar={() => setExpandido(expandido === producto.id ? null : producto.id)}
-                  />
+                  <TarjetaProducto key={producto.id} orderId={orderId} producto={producto} />
                 ))}
               </ul>
             </section>

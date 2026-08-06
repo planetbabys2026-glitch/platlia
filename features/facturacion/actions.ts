@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Role } from "@/generated/prisma/enums";
@@ -40,5 +41,37 @@ export const pagarSuscripcion = defineAction({
 
     // Se sale del sitio: el pago ocurre en MercadoPago y nunca vemos una tarjeta.
     redirect(preferencia.urlDePago);
+  },
+});
+
+import { solicitarSedeAdicionalSchema } from "./schemas";
+
+/**
+ * Solicitud de sede adicional o cambio de plan enviada por el propietario.
+ */
+export const solicitarSedeAdicional = defineAction({
+  schema: solicitarSedeAdicionalSchema,
+  roles: [Role.PROPIETARIO],
+  permitirSinLicencia: true,
+  async handler({ input, ctx, db }) {
+    await db.auditLog.create({
+      data: {
+        businessId: ctx.business.id,
+        userId: ctx.user.id,
+        action: "SOLICITUD_SEDE_ADICIONAL",
+        entity: "Business",
+        entityId: ctx.business.id,
+        metadata: {
+          cantidadSedes: input.cantidadSedes,
+          periodoMeses: input.periodoMeses,
+          observaciones: input.observaciones ?? null,
+          solicitadoPor: ctx.user.email,
+          nombreNegocio: ctx.business.name,
+        },
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
+    revalidatePath("/facturacion");
   },
 });

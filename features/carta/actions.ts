@@ -6,7 +6,6 @@ import {
   archivarSchema,
   categoriaSchema,
   disponibilidadSchema,
-  presentacionSchema,
   productoSchema,
   subirImagenSchema,
 } from "@/features/carta/schemas";
@@ -196,61 +195,5 @@ export const cambiarDisponibilidad = defineAction({
 
     revalidatePath("/administracion/carta");
     revalidatePath("/salon");
-  },
-});
-
-export const guardarPresentacion = defineAction({
-  schema: presentacionSchema,
-  roles: ADMINISTRAN,
-  modulo: AppModule.PEDIDOS,
-  async handler({ input, ctx, db }) {
-    const producto = await db.product.findFirst({
-      where: { id: input.productId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!producto) throw new ErrorDeUsuario("Ese producto no existe.");
-
-    const repetida = await db.productVariant.findFirst({
-      where: {
-        productId: input.productId,
-        name: input.name,
-        ...(input.id ? { NOT: { id: input.id } } : {}),
-      },
-      select: { id: true },
-    });
-    if (repetida) {
-      throw new ErrorDeUsuario(`Ese producto ya tiene una presentación "${input.name}".`);
-    }
-
-    const presentacion = input.id
-      ? await db.productVariant.update({
-          where: { id: input.id },
-          data: { name: input.name, priceCop: input.priceCop },
-          select: { id: true },
-        })
-      : await db.productVariant.create({
-          data: {
-            businessId: ctx.business.id,
-            productId: input.productId,
-            name: input.name,
-            priceCop: input.priceCop,
-          },
-          select: { id: true },
-        });
-
-    revalidatePath("/administracion/carta");
-    return presentacion;
-  },
-});
-
-export const archivarPresentacion = defineAction({
-  schema: archivarSchema,
-  roles: ADMINISTRAN,
-  modulo: AppModule.PEDIDOS,
-  async handler({ input, db }) {
-    // La presentación no tiene deletedAt: se desactiva. Los renglones viejos la
-    // referencian con onDelete: Restrict, así que borrarla fallaría igual.
-    await db.productVariant.update({ where: { id: input.id }, data: { active: false } });
-    revalidatePath("/administracion/carta");
   },
 });

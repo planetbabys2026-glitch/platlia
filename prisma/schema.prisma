@@ -189,7 +189,6 @@ model Business {
   sessions      Session[]
   categories    Category[]
   products      Product[]
-  variants      ProductVariant[]
   areas         Area[]
   tables        Table[]
   orders        Order[]
@@ -199,6 +198,13 @@ model Business {
   cashMovements CashMovement[]
   payments      SubscriptionPayment[]
   auditLogs     AuditLog[]
+
+  inventoryItems       InventoryItem[]
+  suppliers            Supplier[]
+  purchaseInvoices     PurchaseInvoice[]
+  purchaseInvoiceItems PurchaseInvoiceItem[]
+  productRecipeItems   ProductRecipeItem[]
+  inventoryMovements   InventoryMovement[]
 
   @@index([status])
 }
@@ -265,6 +271,10 @@ model BusinessSettings {
   turneroImageIntervalSeconds Int     @default(10)
   turneroYoutubeUrl           String?
   turneroBadgePosition        String  @default("TOP_RIGHT")
+
+  /// Módulos de Inventario y Recetas / Escandallos
+  inventoryEnabled Boolean @default(false)
+  recipesEnabled   Boolean @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -581,38 +591,12 @@ model Product {
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
 
-  variants   ProductVariant[]
-  orderItems OrderItem[]
+  orderItems  OrderItem[]
+  recipeItems ProductRecipeItem[]
 
   @@unique([businessId, sku])
   @@index([businessId, categoryId, sortOrder])
   @@index([businessId, active, isAvailable])
-}
-
-/// Presentaciones con precio propio: "Botella", "Jarra", "Media". El precio es
-/// absoluto, no un delta, porque un delta obliga a recalcular todas las variantes
-/// cada vez que se corrige el precio base y esa cuenta siempre se hace mal.
-model ProductVariant {
-  id         String   @id @default(cuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  name      String
-  priceCop  Int
-  sortOrder Int     @default(0)
-  active    Boolean @default(true)
-  isDefault Boolean @default(false)
-
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-
-  orderItems OrderItem[]
-
-  @@unique([productId, name])
-  @@index([businessId, productId])
 }
 
 /// Biblioteca de fotos genéricas en Cloudinary que el superadministrador cura
@@ -784,11 +768,11 @@ model OrderItem {
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   productId String
-  product   Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
-  variantId String?
-  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
-  /// Instantáneas. `nameSnapshot` incluye la variante: "Cerveza (Jarra)".
+  /// Instantánea: si el producto vendido era una presentación, ya no existe como
+  /// tal —cada presentación es su propio Product— así que esto es lo único que
+  /// queda de "qué era" en un tiquete viejo.
   nameSnapshot        String
   unitPriceCop        Int
   taxRateBpSnapshot   Int
@@ -957,4 +941,142 @@ model AuditLog {
   @@index([businessId, createdAt])
   @@index([businessId, entity, entityId])
   @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventario, Facturas de Compra y Recetas / Escandallos
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Insumos, ingredientes o productos que se gestionan en stock.
+model InventoryItem {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name         String
+  sku          String?
+  unit         String   @default("UNIDAD")
+  stockCurrent Int      @default(0)
+  stockMin     Int      @default(0)
+  costCop      Int      @default(0)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  recipeItems  ProductRecipeItem[]
+  invoiceItems PurchaseInvoiceItem[]
+  movements    InventoryMovement[]
+
+  @@index([businessId, deletedAt])
+}
+
+/// Proveedores de insumos y productos.
+model Supplier {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name    String
+  taxId   String?
+  phone   String?
+  email   String?
+  address String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  invoices PurchaseInvoice[]
+
+  @@index([businessId, deletedAt])
+}
+
+/// Facturas de compra registradas a proveedores.
+model PurchaseInvoice {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  invoiceNumber String
+  invoiceDate   DateTime @db.Timestamptz(3)
+  includesTax   Boolean  @default(true)
+  subtotalCop   Int      @default(0)
+  taxCop        Int      @default(0)
+  totalCop      Int      @default(0)
+  notes         String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  items PurchaseInvoiceItem[]
+
+  @@index([businessId, invoiceDate])
+}
+
+/// Línea de factura de compra.
+model PurchaseInvoiceItem {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  invoiceId String
+  invoice   PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  quantity    Int
+  unitCostCop Int
+  taxRateBp   Int @default(0)
+  totalCop    Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, invoiceId])
+}
+
+/// Receta / Escandallo: insumos requeridos por cada porción/unidad de producto.
+model ProductRecipeItem {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  quantityRequired Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([productId, inventoryItemId])
+  @@index([businessId, productId])
+}
+
+/// Historial Kardex de entradas, compras, ventas y ajustes de stock.
+model InventoryMovement {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  type        String
+  quantity    Int
+  stockAfter  Int
+  unitCostCop Int
+  referenceId String?
+  notes       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, inventoryItemId, createdAt])
 }

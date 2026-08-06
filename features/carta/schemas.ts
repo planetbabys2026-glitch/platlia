@@ -2,7 +2,12 @@ import { z } from "zod";
 import { id, montoCopPositivo, textoOpcional } from "@/lib/validaciones";
 
 /**
- * Carta: categorías, productos y presentaciones.
+ * Carta: categorías y productos.
+ *
+ * No hay presentaciones: "Cerveza (Botella)" y "Cerveza (Litro)" son dos
+ * productos, no un producto con dos precios. Mezclarlos en una sola entidad
+ * era justo lo que generaba errores al vender y una carta de administración
+ * más confusa de lo que hacía falta.
  *
  * El precio se escribe como lo escribe una persona ("18.900", "$18.900") y llega
  * como entero en pesos. Nada de decimales en ninguna parte.
@@ -57,13 +62,6 @@ export const subirImagenSchema = z.object({
     // El límite real de la Server Action es más generoso; este es el corte de
     // sentido común para lo que llega ya comprimido desde el navegador.
     .refine((f) => f.size <= 8 * 1024 * 1024, "La imagen pesa demasiado (máximo 8 MB)."),
-});
-
-export const presentacionSchema = z.object({
-  id: id.optional(),
-  productId: id,
-  name: nombre,
-  priceCop: montoCopPositivo,
 });
 
 /** Se acabó por hoy / volvió a haber. No toca el catálogo. */

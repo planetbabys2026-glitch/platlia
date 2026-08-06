@@ -66,15 +66,8 @@ const CARTA = [
     estacion: "Barra",
     minutos: 2,
     productos: [
-      {
-        sku: "CER-NAL",
-        name: "Cerveza nacional",
-        priceCop: 5000,
-        variantes: [
-          { name: "Botella", priceCop: 5000, isDefault: true },
-          { name: "Litro", priceCop: 12000 },
-        ],
-      },
+      { sku: "CER-NAL-BOT", name: "Cerveza nacional (Botella)", priceCop: 5000 },
+      { sku: "CER-NAL-LIT", name: "Cerveza nacional (Litro)", priceCop: 12000 },
       { sku: "CER-IMP", name: "Cerveza importada", priceCop: 9000 },
       { sku: "CER-MICH", name: "Michelada", priceCop: 8000 },
     ],
@@ -273,23 +266,6 @@ async function main() {
           preparationMinutes: grupo.minutos,
         },
       });
-      for (const [ordenVariante, variante] of ("variantes" in producto
-        ? producto.variantes
-        : []
-      ).entries()) {
-        await rootDb.productVariant.upsert({
-          where: { productId_name: { productId: creado.id, name: variante.name } },
-          update: {},
-          create: {
-            businessId: business.id,
-            productId: creado.id,
-            name: variante.name,
-            priceCop: variante.priceCop,
-            isDefault: "isDefault" in variante ? variante.isDefault : false,
-            sortOrder: ordenVariante,
-          },
-        });
-      }
     }
   }
 

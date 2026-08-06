@@ -80,6 +80,8 @@ const casillaModulo = z.preprocess((v) => v === "on" || v === "true" || v === tr
 export const modulosSchema = z.object({
   mesasHabilitado: casillaModulo,
   deliveryEnabled: casillaModulo,
+  inventoryEnabled: casillaModulo,
+  recipesEnabled: casillaModulo,
 });
 
 export const turneroSchema = z.object({

@@ -172,18 +172,8 @@ export const agregarItem = defineAction({
         throw new ErrorDeUsuario(`${producto.name} está marcado como agotado.`);
       }
 
-      let nombre = producto.name;
-      let precio = producto.priceCop;
-
-      if (input.variantId) {
-        const variante = await tx.productVariant.findFirst({
-          where: { id: input.variantId, productId: producto.id, active: true },
-          select: { name: true, priceCop: true },
-        });
-        if (!variante) throw new ErrorDeUsuario("Esa presentación no existe.");
-        nombre = `${producto.name} (${variante.name})`;
-        precio = variante.priceCop;
-      }
+      const nombre = producto.name;
+      const precio = producto.priceCop;
 
       // Acá se congela todo: nombre, precio y tarifa. Un tiquete reimpreso en seis
       // meses tiene que salir idéntico aunque el producto haya cambiado de precio
@@ -200,7 +190,6 @@ export const agregarItem = defineAction({
           businessId: ctx.business.id,
           orderId: pedido.id,
           productId: producto.id,
-          variantId: input.variantId ?? null,
           nameSnapshot: nombre,
           unitPriceCop: precio,
           taxRateBpSnapshot: producto.taxRate.rateBp,
@@ -212,12 +201,40 @@ export const agregarItem = defineAction({
           lineTotalCop: linea.lineTotalCop,
           notes: input.notes ?? null,
           createdById: ctx.user.id,
-          // El renglón sale hacia la estación en el momento en que se canta: en un
-          // bar no hay un paso aparte de "enviar comanda", el mesero toca y la
-          // cocina lo ve. De acá salen los tiempos de espera de la pantalla.
           sentToKitchenAt: new Date(),
         },
       });
+
+      if (settings.inventoryEnabled) {
+        const recetas = await tx.productRecipeItem.findMany({
+          where: { productId: producto.id },
+        });
+        for (const r of recetas) {
+          const descuentoTotal = r.quantityRequired * input.quantity;
+          const insumo = await tx.inventoryItem.findUnique({
+            where: { id: r.inventoryItemId },
+          });
+          if (insumo) {
+            const nuevoStock = insumo.stockCurrent - descuentoTotal;
+            await tx.inventoryItem.update({
+              where: { id: insumo.id },
+              data: { stockCurrent: nuevoStock },
+            });
+            await tx.inventoryMovement.create({
+              data: {
+                businessId: ctx.business.id,
+                inventoryItemId: insumo.id,
+                type: "VENTA",
+                quantity: -descuentoTotal,
+                stockAfter: nuevoStock,
+                unitCostCop: insumo.costCop,
+                referenceId: pedido.id,
+                notes: `Venta de ${producto.name} x${input.quantity}`,
+              },
+            });
+          }
+        }
+      }
 
       // El inventario puede quedar negativo a propósito: un bar no puede negarse a
       // vender porque el conteo está desactualizado. El número negativo es la

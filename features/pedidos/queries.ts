@@ -152,11 +152,6 @@ export async function getCarta(businessId: string) {
           priceCop: true,
           isAvailable: true,
           imageUrl: true,
-          variants: {
-            where: { active: true },
-            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-            select: { id: true, name: true, priceCop: true },
-          },
         },
       },
     },

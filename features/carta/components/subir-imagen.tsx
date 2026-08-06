@@ -43,9 +43,11 @@ type Estado =
   | { fase: "lista"; previewUrl: string; url: string }
   | { fase: "error"; mensaje: string };
 
-export function SubirImagen() {
+export function SubirImagen({ valorInicial }: { valorInicial?: string | null }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [estado, setEstado] = useState<Estado>({ fase: "vacio" });
+  const [estado, setEstado] = useState<Estado>(
+    valorInicial ? { fase: "lista", previewUrl: valorInicial, url: valorInicial } : { fase: "vacio" },
+  );
 
   async function manejarArchivo(archivo: File) {
     const previewUrl = URL.createObjectURL(archivo);

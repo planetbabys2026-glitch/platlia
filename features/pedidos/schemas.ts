@@ -26,7 +26,6 @@ export const abrirPedidoSchema = z
 export const agregarItemSchema = z.object({
   orderId: id,
   productId: id,
-  variantId: z.preprocess((v) => (v === "" ? undefined : v), id.optional()),
   quantity: cantidad.default(1),
   notes: textoOpcional(200),
 });

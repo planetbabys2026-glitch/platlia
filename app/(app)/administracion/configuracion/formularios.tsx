@@ -5,10 +5,22 @@ import { useFormStatus } from "react-dom";
 import { ReceiptWidth } from "@/generated/prisma/enums";
 import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarTurneroSettings } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { pagarSuscripcion, solicitarSedeAdicional } from "@/features/facturacion/actions";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { diasParaElCorte } from "@/lib/billing/suscripcion";
+import { formatCop } from "@/lib/money";
+import { formatDayInTimeZone } from "@/lib/time";
 
 /** Las zonas que un negocio colombiano puede necesitar de verdad. */
 const ZONAS = [
@@ -261,9 +273,13 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
 export function FormularioModulos({
   mesasHabilitado,
   deliveryEnabled,
+  inventoryEnabled,
+  recipesEnabled,
 }: {
   mesasHabilitado: boolean;
   deliveryEnabled: boolean;
+  inventoryEnabled: boolean;
+  recipesEnabled: boolean;
 }) {
   const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
 
@@ -287,6 +303,20 @@ export function FormularioModulos({
         label="Este negocio reparte a domicilio"
         defaultChecked={deliveryEnabled}
         ayuda="Si lo apagás, 'Domicilio' deja de ofrecerse como tipo de pedido."
+      />
+
+      <Casilla
+        name="inventoryEnabled"
+        label="Gestión de Inventario (Insumos, Entradas por Factura y Stock)"
+        defaultChecked={inventoryEnabled}
+        ayuda="Al activarlo, aparece el módulo de Inventario en el menú superior para propietarios, administradores y cajeros."
+      />
+
+      <Casilla
+        name="recipesEnabled"
+        label="Prepara productos con Recetas y Escandallos"
+        defaultChecked={recipesEnabled}
+        ayuda="Permite definir recetas/ingredientes por producto para descontar insumos automáticamente por cada venta."
       />
 
       <Enviar>Guardar módulos</Enviar>
@@ -458,6 +488,177 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
 
         <Enviar>Guardar configuración de turnero</Enviar>
       </form>
+    </div>
+  );
+}
+
+export type FormularioLicenciaProps = {
+  suscripcion: {
+    id: string;
+    status: string;
+    priceCop: number;
+    trialEndsAt: Date | null;
+    currentPeriodStart: Date | null;
+    currentPeriodEnd: Date | null;
+    graceUntil: Date | null;
+  } | null;
+  timeZone: string;
+};
+
+export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicenciaProps) {
+  const [openModal, setOpenModal] = useState(false);
+  const [estadoPago, accionPago] = useActionState(pagarSuscripcion, ESTADO_INICIAL);
+  const [estadoSolicitud, accionSolicitud] = useActionState(solicitarSedeAdicional, ESTADO_INICIAL);
+
+  const ESTADO_MAP: Record<string, { texto: string; variante: "default" | "secondary" | "destructive" | "outline" }> = {
+    PRUEBA: { texto: "En Prueba Gratis", variante: "secondary" },
+    ACTIVA: { texto: "Al Día / Activa", variante: "default" },
+    VENCIDA: { texto: "Vencida", variante: "destructive" },
+    SUSPENDIDA: { texto: "Suspendida", variante: "destructive" },
+    CANCELADA: { texto: "Cancelada", variante: "destructive" },
+  };
+
+  const infoEstado = suscripcion ? (ESTADO_MAP[suscripcion.status] ?? { texto: suscripcion.status, variante: "outline" }) : null;
+  const dias = suscripcion ? diasParaElCorte(suscripcion) : null;
+  const vence = suscripcion ? (suscripcion.currentPeriodEnd ?? suscripcion.trialEndsAt) : null;
+
+  return (
+    <div className="space-y-6">
+      <Resultado estado={estadoPago} />
+      <Resultado estado={estadoSolicitud} />
+
+      {/* Tarjeta resumen de la licencia del negocio */}
+      <div className="rounded-xl border border-border p-4 bg-card/60 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Estado Actual de la Licencia</span>
+            <span className="text-lg font-bold text-foreground">
+              {suscripcion ? formatCop(suscripcion.priceCop) : "Sin suscripción"} <span className="text-xs font-normal text-muted-foreground">/ mes</span>
+            </span>
+          </div>
+
+          {infoEstado && (
+            <Badge variant={infoEstado.variante} className="text-xs font-bold px-3 py-1">
+              {infoEstado.texto}
+            </Badge>
+          )}
+        </div>
+
+        {suscripcion && (
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-2 border-t border-border">
+            {vence && (
+              <div>
+                <dt className="text-muted-foreground">
+                  {suscripcion.status === "PRUEBA" ? "Fin del periodo de prueba:" : "Fecha de vencimiento:"}
+                </dt>
+                <dd className="numeral font-medium text-foreground">{formatDayInTimeZone(vence, timeZone)}</dd>
+              </div>
+            )}
+            {dias !== null && (
+              <div>
+                <dt className="text-muted-foreground">Días de servicio restantes:</dt>
+                <dd className={`numeral font-bold ${dias <= 3 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {dias > 0 ? `${dias} días` : "Servicio suspendido (renová para trabajar)"}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          <form action={accionPago} className="flex-1 sm:flex-none">
+            <Button type="submit" size="sm" className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold">
+              💳 Pagar / Renovar Licencia con MercadoPago
+            </Button>
+          </form>
+
+          <Dialog open={openModal} onOpenChange={setOpenModal}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="text-xs font-semibold">
+                🏢 Pedir Sede Adicional
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Solicitar Sede Adicional o Cambio de Plan</DialogTitle>
+              </DialogHeader>
+
+              <form action={accionSolicitud} className="space-y-4 pt-2">
+                <Resultado estado={estadoSolicitud} />
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cantidadSedes" className="text-xs font-bold">¿Cuántas sucursales o sedes necesitas?</Label>
+                  <select
+                    id="cantidadSedes"
+                    name="cantidadSedes"
+                    defaultValue="2"
+                    className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
+                  >
+                    <option value="2">2 Sucursales ($80.000 COP / mes)</option>
+                    <option value="3">3 o más Sucursales (Cotización personalizada multi-sede)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="periodoMeses" className="text-xs font-bold">Periodo de facturación preferido</Label>
+                  <select
+                    id="periodoMeses"
+                    name="periodoMeses"
+                    defaultValue="1"
+                    className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
+                  >
+                    <option value="1">Mensual (Precio de lista)</option>
+                    <option value="6">Semestral 6 Meses (10% de Descuento)</option>
+                    <option value="12">Anual 12 Meses (20% de Descuento)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="observaciones" className="text-xs font-bold">Observaciones o nombre de la nueva sede</Label>
+                  <Input
+                    id="observaciones"
+                    name="observaciones"
+                    placeholder="Ej. Nombre de la nueva sede, dirección estimada o consulta..."
+                    className="text-xs"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full bg-brand text-brand-foreground text-xs font-bold">
+                  Enviar Solicitud de Nueva Sede
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Cuadro informativo de tarifas de Platlia */}
+      <div className="rounded-xl border border-border/80 p-4 bg-muted/30 space-y-3">
+        <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">Planes Oficiales de Licencia Platlia</h4>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="p-3 rounded-lg border border-border bg-card">
+            <span className="font-bold text-foreground block">1 Sucursal</span>
+            <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 block">$50.000 COP / mes</span>
+            <span className="text-[11px] text-muted-foreground">Todos los módulos incluidos (Salón, POS, Cocina, Caja, Inventario, Recetas e Informes).</span>
+          </div>
+
+          <div className="p-3 rounded-lg border border-border bg-card">
+            <span className="font-bold text-foreground block">2 Sucursales</span>
+            <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 block">$80.000 COP / mes</span>
+            <span className="text-[11px] text-muted-foreground">Ahorro de $20.000 COP/mes en la segunda sede.</span>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-brand/30 bg-brand/5 text-xs space-y-1">
+          <span className="font-bold text-brand dark:text-[#3E9EA2] block">✨ Descuentos por Pago Anticipado</span>
+          <p className="text-muted-foreground">
+            • <strong>6 Meses (Semestral):</strong> 10% de descuento ($270.000 para 1 sede / $432.000 para 2 sedes).<br />
+            • <strong>12 Meses (Anual):</strong> 20% de descuento ($480.000 para 1 sede / $768.000 para 2 sedes).<br />
+            • <strong>3 o más Sucursales:</strong> Contactate con nuestro equipo para definir precio corporativo especial.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

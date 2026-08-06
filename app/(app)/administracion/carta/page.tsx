@@ -2,17 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Role } from "@/generated/prisma/enums";
 import { getCartaAdmin, getTarifas } from "@/features/carta/queries";
-import { ImagenProducto } from "@/features/pedidos/components/imagen-producto";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/dal";
-import { formatCop, formatRateBp } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import {
-  AccionesProducto,
   ArchivarCategoria,
+  FilaProducto,
   NuevaCategoria,
-  NuevaPresentacion,
   NuevoProducto,
   RenombrarCategoria,
 } from "./formularios";
@@ -116,48 +112,13 @@ export default async function CartaPage({
               {activa.products.length > 0 ? (
                 <ul className="divide-border divide-y">
                   {activa.products.map((producto) => (
-                    <li key={producto.id} className="flex gap-3 py-3 first:pt-0">
-                      <ImagenProducto
-                        nombre={producto.name}
-                        imageUrl={producto.imageUrl}
-                        className="size-14 shrink-0 rounded-lg object-cover"
-                      />
-
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <span className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{producto.name}</span>
-                            {!producto.isAvailable && <Badge variant="secondary">Agotado</Badge>}
-                          </span>
-                          <span className="numeral text-sm">{formatCop(producto.priceCop)}</span>
-                        </div>
-
-                        <p className="text-muted-foreground text-xs">
-                          {producto.taxRate.name} {formatRateBp(producto.taxRate.rateBp)}
-                          {producto.kitchenStation && ` · ${producto.kitchenStation}`}
-                          {producto.sku && ` · ${producto.sku}`}
-                        </p>
-
-                        {producto.variants.length > 0 && (
-                          <ul className="text-muted-foreground flex flex-wrap gap-x-3 text-xs">
-                            {producto.variants.map((variante) => (
-                              <li key={variante.id}>
-                                {variante.name}{" "}
-                                <span className="numeral">{formatCop(variante.priceCop)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <NuevaPresentacion productId={producto.id} />
-                          <AccionesProducto
-                            productId={producto.id}
-                            isAvailable={producto.isAvailable}
-                          />
-                        </div>
-                      </div>
-                    </li>
+                    <FilaProducto
+                      key={producto.id}
+                      producto={producto}
+                      categoryId={activa.id}
+                      tarifas={tarifas}
+                      estaciones={estaciones}
+                    />
                   ))}
                 </ul>
               ) : (

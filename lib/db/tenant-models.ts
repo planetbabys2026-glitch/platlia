@@ -22,7 +22,6 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "SubscriptionPayment",
   "Category",
   "Product",
-  "ProductVariant",
   "Area",
   "Table",
   "Order",
@@ -31,6 +30,12 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "CashSession",
   "CashMovement",
   "AuditLog",
+  "InventoryItem",
+  "Supplier",
+  "PurchaseInvoice",
+  "PurchaseInvoiceItem",
+  "ProductRecipeItem",
+  "InventoryMovement",
 ]);
 
 /**

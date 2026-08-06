@@ -18,14 +18,26 @@ import { getContext } from "@/lib/auth/dal";
  * memoizada con `cache()` y cada página ya la dispara por su cuenta al llamar a
  * `requireModule`/`requireRole`— así que esto reusa el mismo resultado.
  */
+import { getSettings } from "@/features/negocio/queries";
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getContext();
-  // Sin mesas, /salon no sirve para nada: la entrada al negocio es /pos. Los
-  // demás enlaces se pintan siempre —si el rol no alcanza, la página responde
-  // 404 por su cuenta—, pero este caso es distinto: no es un permiso que varía
-  // por persona, es una configuración del negocio que no cambia nunca sola, y
-  // un enlace a Salón que jamás va a andar es un enlace roto, no una frontera.
   const usaMesas = ctx?.modules.has(AppModule.MESAS) ?? true;
+
+  let usaInventario = false;
+  if (ctx?.business?.id) {
+    try {
+      const settings = await getSettings(ctx.business.id);
+      usaInventario = settings.inventoryEnabled;
+    } catch {
+      // Si la empresa aún no tiene settings cargados
+    }
+  }
+
+  const puedeVerInventario =
+    usaInventario &&
+    ctx?.role &&
+    ["PROPIETARIO", "ADMINISTRADOR", "CAJERO"].includes(ctx.role);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -52,6 +64,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/caja" className="hover:text-primary transition-colors">
                 Caja
               </Link>
+              {puedeVerInventario && (
+                <Link href="/inventario" className="hover:text-primary transition-colors font-medium">
+                  Inventario
+                </Link>
+              )}
               <Link href="/informes" className="hover:text-primary transition-colors">
                 Informes
               </Link>

@@ -7,18 +7,34 @@ import {
   archivarProducto,
   cambiarDisponibilidad,
   guardarCategoria,
-  guardarPresentacion,
   guardarProducto,
 } from "@/features/carta/actions";
 import { SubirImagen } from "@/features/carta/components/subir-imagen";
+import { ImagenProducto } from "@/features/pedidos/components/imagen-producto";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-import { formatCop } from "@/lib/money";
+import { formatCop, formatRateBp } from "@/lib/money";
 
 export type Tarifa = { id: string; name: string; rateBp: number; isDefault: boolean };
+
+export type ProductoAdmin = {
+  id: string;
+  name: string;
+  description: string | null;
+  sku: string | null;
+  imageUrl: string | null;
+  priceCop: number;
+  active: boolean;
+  isAvailable: boolean;
+  kitchenStation: string | null;
+  preparationMinutes: number | null;
+  taxRateId: string;
+  taxRate: { name: string; rateBp: number };
+};
 
 function Enviar({
   children,
@@ -169,53 +185,54 @@ export function ArchivarCategoria({ id, name }: { id: string; name: string }) {
   );
 }
 
-export function NuevoProducto({
-  categoryId,
+/** Los campos que comparten "agregar producto" y "editar producto". */
+function CamposProducto({
+  idBase,
   tarifas,
   estaciones,
+  producto,
+  campos,
+  version,
 }: {
-  categoryId: string;
+  idBase: string;
   tarifas: Tarifa[];
   /** Estaciones que ya usa este negocio, para no fragmentar "Cocina"/"cocina". */
   estaciones: string[];
+  producto?: ProductoAdmin;
+  campos?: Record<string, string[]>;
+  version: number;
 }) {
-  const [estado, accion] = useActionState(guardarProducto, ESTADO_INICIAL);
-  const campos = !estado.ok ? estado.campos : undefined;
-  const listaEstaciones = `estaciones-${categoryId}`;
-
-  // El reset nativo del form limpia los campos no controlados, pero SubirImagen
-  // guarda su preview y su URL en estado de React: sin este remount, agregar un
-  // segundo producto seguido heredaba en silencio la foto del primero.
-  const [version, setVersion] = useState(0);
-  useEffect(() => {
-    if (estado.ok) setVersion((v) => v + 1);
-  }, [estado]);
+  const listaEstaciones = `estaciones-${idBase}`;
 
   return (
-    <form action={accion} className="border-border space-y-4 rounded-lg border border-dashed p-3">
-      <Error estado={estado} />
-      <input type="hidden" name="categoryId" value={categoryId} />
-
-      <SubirImagen key={version} />
+    <>
+      <SubirImagen key={version} valorInicial={producto?.imageUrl} />
 
       <div className="grid gap-2 sm:grid-cols-[1fr_8rem]">
         <div className="space-y-1">
-          <Label htmlFor={`nombre-${categoryId}`} className="text-xs">
+          <Label htmlFor={`nombre-${idBase}`} className="text-xs">
             Producto
           </Label>
-          <Input id={`nombre-${categoryId}`} name="name" required placeholder="Cerveza nacional" />
+          <Input
+            id={`nombre-${idBase}`}
+            name="name"
+            required
+            placeholder="Cerveza nacional"
+            defaultValue={producto?.name}
+          />
           {campos?.name && <p className="text-destructive text-xs">{campos.name[0]}</p>}
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`precio-${categoryId}`} className="text-xs">
+          <Label htmlFor={`precio-${idBase}`} className="text-xs">
             Precio
           </Label>
           <Input
-            id={`precio-${categoryId}`}
+            id={`precio-${idBase}`}
             name="priceCop"
             inputMode="numeric"
             required
             placeholder="5.000"
+            defaultValue={producto ? formatCop(producto.priceCop, { symbol: false }) : undefined}
           />
           {campos?.priceCop && <p className="text-destructive text-xs">{campos.priceCop[0]}</p>}
         </div>
@@ -223,12 +240,13 @@ export function NuevoProducto({
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor={`tarifa-${categoryId}`} className="text-xs">
+          <Label htmlFor={`tarifa-${idBase}`} className="text-xs">
             Impuesto
           </Label>
           <select
-            id={`tarifa-${categoryId}`}
+            id={`tarifa-${idBase}`}
             name="taxRateId"
+            defaultValue={producto?.taxRateId}
             className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
           >
             {tarifas.map((tarifa) => (
@@ -240,13 +258,14 @@ export function NuevoProducto({
           </select>
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`estacion-${categoryId}`} className="text-xs">
+          <Label htmlFor={`estacion-${idBase}`} className="text-xs">
             Estación de cocina
           </Label>
           <Input
-            id={`estacion-${categoryId}`}
+            id={`estacion-${idBase}`}
             name="kitchenStation"
             placeholder="Cocina, Barra, Parrilla…"
+            defaultValue={producto?.kitchenStation ?? undefined}
             list={estaciones.length > 0 ? listaEstaciones : undefined}
           />
           {estaciones.length > 0 && (
@@ -261,6 +280,42 @@ export function NuevoProducto({
           </p>
         </div>
       </div>
+    </>
+  );
+}
+
+export function NuevoProducto({
+  categoryId,
+  tarifas,
+  estaciones,
+}: {
+  categoryId: string;
+  tarifas: Tarifa[];
+  estaciones: string[];
+}) {
+  const [estado, accion] = useActionState(guardarProducto, ESTADO_INICIAL);
+  const campos = !estado.ok ? estado.campos : undefined;
+
+  // El reset nativo del form limpia los campos no controlados, pero SubirImagen
+  // guarda su preview y su URL en estado de React: sin este remount, agregar un
+  // segundo producto seguido heredaba en silencio la foto del primero.
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (estado.ok) setVersion((v) => v + 1);
+  }, [estado]);
+
+  return (
+    <form action={accion} className="border-border space-y-4 rounded-lg border border-dashed p-3">
+      <Error estado={estado} />
+      <input type="hidden" name="categoryId" value={categoryId} />
+
+      <CamposProducto
+        idBase={categoryId}
+        tarifas={tarifas}
+        estaciones={estaciones}
+        campos={campos}
+        version={version}
+      />
 
       <Enviar size="sm">Agregar producto</Enviar>
     </form>
@@ -299,37 +354,96 @@ export function AccionesProducto({
   );
 }
 
-export function NuevaPresentacion({ productId }: { productId: string }) {
-  const [estado, accion] = useActionState(guardarPresentacion, ESTADO_INICIAL);
+/**
+ * Un renglón de la carta: la vista de siempre, o —al tocar "Editar"— el mismo
+ * formulario de `NuevoProducto` pero precargado y guardando sobre el `id`
+ * existente en vez de crear uno nuevo.
+ */
+export function FilaProducto({
+  producto,
+  categoryId,
+  tarifas,
+  estaciones,
+}: {
+  producto: ProductoAdmin;
+  categoryId: string;
+  tarifas: Tarifa[];
+  estaciones: string[];
+}) {
+  const [editando, setEditando] = useState(false);
+  const [estado, accion] = useActionState(guardarProducto, ESTADO_INICIAL);
+  const campos = !estado.ok ? estado.campos : undefined;
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    if (estado.ok) {
+      setEditando(false);
+      setVersion((v) => v + 1);
+    }
+  }, [estado]);
+
+  if (editando) {
+    return (
+      <li className="border-border rounded-lg border border-dashed p-3">
+        <form action={accion} className="space-y-4">
+          <Error estado={estado} />
+          <input type="hidden" name="id" value={producto.id} />
+          <input type="hidden" name="categoryId" value={categoryId} />
+
+          <CamposProducto
+            idBase={producto.id}
+            tarifas={tarifas}
+            estaciones={estaciones}
+            producto={producto}
+            campos={campos}
+            version={version}
+          />
+
+          <div className="flex gap-2">
+            <Enviar size="sm">Guardar cambios</Enviar>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditando(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      </li>
+    );
+  }
 
   return (
-    <form action={accion} className="flex flex-wrap items-center gap-1">
-      <input type="hidden" name="productId" value={productId} />
-      <Input
-        name="name"
-        placeholder="Presentación"
-        aria-label="Nombre de la presentación"
-        required
-        className="h-7 w-32 text-xs"
+    <li className="flex gap-3 py-3 first:pt-0">
+      <ImagenProducto
+        nombre={producto.name}
+        imageUrl={producto.imageUrl}
+        className="size-14 shrink-0 rounded-lg object-cover"
       />
-      <Input
-        name="priceCop"
-        inputMode="numeric"
-        placeholder="Precio"
-        aria-label="Precio de la presentación"
-        required
-        className="h-7 w-24 text-xs"
-      />
-      <Enviar variant="outline" size="sm" className="h-7 text-xs">
-        Agregar
-      </Enviar>
-      {!estado.ok && estado.error && (
-        <span className="text-destructive text-xs">{estado.error}</span>
-      )}
-    </form>
-  );
-}
 
-export function Precio({ valor }: { valor: number }) {
-  return <span className="numeral">{formatCop(valor)}</span>;
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-medium">{producto.name}</span>
+            {!producto.isAvailable && <Badge variant="secondary">Agotado</Badge>}
+          </span>
+          <span className="numeral text-sm">{formatCop(producto.priceCop)}</span>
+        </div>
+
+        <p className="text-muted-foreground text-xs">
+          {producto.taxRate.name} {formatRateBp(producto.taxRate.rateBp)}
+          {producto.kitchenStation && ` · ${producto.kitchenStation}`}
+          {producto.sku && ` · ${producto.sku}`}
+        </p>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setEditando(true)}
+            className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted underline-offset-2"
+          >
+            Editar
+          </button>
+          <AccionesProducto productId={producto.id} isAvailable={producto.isAvailable} />
+        </div>
+      </div>
+    </li>
+  );
 }

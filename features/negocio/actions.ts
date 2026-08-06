@@ -124,12 +124,18 @@ export const guardarModulos = defineAction({
     });
 
     await db.businessSettings.updateMany({
-      data: { deliveryEnabled: input.deliveryEnabled },
+      where: { businessId: ctx.business.id },
+      data: {
+        deliveryEnabled: input.deliveryEnabled,
+        inventoryEnabled: input.inventoryEnabled,
+        recipesEnabled: input.recipesEnabled,
+      },
     });
 
     revalidatePath("/administracion/configuracion");
     revalidatePath("/salon");
     revalidatePath("/pos");
+    revalidatePath("/inventario");
     revalidatePath("/panel");
   },
 });
