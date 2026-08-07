@@ -3,7 +3,7 @@
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ReceiptWidth } from "@/generated/prisma/enums";
-import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
+import { guardarConfiguracionFactus, guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -534,7 +534,11 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
           <div>
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Estado Actual de la Licencia</span>
             <span className="text-lg font-bold text-foreground">
-              {suscripcion ? formatCop(suscripcion.priceCop) : "Sin suscripción"} <span className="text-xs font-normal text-muted-foreground">/ mes</span>
+              {suscripcion?.status === "PRUEBA"
+                ? "$0 COP (Prueba Gratis de 7 días)"
+                : suscripcion
+                ? `${formatCop(suscripcion.priceCop)} / mes`
+                : "Sin suscripción"}
             </span>
           </div>
 
@@ -584,50 +588,60 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
                 <DialogTitle>Solicitar Sede Adicional o Cambio de Plan</DialogTitle>
               </DialogHeader>
 
-              <form action={accionSolicitud} className="space-y-4 pt-2">
-                <Resultado estado={estadoSolicitud} />
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="cantidadSedes" className="text-xs font-bold">¿Cuántas sucursales o sedes necesitas?</Label>
-                  <select
-                    id="cantidadSedes"
-                    name="cantidadSedes"
-                    defaultValue="2"
-                    className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
-                  >
-                    <option value="2">2 Sucursales ($80.000 COP / mes)</option>
-                    <option value="3">3 o más Sucursales (Cotización personalizada multi-sede)</option>
-                  </select>
+              {suscripcion?.status === "PRUEBA" ? (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+                  <span className="font-bold block">⚠️ Plan de Prueba Gratuita (7 Días)</span>
+                  <p className="leading-relaxed">
+                    Las sedes adicionales únicamente pueden crearse tras adquirir una licencia de pago activa.
+                    Realiza el pago de tu licencia para desbloquear la adición de múltiples sucursales con prorrateo.
+                  </p>
                 </div>
+              ) : (
+                <form action={accionSolicitud} className="space-y-4 pt-2">
+                  <Resultado estado={estadoSolicitud} />
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="periodoMeses" className="text-xs font-bold">Periodo de facturación preferido</Label>
-                  <select
-                    id="periodoMeses"
-                    name="periodoMeses"
-                    defaultValue="1"
-                    className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
-                  >
-                    <option value="1">Mensual (Precio de lista)</option>
-                    <option value="6">Semestral 6 Meses (10% de Descuento)</option>
-                    <option value="12">Anual 12 Meses (20% de Descuento)</option>
-                  </select>
-                </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cantidadSedes" className="text-xs font-bold">¿Cuántas sucursales o sedes necesitas?</Label>
+                    <select
+                      id="cantidadSedes"
+                      name="cantidadSedes"
+                      defaultValue="2"
+                      className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
+                    >
+                      <option value="2">2 Sucursales ($80.000 COP / mes)</option>
+                      <option value="3">3 o más Sucursales (Cotización personalizada multi-sede)</option>
+                    </select>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="observaciones" className="text-xs font-bold">Observaciones o nombre de la nueva sede</Label>
-                  <Input
-                    id="observaciones"
-                    name="observaciones"
-                    placeholder="Ej. Nombre de la nueva sede, dirección estimada o consulta..."
-                    className="text-xs"
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="periodoMeses" className="text-xs font-bold">Periodo de facturación preferido</Label>
+                    <select
+                      id="periodoMeses"
+                      name="periodoMeses"
+                      defaultValue="1"
+                      className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
+                    >
+                      <option value="1">Mensual ($50k / 1 sede - $80k / 2 sedes)</option>
+                      <option value="6">Semestral 6 Meses - 10% desc. ($270k / 1 sede - $432k / 2 sedes)</option>
+                      <option value="12">Anual 12 Meses - 20% desc. ($480k / 1 sede - $768k / 2 sedes)</option>
+                    </select>
+                  </div>
 
-                <Button type="submit" className="w-full bg-brand text-brand-foreground text-xs font-bold">
-                  Enviar Solicitud de Nueva Sede
-                </Button>
-              </form>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="observaciones" className="text-xs font-bold">Observaciones o nombre de la nueva sede</Label>
+                    <Input
+                      id="observaciones"
+                      name="observaciones"
+                      placeholder="Ej. Nombre de la nueva sede, dirección estimada o consulta..."
+                      className="text-xs"
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full bg-brand text-brand-foreground text-xs font-bold">
+                    Enviar Solicitud de Nueva Sede
+                  </Button>
+                </form>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -1515,6 +1529,156 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
             `}</style>
           </DialogContent>
         </Dialog>
+      )}
+    </div>
+  );
+}
+
+export type FactusSettings = {
+  facturacionElectronicaHabilitada: boolean;
+  paquetesDocumentosDisponibles: number;
+  documentosEmitidosConsumidos: number;
+  factusClientId: string | null;
+  factusClientSecret: string | null;
+  factusUsername: string | null;
+  factusPassword: string | null;
+  factusNumberingRangeId: number | null;
+  municipalityCode: string | null;
+};
+
+export function FormularioFactus({ settings }: { settings: FactusSettings }) {
+  const [estado, accion] = useActionState(guardarConfiguracionFactus, ESTADO_INICIAL);
+
+  const habilitado = settings.facturacionElectronicaHabilitada;
+  const disponibles = settings.paquetesDocumentosDisponibles ?? 0;
+  const consumidos = settings.documentosEmitidosConsumidos ?? 0;
+  const remanentes = Math.max(0, disponibles - consumidos);
+
+  return (
+    <div className="space-y-6">
+      {!habilitado ? (
+        <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-bold">🚫 Módulo de Facturación Electrónica DIAN Deshabilitado</span>
+          </div>
+          <p className="text-xs leading-relaxed opacity-90">
+            La generación de facturas electrónicas con la API de Factus DIAN es una función opcional con costo adicional por paquete de documentos.
+            Contacta a nuestro equipo comercial o de soporte desde el botón de ayuda para adquirir y desbloquear tu paquete de documentos electrónicamente.
+          </p>
+        </div>
+      ) : (
+        <form action={accion} className="space-y-6">
+          {!estado.ok && estado.error && (
+            <Alert variant="destructive" role="alert">
+              <AlertDescription>{estado.error}</AlertDescription>
+            </Alert>
+          )}
+
+          {estado.ok && (
+            <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              <AlertDescription>¡Credenciales de Factus guardadas con éxito!</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Tarjeta de Resumen de Paquete */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-4 rounded-xl bg-brand/5 border border-brand/20 space-y-1">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Paquete Total</span>
+              <p className="numeral text-2xl font-bold text-brand dark:text-[#3E9EA2]">{disponibles} <span className="text-xs font-normal">docs</span></p>
+            </div>
+            <div className="p-4 rounded-xl bg-card border border-border space-y-1">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Emitidos / Consumidos</span>
+              <p className="numeral text-2xl font-bold text-foreground">{consumidos} <span className="text-xs font-normal">docs</span></p>
+            </div>
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
+              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 uppercase">Remanentes</span>
+              <p className="numeral text-2xl font-bold text-emerald-700 dark:text-emerald-400">{remanentes} <span className="text-xs font-normal">docs</span></p>
+            </div>
+          </div>
+
+          {/* Formulario de Credenciales API Factus */}
+          <div className="space-y-4 pt-2">
+            <h3 className="font-semibold text-sm text-foreground">Credenciales API Factus Colombia</h3>
+            <p className="text-xs text-muted-foreground">
+              Ingresa tus llaves de acceso obtenidas en la plataforma de Factus (Sandbox o Producción).
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="factusClientId" className="text-xs font-semibold">Client ID *</Label>
+                <Input
+                  id="factusClientId"
+                  name="factusClientId"
+                  defaultValue={settings.factusClientId ?? ""}
+                  placeholder="Tu Client ID de Factus"
+                  className="h-10 text-xs rounded-xl font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="factusClientSecret" className="text-xs font-semibold">Client Secret *</Label>
+                <Input
+                  id="factusClientSecret"
+                  name="factusClientSecret"
+                  type="password"
+                  defaultValue={settings.factusClientSecret ?? ""}
+                  placeholder="Tu Client Secret"
+                  className="h-10 text-xs rounded-xl font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="factusUsername" className="text-xs font-semibold">Usuario / Correo Factus *</Label>
+                <Input
+                  id="factusUsername"
+                  name="factusUsername"
+                  defaultValue={settings.factusUsername ?? ""}
+                  placeholder="ejemplo@tuempresa.com"
+                  className="h-10 text-xs rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="factusPassword" className="text-xs font-semibold">Contraseña Factus *</Label>
+                <Input
+                  id="factusPassword"
+                  name="factusPassword"
+                  type="password"
+                  defaultValue={settings.factusPassword ?? ""}
+                  placeholder="••••••••••••"
+                  className="h-10 text-xs rounded-xl font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="factusNumberingRangeId" className="text-xs font-semibold">ID Rango Numeración DIAN *</Label>
+                <Input
+                  id="factusNumberingRangeId"
+                  name="factusNumberingRangeId"
+                  type="number"
+                  defaultValue={settings.factusNumberingRangeId ?? ""}
+                  placeholder="Ej. 389"
+                  className="h-10 text-xs rounded-xl font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="municipalityCode" className="text-xs font-semibold">Código Municipio DIAN *</Label>
+                <Input
+                  id="municipalityCode"
+                  name="municipalityCode"
+                  defaultValue={settings.municipalityCode ?? "05001"}
+                  placeholder="Ej. 05001 (Medellín) / 11001 (Bogotá)"
+                  className="h-10 text-xs rounded-xl font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <Enviar>Guardar Credenciales Factus</Enviar>
+          </div>
+        </form>
       )}
     </div>
   );

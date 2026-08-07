@@ -52,16 +52,6 @@ export async function middleware(request: NextRequest) {
   const cookie = request.cookies.get(esSuperadmin ? COOKIE_SUPERADMIN : COOKIE_SESION);
 
   if (esPublica(pathname)) {
-    // Quien ya entró no tiene por qué volver a ver el formulario de ingreso.
-    const formularioDeIngreso =
-      pathname === "/ingresar" || pathname === "/registro" || pathname === "/superadmin/ingresar";
-
-    if (formularioDeIngreso && cookie?.value) {
-      const claims = await verifySessionToken(cookie.value);
-      if (claims?.kind === (esSuperadmin ? "SUPERADMIN" : "APP")) {
-        return NextResponse.redirect(new URL(esSuperadmin ? "/superadmin" : "/panel", request.url));
-      }
-    }
     return NextResponse.next();
   }
 
@@ -80,7 +70,9 @@ export async function middleware(request: NextRequest) {
 
 function aIngresar(request: NextRequest, destino: string, esSuperadmin: boolean) {
   const url = new URL(esSuperadmin ? "/superadmin/ingresar" : "/ingresar", request.url);
-  if (!esSuperadmin && destino !== "/") url.searchParams.set("desde", destino);
+  if (destino !== "/" && destino !== "/ingresar" && destino !== "/superadmin/ingresar") {
+    url.searchParams.set("desde", destino);
+  }
   return NextResponse.redirect(url);
 }
 

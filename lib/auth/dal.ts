@@ -69,7 +69,7 @@ export const getSuperAdmin = cache(async () => {
 
 export async function requireSuperAdmin() {
   const superAdmin = await getSuperAdmin();
-  if (!superAdmin) redirect("/superadmin/ingresar");
+  if (!superAdmin) redirect("/superadmin/ingresar?desde=/superadmin");
   return superAdmin;
 }
 

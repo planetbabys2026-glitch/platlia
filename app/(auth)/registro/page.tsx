@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { readSession } from "@/lib/auth/session";
 import { FormularioRegistro } from "./formulario";
 
 export const metadata: Metadata = { title: "Crear cuenta" };
 
-export default function RegistroPage() {
+export default async function RegistroPage() {
+  const sesion = await readSession("APP");
+  if (sesion) {
+    redirect("/panel");
+  }
   return (
     <div className="space-y-6">
       <div className="space-y-1 text-center">

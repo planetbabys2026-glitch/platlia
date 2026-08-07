@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatDayInTimeZone } from "@/lib/time";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-import { extenderLicencia, suspenderEmpresa } from "@/features/superadmin/actions";
+import { actualizarLimiteSucursales, extenderLicencia, gestionarPaqueteFacturacionElectronica, suspenderEmpresa } from "@/features/superadmin/actions";
 import { toast } from "sonner";
 import { 
   Search, 
@@ -41,10 +41,16 @@ type NegocioItem = {
   subscription: {
     status: string;
     priceCop: number;
+    maxBranches: number;
     trialEndsAt: Date | null;
     currentPeriodStart: Date | null;
     currentPeriodEnd: Date | null;
     graceUntil: Date | null;
+  } | null;
+  settings: {
+    facturacionElectronicaHabilitada: boolean;
+    paquetesDocumentosDisponibles: number;
+    documentosEmitidosConsumidos: number;
   } | null;
   _count: {
     memberships: number;
@@ -365,6 +371,13 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
   const [diasExtender, setDiasExtender] = useState<number>(30);
   const [motivoExtender, setMotivoExtender] = useState("");
   const [motivoSuspender, setMotivoSuspender] = useState("");
+  const [maxSucursales, setMaxSucursales] = useState<number>(negocio.subscription?.maxBranches ?? 1);
+  const [motivoSucursales, setMotivoSucursales] = useState("");
+  const [facturacionHabilitada, setFacturacionHabilitada] = useState<boolean>(
+    negocio.settings?.facturacionElectronicaHabilitada ?? false,
+  );
+  const [sumarDocumentos, setSumarDocumentos] = useState<number>(100);
+  const [motivoFacturacion, setMotivoFacturacion] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const suspendido = negocio.status !== "ACTIVO";
@@ -421,6 +434,57 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
     });
   };
 
+  const handleActualizarSucursales = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!motivoSucursales || motivoSucursales.trim().length < 3) {
+      toast.error("Ingresa un motivo válido para la modificación de sucursales (mínimo 3 caracteres)");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await actualizarLimiteSucursales(ESTADO_INICIAL, {
+        businessId: negocio.id,
+        maxBranches: Number(maxSucursales),
+        motivo: motivoSucursales.trim(),
+      });
+
+      if (res.ok) {
+        toast.success(`Límite de sucursales actualizado a ${maxSucursales} para ${negocio.name}.`);
+        setOpen(false);
+        setMotivoSucursales("");
+        router.refresh();
+      } else {
+        toast.error(res.error || "Ocurrió un error.");
+      }
+    });
+  };
+
+  const handleGestionarFacturacion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!motivoFacturacion || motivoFacturacion.trim().length < 3) {
+      toast.error("Ingresa un motivo para la acción (mínimo 3 caracteres)");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await gestionarPaqueteFacturacionElectronica(ESTADO_INICIAL, {
+        businessId: negocio.id,
+        habilitar: facturacionHabilitada,
+        sumarDocumentos: Number(sumarDocumentos),
+        motivo: motivoFacturacion.trim(),
+      });
+
+      if (res.ok) {
+        toast.success(`Paquete de Facturación Electrónica DIAN actualizado para ${negocio.name}.`);
+        setOpen(false);
+        setMotivoFacturacion("");
+        router.refresh();
+      } else {
+        toast.error(res.error || "Ocurrió un error.");
+      }
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -436,14 +500,16 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
             Gestionar Licencia · {negocio.name}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Ajusta los días de servicio o modifica el estado de operación de este negocio.
+            Ajusta días de servicio, estado operacional, límite de sucursales o paquetes DIAN.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="extender" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="extender" className="text-xs">Extender Licencia</TabsTrigger>
-            <TabsTrigger value="estado" className="text-xs">Estado de Operación</TabsTrigger>
+          <TabsList className="grid grid-cols-4 w-full">
+            <TabsTrigger value="extender" className="text-xs">Extender</TabsTrigger>
+            <TabsTrigger value="estado" className="text-xs">Estado</TabsTrigger>
+            <TabsTrigger value="sucursales" className="text-xs">Sucursales ({negocio.subscription?.maxBranches ?? 1})</TabsTrigger>
+            <TabsTrigger value="factus" className="text-xs">DIAN 🧾</TabsTrigger>
           </TabsList>
 
           {/* Pestaña: Extender Licencia */}
@@ -551,6 +617,151 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
                   : suspendido
                   ? "Reactivar Negocio"
                   : "Suspender Negocio"}
+              </Button>
+            </form>
+          </TabsContent>
+
+          {/* Pestaña: Límite de Sucursales */}
+          <TabsContent value="sucursales" className="space-y-4 pt-3">
+            <form onSubmit={handleActualizarSucursales} className="space-y-4">
+              <div className="p-3 rounded-xl bg-brand/10 border border-brand/20 text-xs space-y-1">
+                <span className="font-bold text-brand dark:text-[#3E9EA2] block">
+                  Control de Sucursales (Plan Cadena Empresarial)
+                </span>
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  Define cuántas sucursales puede administrar este propietario (1 por defecto, 2 self-service con prorrateo, 3+ mediante negociación en superadmin).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="maxSucursalesInput" className="text-xs font-semibold text-foreground">
+                  Número máximo de sucursales permitidas:
+                </label>
+                <Input
+                  id="maxSucursalesInput"
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={maxSucursales}
+                  onChange={(e) => setMaxSucursales(Number(e.target.value))}
+                  className="text-sm font-semibold h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="motivoSuc" className="text-xs font-semibold text-foreground">
+                  Motivo comercial / auditoría (obligatorio) *
+                </label>
+                <Input
+                  id="motivoSuc"
+                  required
+                  minLength={3}
+                  placeholder="Ej. Plan Cadena Habilitado 5 Sedes"
+                  value={motivoSucursales}
+                  onChange={(e) => setMotivoSucursales(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isPending}
+                className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold h-10"
+              >
+                {isPending ? "Actualizando..." : `Guardar Límite (${maxSucursales} sucursales)`}
+              </Button>
+            </form>
+          </TabsContent>
+
+          {/* Pestaña: Facturación Electrónica DIAN */}
+          <TabsContent value="factus" className="space-y-4 pt-3">
+            <form onSubmit={handleGestionarFacturacion} className="space-y-4">
+              <div className="p-3 rounded-xl bg-brand/10 border border-brand/20 text-xs space-y-1.5">
+                <span className="font-bold text-brand dark:text-[#3E9EA2] block">
+                  Facturación Electrónica DIAN (Factus API)
+                </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                  <span>Disponibles: <strong>{negocio.settings?.paquetesDocumentosDisponibles ?? 0} doc.</strong></span>
+                  <span>Consumidos: <strong>{negocio.settings?.documentosEmitidosConsumidos ?? 0} doc.</strong></span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground block">
+                  Estado del Módulo DIAN:
+                </label>
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant={facturacionHabilitada ? "default" : "outline"}
+                    onClick={() => setFacturacionHabilitada(true)}
+                    className={`h-9 text-xs font-bold flex-1 ${facturacionHabilitada ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+                  >
+                    ✅ Habilitado
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={!facturacionHabilitada ? "default" : "outline"}
+                    onClick={() => setFacturacionHabilitada(false)}
+                    className={`h-9 text-xs font-bold flex-1 ${!facturacionHabilitada ? "bg-muted text-foreground" : ""}`}
+                  >
+                    🚫 Deshabilitado
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="sumarDocsInput" className="text-xs font-semibold text-foreground block">
+                  Sumar / Cargar Paquete de Documentos Electrónicos:
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[0, 50, 100, 500, 1000, 5000].map((cant) => (
+                    <button
+                      key={cant}
+                      type="button"
+                      onClick={() => setSumarDocumentos(cant)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                        sumarDocumentos === cant
+                          ? "bg-brand text-brand-foreground border-brand"
+                          : "bg-muted/60 border-border text-foreground"
+                      }`}
+                    >
+                      +{cant} docs
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  id="sumarDocsInput"
+                  type="number"
+                  min={0}
+                  max={100000}
+                  value={sumarDocumentos}
+                  onChange={(e) => setSumarDocumentos(Number(e.target.value))}
+                  className="text-sm font-semibold h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="motivoFactus" className="text-xs font-semibold text-foreground">
+                  Motivo comercial / Pago de paquete (obligatorio) *
+                </label>
+                <Input
+                  id="motivoFactus"
+                  required
+                  minLength={3}
+                  placeholder="Ej. Compra Paquete 500 Documentos DIAN"
+                  value={motivoFacturacion}
+                  onChange={(e) => setMotivoFacturacion(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isPending}
+                className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold h-10"
+              >
+                {isPending ? "Guardando..." : "Guardar Paquete DIAN"}
               </Button>
             </form>
           </TabsContent>

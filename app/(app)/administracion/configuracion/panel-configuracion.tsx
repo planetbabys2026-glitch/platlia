@@ -5,6 +5,7 @@ import {
   Blocks,
   Building2,
   Crown,
+  FileText,
   QrCode,
   SlidersHorizontal,
   Tv,
@@ -13,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   FormularioDatos,
+  FormularioFactus,
   FormularioLicencia,
   FormularioModulos,
   FormularioOperacion,
@@ -59,6 +61,15 @@ type PanelConfiguracionProps = {
     qrMenuLogoUrl: string | null;
     qrMenuHeaderTitle: string | null;
     qrMenuHeaderSubtitle: string | null;
+    facturacionElectronicaHabilitada: boolean;
+    paquetesDocumentosDisponibles: number;
+    documentosEmitidosConsumidos: number;
+    factusClientId: string | null;
+    factusClientSecret: string | null;
+    factusUsername: string | null;
+    factusPassword: string | null;
+    factusNumberingRangeId: number | null;
+    municipalityCode: string | null;
   };
   facturacion: {
     suscripcion: {
@@ -79,7 +90,7 @@ type PanelConfiguracionProps = {
   mesas: { id: string; name: string }[];
 };
 
-type TabId = "datos" | "modulos" | "turnero" | "qr" | "operacion" | "licencia";
+type TabId = "datos" | "modulos" | "turnero" | "qr" | "operacion" | "factus" | "licencia";
 
 export function PanelConfiguracion({
   negocio,
@@ -98,6 +109,7 @@ export function PanelConfiguracion({
     { id: "turnero" as TabId, label: "Turnero TV", icono: Tv },
     { id: "qr" as TabId, label: "Menú Digital QR", icono: QrCode },
     { id: "operacion" as TabId, label: "Operación y Recibos", icono: SlidersHorizontal },
+    { id: "factus" as TabId, label: "Facturación DIAN", icono: FileText },
     ...(esPropietario && facturacion
       ? [{ id: "licencia" as TabId, label: "Licencia y Sucursales", icono: Crown }]
       : []),
@@ -239,6 +251,32 @@ export function PanelConfiguracion({
                 receiptWidth: settings.receiptWidth,
                 receiptHeader: settings.receiptHeader,
                 receiptFooter: settings.receiptFooter,
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {tabActiva === "factus" && (
+        <Card className="shadow-sm">
+          <CardContent className="space-y-4 pt-6">
+            <div>
+              <h2 className="font-semibold text-lg">Facturación Electrónica DIAN (Factus API)</h2>
+              <p className="text-muted-foreground text-xs">
+                Configuración del paquete de documentos y credenciales de transmisión DIAN.
+              </p>
+            </div>
+            <FormularioFactus
+              settings={{
+                facturacionElectronicaHabilitada: settings.facturacionElectronicaHabilitada,
+                paquetesDocumentosDisponibles: settings.paquetesDocumentosDisponibles,
+                documentosEmitidosConsumidos: settings.documentosEmitidosConsumidos,
+                factusClientId: settings.factusClientId,
+                factusClientSecret: settings.factusClientSecret,
+                factusUsername: settings.factusUsername,
+                factusPassword: settings.factusPassword,
+                factusNumberingRangeId: settings.factusNumberingRangeId,
+                municipalityCode: settings.municipalityCode,
               }}
             />
           </CardContent>

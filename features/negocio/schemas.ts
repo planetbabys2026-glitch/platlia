@@ -114,3 +114,15 @@ export const crearSucursalSchema = z.object({
   address: textoOpcional(200),
   phone: textoOpcional(40),
 });
+
+export const configuracionFactusSchema = z.object({
+  factusClientId: textoOpcional(200),
+  factusClientSecret: textoOpcional(200),
+  factusUsername: textoOpcional(200),
+  factusPassword: textoOpcional(200),
+  factusNumberingRangeId: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? undefined : Number(v)),
+    z.number().int().min(1).optional(),
+  ),
+  municipalityCode: z.string().trim().default("05001"),
+});

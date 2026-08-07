@@ -293,6 +293,18 @@ model BusinessSettings {
   qrMenuHeaderTitle    String?
   qrMenuHeaderSubtitle String?
 
+  /// Módulo Opcional de Facturación Electrónica DIAN (Factus)
+  facturacionElectronicaHabilitada Boolean @default(false)
+  paquetesDocumentosDisponibles    Int     @default(0)
+  documentosEmitidosConsumidos     Int     @default(0)
+
+  factusClientId         String?
+  factusClientSecret     String?
+  factusUsername         String?
+  factusPassword         String?
+  factusNumberingRangeId Int?
+  municipalityCode       String? @default("05001")
+
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 }
@@ -475,6 +487,9 @@ model Subscription {
   /// Precio vigente para esta empresa. Se guarda acá y no como constante para
   /// poder respetar el precio de los primeros clientes cuando la lista suba.
   priceCop Int                @default(50000)
+
+  /// Número máximo de sucursales permitidas (1 por defecto, 2 self-service con prorrateo, 3+ controlado por superadmin).
+  maxBranches Int               @default(1)
 
   trialEndsAt        DateTime? @db.Timestamptz(3)
   currentPeriodStart DateTime? @db.Timestamptz(3)
@@ -740,6 +755,15 @@ model Order {
   docNumber       String?
   deliveryStatus  String  @default("PENDIENTE")
   notes           String?
+
+  /// Facturación Electrónica DIAN (Factus)
+  facturaElectronicaNumero String?
+  facturaElectronicaCufe   String?
+  facturaElectronicaUrlPdf String?
+  facturaElectronicaUrlQr  String?
+  facturaElectronicaEstado String?
+  facturaElectronicaFecha  DateTime? @db.Timestamptz(3)
+  facturaElectronicaError  String?
 
   /// Totales denormalizados. Se recalculan enteros en cada cambio de ítem, dentro
   /// de la misma transacción: los informes no pueden depender de sumar renglones

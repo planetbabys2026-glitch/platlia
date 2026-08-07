@@ -25,11 +25,19 @@ export async function getNegocios() {
         select: {
           status: true,
           priceCop: true,
+          maxBranches: true,
           trialEndsAt: true,
           // currentPeriodStart lo pide el tipo PeriodoSuscripcion de lib/billing.
           currentPeriodStart: true,
           currentPeriodEnd: true,
           graceUntil: true,
+        },
+      },
+      settings: {
+        select: {
+          facturacionElectronicaHabilitada: true,
+          paquetesDocumentosDisponibles: true,
+          documentosEmitidosConsumidos: true,
         },
       },
       _count: { select: { memberships: true, tables: true, products: true, orders: true } },

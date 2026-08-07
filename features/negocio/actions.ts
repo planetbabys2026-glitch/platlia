@@ -3,10 +3,19 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { AppModule, Role, SubscriptionStatus, TaxKind } from "@/generated/prisma/enums";
-import { crearSucursalSchema, datosNegocioSchema, modulosSchema, operacionSchema, qrMenuSchema, turneroSchema } from "@/features/negocio/schemas";
+import {
+  configuracionFactusSchema,
+  crearSucursalSchema,
+  datosNegocioSchema,
+  modulosSchema,
+  operacionSchema,
+  qrMenuSchema,
+  turneroSchema,
+} from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
+import { tenantDb } from "@/lib/db/tenant";
 // eslint-disable-next-line no-restricted-imports -- Crear sucursal adicional requiere crear la fila de Business inicial
 import { rootDb } from "@/lib/db/root";
 
@@ -245,6 +254,37 @@ export const crearSucursalAdicional = defineAction({
   schema: crearSucursalSchema,
   roles: [Role.PROPIETARIO],
   async handler({ input, ctx }) {
+    // 1. Contar sucursales activas propiedad del usuario
+    const sucursalesDelUsuario = await rootDb.membership.findMany({
+      where: { userId: ctx.user.id, role: Role.PROPIETARIO, active: true, business: { deletedAt: null } },
+      select: { businessId: true },
+    });
+
+    const cantActual = sucursalesDelUsuario.length;
+
+    // 2. Consultar suscripción principal para verificar maxBranches y periodos
+    const subPrincipal = await rootDb.subscription.findFirst({
+      where: { businessId: { in: sucursalesDelUsuario.map((s) => s.businessId) } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const maxPermitidas = subPrincipal?.maxBranches ?? 1;
+
+    // Bloquear creación de sedes adicionales en el plan de prueba gratuita de 7 días
+    if (!subPrincipal || subPrincipal.status === SubscriptionStatus.PRUEBA) {
+      throw new ErrorDeUsuario(
+        "El plan de prueba gratuita (7 días) no permite crear sedes adicionales. Adquiere o renueva una licencia de pago para agregar más sucursales a tu empresa.",
+      );
+    }
+
+    // Si ya tiene 2 o más sucursales y no ha recibido autorización especial del superadmin para 3+
+    if (cantActual >= maxPermitidas && maxPermitidas >= 2) {
+      throw new ErrorDeUsuario(
+        `Tu cuenta cuenta con un límite de ${maxPermitidas} sucursal(es). Para habilitar 3 o más sucursales (Plan Cadena Empresarial), comunícate con nuestro equipo comercial desde el botón de soporte para coordinar tu tarifa preferencial.`,
+      );
+    }
+
+    // 3. Crear la nueva sucursal independiente
     const slug = await slugSucursalLibre(input.name);
     const DIA_MS = 24 * 60 * 60 * 1000;
     const finPrueba = new Date(Date.now() + 7 * DIA_MS);
@@ -273,6 +313,8 @@ export const crearSucursalAdicional = defineAction({
         subscription: {
           create: {
             status: SubscriptionStatus.PRUEBA,
+            priceCop: 30000,
+            maxBranches: Math.max(2, maxPermitidas),
             trialEndsAt: finPrueba,
             currentPeriodStart: new Date(),
             currentPeriodEnd: finPrueba,
@@ -283,10 +325,40 @@ export const crearSucursalAdicional = defineAction({
       select: { id: true, name: true, slug: true },
     });
 
+    // Actualizar maxBranches en la suscripción principal si pasa a 2
+    if (subPrincipal && subPrincipal.maxBranches < 2) {
+      await rootDb.subscription.update({
+        where: { id: subPrincipal.id },
+        data: { maxBranches: 2 },
+      });
+    }
+
     revalidatePath("/elegir-negocio");
     revalidatePath("/administracion/configuracion");
     revalidatePath("/facturacion");
 
     return sucursal;
+  },
+});
+
+export const guardarConfiguracionFactus = defineAction({
+  schema: configuracionFactusSchema,
+  roles: [Role.PROPIETARIO, Role.ADMINISTRADOR],
+  async handler({ input, ctx }) {
+    const db = tenantDb(ctx.business.id);
+
+    await db.businessSettings.updateMany({
+      where: { businessId: ctx.business.id },
+      data: {
+        factusClientId: input.factusClientId ?? null,
+        factusClientSecret: input.factusClientSecret ?? null,
+        factusUsername: input.factusUsername ?? null,
+        factusPassword: input.factusPassword ?? null,
+        factusNumberingRangeId: input.factusNumberingRangeId ?? null,
+        municipalityCode: input.municipalityCode ?? "05001",
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
   },
 });

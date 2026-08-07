@@ -1,6 +1,6 @@
 import { AppModule } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
-import { getContext } from "@/lib/auth/dal";
+import { requireBusiness } from "@/lib/auth/dal";
 import { AppShell } from "./app-shell";
 
 /**
@@ -8,11 +8,11 @@ import { AppShell } from "./app-shell";
  * y menú desplegable responsivo para celulares y tabletas.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const ctx = await getContext();
-  const usaMesas = ctx?.modules.has(AppModule.MESAS) ?? true;
+  const ctx = await requireBusiness();
+  const usaMesas = ctx.modules.has(AppModule.MESAS);
 
   let usaInventario = false;
-  if (ctx?.business?.id) {
+  if (ctx.business.id) {
     try {
       const settings = await getSettings(ctx.business.id);
       usaInventario = settings.inventoryEnabled;
@@ -23,15 +23,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const puedeVerInventario = Boolean(
     usaInventario &&
-      ctx?.role &&
+      ctx.role &&
       ["PROPIETARIO", "ADMINISTRADOR", "CAJERO"].includes(ctx.role),
   );
 
   return (
     <AppShell
-      user={ctx?.user ?? null}
-      businessName={ctx?.business?.name}
-      role={ctx?.role ?? null}
+      user={ctx.user}
+      businessName={ctx.business.name}
+      role={ctx.role}
       usaMesas={usaMesas}
       puedeVerInventario={puedeVerInventario}
     >

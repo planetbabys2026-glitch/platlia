@@ -115,12 +115,19 @@ export const ingresar = definePublicAction({
         id: true,
         passwordHash: true,
         status: true,
+        isSuperAdmin: true,
         deletedAt: true,
         failedLoginAttempts: true,
         lockedUntil: true,
         memberships: { where: { active: true }, select: { businessId: true }, take: 2 },
       },
     });
+
+    if (user?.isSuperAdmin) {
+      throw new ErrorDeUsuario(
+        "Los superadministradores deben ingresar exclusivamente desde la consola de soporte (/superadmin/ingresar).",
+      );
+    }
 
     if (user?.lockedUntil && user.lockedUntil > new Date()) {
       throw new ErrorDeUsuario(
@@ -174,31 +181,49 @@ export const registrarse = definePublicAction({
   async handler({ input }) {
     const existente = await rootDb.user.findUnique({
       where: { email: input.email },
-      select: { id: true },
+      select: {
+        id: true,
+        isSuperAdmin: true,
+        memberships: {
+          where: { active: true, business: { deletedAt: null } },
+          select: { id: true, business: { select: { name: true } } },
+        },
+      },
     });
-    if (existente) {
+
+    if (existente?.isSuperAdmin) {
       throw new ErrorDeUsuario(
-        "Ya hay una cuenta con ese correo. Ingresá o recuperá tu contraseña.",
-        { email: ["Ya hay una cuenta con ese correo."] },
+        "Los superadministradores deben ingresar exclusivamente desde la consola de soporte (/superadmin/ingresar).",
       );
     }
 
-    const user = await rootDb.user.create({
-      data: {
-        email: input.email,
-        name: input.name,
-        passwordHash: await hashPassword(input.password),
-      },
-      select: { id: true },
-    });
+    if (existente && existente.memberships.length > 0) {
+      const nombreEmpresa = existente.memberships[0]?.business?.name ?? "una empresa activa";
+      throw new ErrorDeUsuario(
+        `Este correo electrónico (${input.email}) ya está vinculado a la empresa "${nombreEmpresa}". Para registrar un nuevo negocio independiente debes solicitar primero que te desvinculen de tu empresa actual.`,
+        { email: ["Este correo ya pertenece a una empresa activa."] },
+      );
+    }
 
-    const negocio = await crearNegocio(input.nombreNegocio, user.id);
-    await createSession({ userId: user.id, businessId: negocio.id });
+    let userId = existente?.id;
 
-    // No bloquea: que Resend esté caído no puede impedir que el negocio quede
-    // creado. El dueño ya entró; confirmar el correo es lo que sigue, no lo que
-    // condiciona el alta.
-    const token = await emitirToken(user.id, "EMAIL_VERIFICATION");
+    if (!userId) {
+      const user = await rootDb.user.create({
+        data: {
+          email: input.email,
+          name: input.name,
+          passwordHash: await hashPassword(input.password),
+        },
+        select: { id: true },
+      });
+      userId = user.id;
+    }
+
+    const negocio = await crearNegocio(input.nombreNegocio, userId);
+    await createSession({ userId, businessId: negocio.id });
+
+    // No bloquea: que Resend esté caído no puede impedir que el negocio quede creado.
+    const token = await emitirToken(userId, "EMAIL_VERIFICATION");
     const verificacion = correoDeVerificacion({
       nombre: input.name,
       urlDeVerificacion: `${env.APP_URL}/verificar-correo?token=${token}`,

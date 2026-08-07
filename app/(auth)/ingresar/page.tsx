@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { readSession } from "@/lib/auth/session";
 import { FormularioIngreso } from "./formulario";
 
 export const metadata: Metadata = { title: "Ingresar" };
@@ -12,6 +14,12 @@ export default async function IngresarPage({
   searchParams: Promise<{ desde?: string; restablecida?: string }>;
 }) {
   const { desde, restablecida } = await searchParams;
+
+  // Si ya cuenta con una sesión real activa en base de datos, redirigir al panel
+  const sesion = await readSession("APP");
+  if (sesion && !desde && !restablecida) {
+    redirect("/panel");
+  }
 
   return (
     <div className="space-y-6">

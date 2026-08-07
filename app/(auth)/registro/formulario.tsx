@@ -39,11 +39,11 @@ export function FormularioRegistro() {
         errores={campos?.name}
       />
       <Campo
-        label="Nombre del negocio"
+        label="Nombre del negocio o primera sucursal"
         name="nombreNegocio"
         autoComplete="organization"
         required
-        ayuda="El que va impreso en el tiquete. Se puede cambiar después."
+        ayuda="Nombre comercial o sede principal (ej. Saja - Poblado). Podrás agregar más sucursales después."
         errores={campos?.nombreNegocio}
       />
       <Campo

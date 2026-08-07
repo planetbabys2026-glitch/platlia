@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Logotipo } from "@/components/marca/logo";
 import { Button } from "@/components/ui/button";
+import { getSuperAdmin } from "@/lib/auth/dal";
 import { ArrowLeft } from "lucide-react";
 import { FormularioSuperAdmin } from "./formulario";
 
 export const metadata: Metadata = { title: "Ingresar" };
 export const dynamic = "force-dynamic";
 
-export default function IngresarSuperAdminPage() {
+export default async function IngresarSuperAdminPage() {
+  const superAdmin = await getSuperAdmin();
+  if (superAdmin) {
+    redirect("/superadmin");
+  }
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-12">
       {/* Botón explícito para regresar a la página principal */}

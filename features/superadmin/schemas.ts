@@ -66,3 +66,14 @@ export const restablecerContrasenaSuperAdminSchema = z.object({
 export const quitarSuperAdminSchema = z.object({
   userId: z.string().min(1),
 });
+
+export const actualizarLimiteSucursalesSchema = sobreEmpresa.extend({
+  maxBranches: z.preprocess((v) => Number(v), z.number().int().min(1).max(999)),
+  motivo,
+});
+
+export const gestionFacturacionElectronicaSchema = sobreEmpresa.extend({
+  habilitar: z.preprocess((v) => v === "true" || v === true, z.boolean()),
+  sumarDocumentos: z.preprocess((v) => Number(v), z.number().int().min(0).max(100000)),
+  motivo,
+});
