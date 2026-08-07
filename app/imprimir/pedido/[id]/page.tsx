@@ -80,6 +80,11 @@ export default async function TiquetePage({
   }
   if (pedido.table) push(`Mesa ${pedido.table.name}`);
   if (pedido.customerName) push(...envolver(`Cliente: ${pedido.customerName}`, ancho));
+  if (pedido.type === "DOMICILIO") {
+    push(centrar("*** PEDIDO A DOMICILIO ***", ancho));
+    if (pedido.customerPhone) push(`Tel: ${pedido.customerPhone}`);
+    if (pedido.deliveryAddress) push(...envolver(`Dir: ${pedido.deliveryAddress}`, ancho));
+  }
   push(`Atendio: ${pedido.openedBy.name}`);
   if (pedido.guestsCount) push(`Personas: ${pedido.guestsCount}`);
   push(separador(ancho));

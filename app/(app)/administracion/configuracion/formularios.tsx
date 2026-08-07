@@ -689,6 +689,7 @@ export type QrMenuSettingsProps = {
   qrMenuHeaderSubtitle: string | null;
   slug: string;
   mesas: { id: string; name: string }[];
+  deliveryEnabled?: boolean;
 };
 
 const COLOR_PRESETS = [
@@ -1276,65 +1277,73 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
           ───────────────────────────────────────────────────────────── */}
       <div className="space-y-6 pt-6 border-t border-border">
         <div>
-          <h3 className="text-base font-bold tracking-tight">Códigos QR para Mesas y Domicilios</h3>
+          <h3 className="text-base font-bold tracking-tight">
+            {settings.deliveryEnabled !== false
+              ? "Códigos QR para Mesas y Domicilios"
+              : "Códigos QR para Mesas"}
+          </h3>
           <p className="text-xs text-muted-foreground">
-            Imprimí estas tarjetas para tus mesas o compartí el enlace directo de domicilio.
+            {settings.deliveryEnabled !== false
+              ? "Imprimí estas tarjetas para tus mesas o compartí el enlace directo de domicilio."
+              : "Imprimí estas tarjetas para los códigos QR de tus mesas."}
           </p>
         </div>
 
-        {/* QR Domicilio / General */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="font-bold text-sm">🛵 QR Menú Domicilios / Para Llevar</span>
-              <p className="text-xs text-muted-foreground">El cliente ingresa su nombre, celular y dirección.</p>
+        {/* QR Domicilio / General (Solo si el negocio reparte a domicilio) */}
+        {settings.deliveryEnabled !== false && (
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="font-bold text-sm">🛵 QR Menú Domicilios / Para Llevar</span>
+                <p className="text-xs text-muted-foreground">El cliente ingresa su nombre, celular y dirección.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    ejecutarImpresion({
+                      identificador: "DOMICILIOS Y PARA LLEVAR",
+                      subtitulo: "Escaneá para hacer tu pedido a domicilio",
+                      url: urlDomicilio,
+                    })
+                  }
+                  className="text-xs font-semibold gap-1"
+                >
+                  🖨️ Imprimir Tarjeta
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copiarEnlace(urlDomicilio, "domicilio")}
+                  className="text-xs font-semibold"
+                >
+                  {copiado === "domicilio" ? "✔ ¡Copiado!" : "Copiar Enlace"}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  ejecutarImpresion({
-                    identificador: "DOMICILIOS Y PARA LLEVAR",
-                    subtitulo: "Escaneá para hacer tu pedido a domicilio",
-                    url: urlDomicilio,
-                  })
-                }
-                className="text-xs font-semibold gap-1"
-              >
-                🖨️ Imprimir Tarjeta
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => copiarEnlace(urlDomicilio, "domicilio")}
-                className="text-xs font-semibold"
-              >
-                {copiado === "domicilio" ? "✔ ¡Copiado!" : "Copiar Enlace"}
-              </Button>
+            <div className="flex items-center gap-4 pt-2">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(urlDomicilio)}`}
+                alt="QR Domicilio"
+                className="size-24 rounded-lg border border-border p-1 bg-white shrink-0 shadow-sm"
+              />
+              <div className="text-xs space-y-1.5 truncate">
+                <span className="font-semibold block truncate text-foreground">{urlDomicilio}</span>
+                <a
+                  href={urlDomicilio}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-brand font-bold hover:underline inline-block"
+                >
+                  Abrir Menú Digital →
+                </a>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-4 pt-2">
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(urlDomicilio)}`}
-              alt="QR Domicilio"
-              className="size-24 rounded-lg border border-border p-1 bg-white shrink-0 shadow-sm"
-            />
-            <div className="text-xs space-y-1.5 truncate">
-              <span className="font-semibold block truncate text-foreground">{urlDomicilio}</span>
-              <a
-                href={urlDomicilio}
-                target="_blank"
-                rel="noopener"
-                className="text-brand font-bold hover:underline inline-block"
-              >
-                Abrir Menú Digital →
-              </a>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* QRs por Mesa */}
         {settings.mesas.length > 0 && (
@@ -1538,12 +1547,12 @@ export type FactusSettings = {
   facturacionElectronicaHabilitada: boolean;
   paquetesDocumentosDisponibles: number;
   documentosEmitidosConsumidos: number;
-  factusClientId: string | null;
-  factusClientSecret: string | null;
-  factusUsername: string | null;
-  factusPassword: string | null;
   factusNumberingRangeId: number | null;
   municipalityCode: string | null;
+  identificationDocumentCode?: string | null;
+  legalOrganizationCode?: string | null;
+  tributeCode?: string | null;
+  responsibilities?: string | null;
 };
 
 export function FormularioFactus({ settings }: { settings: FactusSettings }) {
@@ -1576,7 +1585,7 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
 
           {estado.ok && (
             <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-              <AlertDescription>¡Credenciales de Factus guardadas con éxito!</AlertDescription>
+              <AlertDescription>¡Configuración DIAN guardada con éxito!</AlertDescription>
             </Alert>
           )}
 
@@ -1596,62 +1605,16 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
             </div>
           </div>
 
-          {/* Formulario de Credenciales API Factus */}
+          {/* Formulario de Parámetros DIAN para esta Sede */}
           <div className="space-y-4 pt-2">
-            <h3 className="font-semibold text-sm text-foreground">Credenciales API Factus Colombia</h3>
+            <h3 className="font-semibold text-sm text-foreground">Parámetros de Facturación DIAN (Esta Sucursal)</h3>
             <p className="text-xs text-muted-foreground">
-              Ingresa tus llaves de acceso obtenidas en la plataforma de Factus (Sandbox o Producción).
+              Especifica los datos fiscales y rangos de resolución aprobados por la DIAN para esta sede.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="factusClientId" className="text-xs font-semibold">Client ID *</Label>
-                <Input
-                  id="factusClientId"
-                  name="factusClientId"
-                  defaultValue={settings.factusClientId ?? ""}
-                  placeholder="Tu Client ID de Factus"
-                  className="h-10 text-xs rounded-xl font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="factusClientSecret" className="text-xs font-semibold">Client Secret *</Label>
-                <Input
-                  id="factusClientSecret"
-                  name="factusClientSecret"
-                  type="password"
-                  defaultValue={settings.factusClientSecret ?? ""}
-                  placeholder="Tu Client Secret"
-                  className="h-10 text-xs rounded-xl font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="factusUsername" className="text-xs font-semibold">Usuario / Correo Factus *</Label>
-                <Input
-                  id="factusUsername"
-                  name="factusUsername"
-                  defaultValue={settings.factusUsername ?? ""}
-                  placeholder="ejemplo@tuempresa.com"
-                  className="h-10 text-xs rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="factusPassword" className="text-xs font-semibold">Contraseña Factus *</Label>
-                <Input
-                  id="factusPassword"
-                  name="factusPassword"
-                  type="password"
-                  defaultValue={settings.factusPassword ?? ""}
-                  placeholder="••••••••••••"
-                  className="h-10 text-xs rounded-xl font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="factusNumberingRangeId" className="text-xs font-semibold">ID Rango Numeración DIAN *</Label>
+                <Label htmlFor="factusNumberingRangeId" className="text-xs font-semibold">ID Rango Numeración / Resolución DIAN *</Label>
                 <Input
                   id="factusNumberingRangeId"
                   name="factusNumberingRangeId"
@@ -1659,24 +1622,85 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
                   defaultValue={settings.factusNumberingRangeId ?? ""}
                   placeholder="Ej. 389"
                   className="h-10 text-xs rounded-xl font-mono"
+                  required
                 />
+                <span className="text-[11px] text-muted-foreground block">ID del rango activo obtenido en Factus para tus facturas.</span>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="municipalityCode" className="text-xs font-semibold">Código Municipio DIAN *</Label>
+                <Label htmlFor="municipalityCode" className="text-xs font-semibold">Código Municipio DANE / DIAN *</Label>
                 <Input
                   id="municipalityCode"
                   name="municipalityCode"
                   defaultValue={settings.municipalityCode ?? "05001"}
-                  placeholder="Ej. 05001 (Medellín) / 11001 (Bogotá)"
+                  placeholder="Ej. 68679 (Floridablanca) / 05001 (Medellín)"
                   className="h-10 text-xs rounded-xl font-mono"
+                  required
                 />
+                <span className="text-[11px] text-muted-foreground block">Código DANE oficial de 5 dígitos del municipio de la sede.</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="legalOrganizationCode" className="text-xs font-semibold">Organización Jurídica *</Label>
+                <select
+                  id="legalOrganizationCode"
+                  name="legalOrganizationCode"
+                  defaultValue={settings.legalOrganizationCode ?? "1"}
+                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
+                >
+                  <option value="1">1 - Persona Jurídica (Empresa / Sociedad SAS)</option>
+                  <option value="2">2 - Persona Natural (Comerciante Individual)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="identificationDocumentCode" className="text-xs font-semibold">Tipo Documento de Identificación *</Label>
+                <select
+                  id="identificationDocumentCode"
+                  name="identificationDocumentCode"
+                  defaultValue={settings.identificationDocumentCode ?? "31"}
+                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
+                >
+                  <option value="31">31 - NIT (Número de Identificación Tributaria)</option>
+                  <option value="13">13 - Cédula de Ciudadanía</option>
+                  <option value="22">22 - Cédula de Extranjería</option>
+                  <option value="41">41 - Pasaporte</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="tributeCode" className="text-xs font-semibold">Código de Tributo Principal DIAN *</Label>
+                <select
+                  id="tributeCode"
+                  name="tributeCode"
+                  defaultValue={settings.tributeCode ?? "ZZ"}
+                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
+                >
+                  <option value="ZZ">ZZ - No aplica / Exento / Excluido</option>
+                  <option value="01">01 - IVA (Impuesto al Valor Agregado 19%)</option>
+                  <option value="04">04 - INC (Impuesto Nacional al Consumo 8%)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="responsibilities" className="text-xs font-semibold">Responsabilidad Fiscal DIAN *</Label>
+                <select
+                  id="responsibilities"
+                  name="responsibilities"
+                  defaultValue={settings.responsibilities ?? "R-99-PN"}
+                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
+                >
+                  <option value="R-99-PN">R-99-PN - No responsable de IVA</option>
+                  <option value="O-13">O-13 - Gran Contribuyente</option>
+                  <option value="O-15">O-15 - Autorretenedor</option>
+                  <option value="O-47">O-47 - Régimen Simple de Tributación (RST)</option>
+                </select>
               </div>
             </div>
           </div>
 
           <div className="pt-2">
-            <Enviar>Guardar Credenciales Factus</Enviar>
+            <Enviar>Guardar Parámetros DIAN</Enviar>
           </div>
         </form>
       )}

@@ -12,10 +12,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const usaMesas = ctx.modules.has(AppModule.MESAS);
 
   let usaInventario = false;
+  let usaDomicilios = true;
+
   if (ctx.business.id) {
     try {
       const settings = await getSettings(ctx.business.id);
       usaInventario = settings.inventoryEnabled;
+      usaDomicilios = settings.deliveryEnabled;
     } catch {
       // Si la empresa aún no tiene settings cargados
     }
@@ -33,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       businessName={ctx.business.name}
       role={ctx.role}
       usaMesas={usaMesas}
+      usaDomicilios={usaDomicilios}
       puedeVerInventario={puedeVerInventario}
     >
       {children}

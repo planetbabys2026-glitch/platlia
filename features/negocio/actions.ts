@@ -350,12 +350,12 @@ export const guardarConfiguracionFactus = defineAction({
     await db.businessSettings.updateMany({
       where: { businessId: ctx.business.id },
       data: {
-        factusClientId: input.factusClientId ?? null,
-        factusClientSecret: input.factusClientSecret ?? null,
-        factusUsername: input.factusUsername ?? null,
-        factusPassword: input.factusPassword ?? null,
         factusNumberingRangeId: input.factusNumberingRangeId ?? null,
         municipalityCode: input.municipalityCode ?? "05001",
+        identificationDocumentCode: input.identificationDocumentCode ?? "31",
+        legalOrganizationCode: input.legalOrganizationCode ?? "1",
+        tributeCode: input.tributeCode ?? "ZZ",
+        responsibilities: input.responsibilities ?? "R-99-PN",
       },
     });
 

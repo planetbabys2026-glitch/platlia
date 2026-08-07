@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
-import { getCarta, getPedido } from "@/features/pedidos/queries";
+import { getCajaAbierta } from "@/features/caja/queries";
+import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
+import { getSettings } from "@/features/negocio/queries";
+import { ModuloPosInteractive } from "@/app/(app)/pos/modulo-pos-interactive";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireModule, tieneRol } from "@/lib/auth/dal";
@@ -48,9 +51,31 @@ export default async function PedidoPage({
   // negocio no aparece: es un 404 igual que uno inexistente.
   if (!pedido) notFound();
 
-  // Sin mesas, /salon no existe: el mismo criterio que ya usa el shell de la
-  // app para decidir entre "Salón" y "POS" en la barra de navegación.
   const usaMesas = ctx.modules.has(AppModule.MESAS);
+
+  if (pedido.type !== "MESA" || !usaMesas) {
+    const [caja, pedidos, settings] = await Promise.all([
+      getCajaAbierta(ctx.business.id),
+      getPedidosAbiertos(ctx.business.id),
+      getSettings(ctx.business.id),
+    ]);
+
+    return (
+      <ModuloPosInteractive
+        carta={carta}
+        caja={caja}
+        pedidosAbiertos={pedidos}
+        pedidoInicial={pedido}
+        settings={{
+          deliveryEnabled: settings.deliveryEnabled,
+          requireOpenCashSession: settings.requireOpenCashSession,
+          cashRoundingCop: settings.cashRoundingCop,
+          pricesIncludeTax: settings.pricesIncludeTax,
+        }}
+      />
+    );
+  }
+
   const editable = pedido.status === "ABIERTA" || pedido.status === "CUENTA_PEDIDA";
   const renglones = pedido.items.filter((i) => i.status !== "ANULADO");
   const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);

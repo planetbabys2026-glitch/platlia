@@ -34,6 +34,7 @@ type AppShellProps = {
   businessName?: string;
   role?: string | null;
   usaMesas: boolean;
+  usaDomicilios?: boolean;
   puedeVerInventario: boolean;
   children: React.ReactNode;
 };
@@ -49,6 +50,7 @@ export function AppShell({
   user,
   businessName,
   usaMesas,
+  usaDomicilios = true,
   puedeVerInventario,
   children,
 }: AppShellProps) {
@@ -120,12 +122,16 @@ export function AppShell({
       icono: CreditCard,
       categoria: "OPERACION" as const,
     },
-    {
-      titulo: "Domicilios",
-      href: "/domicilios",
-      icono: Bike,
-      categoria: "OPERACION" as const,
-    },
+    ...(usaDomicilios
+      ? [
+          {
+            titulo: "Domicilios",
+            href: "/domicilios",
+            icono: Bike,
+            categoria: "OPERACION" as const,
+          },
+        ]
+      : []),
     {
       titulo: "Turnero",
       href: "/turnero",
@@ -156,7 +162,7 @@ export function AppShell({
   // Subniveles de Administración en Acordeón
   const adminSubItems = [
     { titulo: "Carta", href: "/administracion/carta", icono: BookOpen },
-    { titulo: "Salón", href: "/administracion/salon", icono: LayoutGrid },
+    ...(usaMesas ? [{ titulo: "Salón", href: "/administracion/salon", icono: LayoutGrid }] : []),
     { titulo: "Equipo", href: "/administracion/equipo", icono: Users },
     { titulo: "Configuración", href: "/administracion/configuracion", icono: SlidersHorizontal },
   ];

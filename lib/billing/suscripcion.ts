@@ -87,11 +87,14 @@ export function estadoSegunFechas(
 }
 
 /** Días que faltan para que se corte el servicio. Negativo si ya se cortó. */
-export function diasParaElCorte(sub: PeriodoSuscripcion, ahora = new Date()): number | null {
-  const limite =
+export function diasParaElCorte(sub: PeriodoSuscripcion, ahora: Date | string = new Date()): number | null {
+  const limiteRaw =
     sub.status === "PRUEBA"
       ? (sub.trialEndsAt ?? sub.currentPeriodEnd ?? sub.graceUntil)
       : (sub.graceUntil ?? sub.currentPeriodEnd ?? sub.trialEndsAt);
-  if (!limite) return null;
-  return Math.ceil((limite.getTime() - ahora.getTime()) / 86_400_000);
+  if (!limiteRaw) return null;
+  const limiteMs = new Date(limiteRaw).getTime();
+  const ahoraMs = new Date(ahora).getTime();
+  if (isNaN(limiteMs) || isNaN(ahoraMs)) return null;
+  return Math.ceil((limiteMs - ahoraMs) / 86_400_000);
 }

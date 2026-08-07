@@ -14,6 +14,7 @@ import {
   pagoSchema,
   pedidoSchema,
   ponerNotaItemSchema,
+  procesarVentaPosCompletaSchema,
   propinaSchema,
   quitarItemSchema,
 } from "@/features/pedidos/schemas";
@@ -120,6 +121,7 @@ export const abrirPedido = defineAction({
             customerName: input.customerName ?? null,
             customerPhone: input.customerPhone ?? null,
             deliveryAddress: input.deliveryAddress ?? null,
+            notes: input.notes ?? null,
             openedById: ctx.user.id,
           },
           select: { id: true, code: true, turnNumber: true },
@@ -790,6 +792,216 @@ export const confirmarPedido = defineAction({
     revalidatePath(`/pedido/${input.orderId}`);
     void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
+
+    return resultado;
+  },
+});
+
+export const procesarVentaPosCompleta = defineAction({
+  schema: procesarVentaPosCompletaSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx, db }) {
+    const settings = await getSettings(ctx.business.id);
+    const businessDate = currentBusinessDate(settings);
+
+    const caja = await db.cashSession.findFirst({
+      where: { status: "ABIERTA" },
+      select: { id: true },
+    });
+    if (settings.requireOpenCashSession && !caja) {
+      throw new ErrorDeUsuario(
+        "No hay caja abierta. Abrí el turno antes de tomar pedidos.",
+      );
+    }
+
+    const resultado = await conReintento(() =>
+      db.$transaction(async (tx) => {
+        const ahora = new Date();
+        const debeEnviarACocina = input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
+
+        let pedido: { id: string; code: number; turnNumber: number | null };
+
+        if (input.orderId) {
+          const existente = await tx.order.findFirst({
+            where: { id: input.orderId },
+            select: { id: true, code: true, turnNumber: true, status: true },
+          });
+          if (!existente) throw new ErrorDeUsuario("Ese pedido no existe.");
+          if (existente.status === "PAGADA" || existente.status === "ANULADA") {
+            throw new ErrorDeUsuario("El pedido ya está cerrado.");
+          }
+
+          let turnNumber = existente.turnNumber;
+          if (turnNumber === null && debeEnviarACocina) {
+            turnNumber = await siguienteTurnoLibre(tx, businessDate, settings.turnNumberMax);
+          }
+
+          pedido = await tx.order.update({
+            where: { id: existente.id },
+            data: {
+              turnNumber,
+              type: input.type,
+              customerName: input.customerName ?? null,
+              customerPhone: input.customerPhone ?? null,
+              deliveryAddress: input.deliveryAddress ?? null,
+              notes: input.notes ?? null,
+            },
+            select: { id: true, code: true, turnNumber: true },
+          });
+
+          await tx.orderItem.deleteMany({
+            where: { orderId: pedido.id, status: { not: "ANULADO" } },
+          });
+        } else {
+          const ultimo = await tx.order.findFirst({
+            where: { businessDate },
+            orderBy: { code: "desc" },
+            select: { code: true },
+          });
+
+          const turnNumber = await siguienteTurnoLibre(tx, businessDate, settings.turnNumberMax);
+
+          pedido = await tx.order.create({
+            data: {
+              businessId: ctx.business.id,
+              code: (ultimo?.code ?? 0) + 1,
+              turnNumber,
+              businessDate,
+              type: input.type,
+              channel: OrderChannel.POS,
+              cashSessionId: caja?.id ?? null,
+              customerName: input.customerName ?? null,
+              customerPhone: input.customerPhone ?? null,
+              deliveryAddress: input.deliveryAddress ?? null,
+              notes: input.notes ?? null,
+              openedById: ctx.user.id,
+            },
+            select: { id: true, code: true, turnNumber: true },
+          });
+        }
+
+        // 3. Crear Ítems (todos agrupados en el mismo lote de comanda)
+        for (const itemInput of input.items) {
+          const producto = await tx.product.findFirst({
+            where: { id: itemInput.productId, deletedAt: null },
+            select: {
+              id: true,
+              name: true,
+              priceCop: true,
+              isAvailable: true,
+              active: true,
+              taxRate: { select: { rateBp: true, name: true } },
+            },
+          });
+
+          if (!producto || !producto.active) {
+            throw new ErrorDeUsuario("Ese producto no existe.");
+          }
+          if (!producto.isAvailable) {
+            throw new ErrorDeUsuario(`"${producto.name}" está marcado como agotado.`);
+          }
+
+          const linea = computeTaxLine({
+            unitPriceCop: producto.priceCop,
+            quantity: itemInput.quantity,
+            taxRateBp: producto.taxRate.rateBp,
+            taxIncluded: settings.pricesIncludeTax,
+          });
+
+          await tx.orderItem.create({
+            data: {
+              businessId: ctx.business.id,
+              orderId: pedido.id,
+              productId: producto.id,
+              nameSnapshot: producto.name,
+              unitPriceCop: producto.priceCop,
+              taxRateBpSnapshot: producto.taxRate.rateBp,
+              taxRateNameSnapshot: producto.taxRate.name,
+              taxIncludedSnapshot: settings.pricesIncludeTax,
+              quantity: itemInput.quantity,
+              lineSubtotalCop: linea.lineSubtotalCop,
+              lineTaxCop: linea.lineTaxCop,
+              lineTotalCop: linea.lineTotalCop,
+              notes: itemInput.notes ?? null,
+              createdById: ctx.user.id,
+              sentToKitchenAt: debeEnviarACocina ? ahora : null,
+            },
+          });
+        }
+
+        // 4. Recalcular totales del pedido
+        await recalcularTotales(tx, pedido.id);
+
+        // 5. Si la acción es PAGAR_DIRECTO
+        if (input.accion === "PAGAR_DIRECTO") {
+          if (!tieneRol(ctx.role, COBRAN)) {
+            throw new ErrorDeUsuario("Solo un cajero o administrador puede registrar cobros.");
+          }
+          const p = input.pago;
+          if (!p) throw new ErrorDeUsuario("Faltan los datos del pago.");
+
+          const pActualizado = await tx.order.findUniqueOrThrow({
+            where: { id: pedido.id },
+            select: { totalCop: true, paidCop: true },
+          });
+
+          const amountCop = p.amountCop > 0 ? p.amountCop : pActualizado.totalCop;
+          const tenderedCop = p.tenderedCop ?? null;
+          const changeCop =
+            tenderedCop !== null && tenderedCop > amountCop ? tenderedCop - amountCop : null;
+
+          await tx.orderPayment.create({
+            data: {
+              businessId: ctx.business.id,
+              orderId: pedido.id,
+              cashSessionId: caja?.id ?? null,
+              method: p.method,
+              amountCop,
+              tenderedCop,
+              changeCop,
+              reference: p.reference ?? null,
+              receivedById: ctx.user.id,
+            },
+          });
+
+          const totales = await recalcularTotales(tx, pedido.id);
+          const faltante = totales.totalCop - totales.paidCop;
+          const huboEfectivo = p.method === "EFECTIVO";
+          const cerrado =
+            faltante <= 0 || (huboEfectivo && faltante > 0 && faltante < settings.cashRoundingCop);
+
+          if (cerrado) {
+            await tx.order.update({
+              where: { id: pedido.id },
+              data: {
+                status: "PAGADA",
+                closedAt: new Date(),
+              },
+            });
+          }
+        }
+
+        return {
+          orderId: pedido.id,
+          code: pedido.code,
+          turnNumber: pedido.turnNumber,
+          pagado: input.accion === "PAGAR_DIRECTO",
+        };
+      }),
+    );
+
+    const debeEnviarACocinaNotificacion =
+      input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
+
+    revalidatePath("/pos");
+    revalidatePath("/caja");
+    if (debeEnviarACocinaNotificacion) {
+      revalidatePath("/cocina");
+      revalidatePath("/turnero");
+      void publishCocinaUpdate(ctx.business.id);
+      void publishTurneroUpdate(ctx.business.id);
+    }
 
     return resultado;
   },

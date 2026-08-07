@@ -116,13 +116,13 @@ export const crearSucursalSchema = z.object({
 });
 
 export const configuracionFactusSchema = z.object({
-  factusClientId: textoOpcional(200),
-  factusClientSecret: textoOpcional(200),
-  factusUsername: textoOpcional(200),
-  factusPassword: textoOpcional(200),
   factusNumberingRangeId: z.preprocess(
     (v) => (v === "" || v === undefined || v === null ? undefined : Number(v)),
-    z.number().int().min(1).optional(),
+    z.number().int().min(1, "Ingresa un ID de rango de numeración válido de la DIAN."),
   ),
-  municipalityCode: z.string().trim().default("05001"),
+  municipalityCode: z.string().trim().min(4, "Ingresa el código DANE del municipio (ej. 05001).").max(10),
+  identificationDocumentCode: z.string().trim().default("31"),
+  legalOrganizationCode: z.string().trim().default("1"),
+  tributeCode: z.string().trim().default("ZZ"),
+  responsibilities: z.string().trim().default("R-99-PN"),
 });

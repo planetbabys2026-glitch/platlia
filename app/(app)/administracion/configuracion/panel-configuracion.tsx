@@ -64,12 +64,12 @@ type PanelConfiguracionProps = {
     facturacionElectronicaHabilitada: boolean;
     paquetesDocumentosDisponibles: number;
     documentosEmitidosConsumidos: number;
-    factusClientId: string | null;
-    factusClientSecret: string | null;
-    factusUsername: string | null;
-    factusPassword: string | null;
     factusNumberingRangeId: number | null;
     municipalityCode: string | null;
+    identificationDocumentCode?: string | null;
+    legalOrganizationCode?: string | null;
+    tributeCode?: string | null;
+    responsibilities?: string | null;
   };
   facturacion: {
     suscripcion: {
@@ -223,6 +223,7 @@ export function PanelConfiguracion({
                 qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
                 slug,
                 mesas,
+                deliveryEnabled: settings.deliveryEnabled,
               }}
             />
           </CardContent>
@@ -271,12 +272,12 @@ export function PanelConfiguracion({
                 facturacionElectronicaHabilitada: settings.facturacionElectronicaHabilitada,
                 paquetesDocumentosDisponibles: settings.paquetesDocumentosDisponibles,
                 documentosEmitidosConsumidos: settings.documentosEmitidosConsumidos,
-                factusClientId: settings.factusClientId,
-                factusClientSecret: settings.factusClientSecret,
-                factusUsername: settings.factusUsername,
-                factusPassword: settings.factusPassword,
                 factusNumberingRangeId: settings.factusNumberingRangeId,
                 municipalityCode: settings.municipalityCode,
+                identificationDocumentCode: settings.identificationDocumentCode,
+                legalOrganizationCode: settings.legalOrganizationCode,
+                tributeCode: settings.tributeCode,
+                responsibilities: settings.responsibilities,
               }}
             />
           </CardContent>

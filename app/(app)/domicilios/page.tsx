@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { getDomicilios } from "@/features/domicilios/queries";
-import { getTimeSettings } from "@/features/negocio/queries";
+import { getSettings, getTimeSettings } from "@/features/negocio/queries";
 import { requireBusiness } from "@/lib/auth/dal";
 import { PanelDomicilios } from "./panel-domicilios";
 
@@ -9,6 +10,11 @@ export const dynamic = "force-dynamic";
 
 export default async function DomiciliosPage() {
   const ctx = await requireBusiness();
+
+  const settings = await getSettings(ctx.business.id);
+  if (!settings.deliveryEnabled) {
+    notFound();
+  }
 
   const [domicilios, timeSettings] = await Promise.all([
     getDomicilios(ctx.business.id),

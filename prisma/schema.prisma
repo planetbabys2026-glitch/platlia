@@ -298,12 +298,16 @@ model BusinessSettings {
   paquetesDocumentosDisponibles    Int     @default(0)
   documentosEmitidosConsumidos     Int     @default(0)
 
-  factusClientId         String?
-  factusClientSecret     String?
-  factusUsername         String?
-  factusPassword         String?
-  factusNumberingRangeId Int?
-  municipalityCode       String? @default("05001")
+  factusClientId               String?
+  factusClientSecret           String?
+  factusUsername               String?
+  factusPassword               String?
+  factusNumberingRangeId       Int?
+  municipalityCode             String? @default("05001")
+  identificationDocumentCode   String? @default("31")
+  legalOrganizationCode        String? @default("1")
+  tributeCode                  String? @default("ZZ")
+  responsibilities             String? @default("R-99-PN")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
