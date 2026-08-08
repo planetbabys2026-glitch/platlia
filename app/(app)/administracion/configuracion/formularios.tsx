@@ -692,38 +692,172 @@ export type QrMenuSettingsProps = {
   deliveryEnabled?: boolean;
 };
 
-const COLOR_PRESETS = [
-  { name: "Obsidiana", hex: "#101416" },
-  { name: "Verde Esmeralda", hex: "#1D4E51" },
-  { name: "Terracota Cálido", hex: "#A75F39" },
-  { name: "Azul Medianoche", hex: "#0D1B2A" },
-  { name: "Ciruela Real", hex: "#1A0B2E" },
-  { name: "Café Espresso", hex: "#1C100B" },
+// ─── Temas de Marca Listos en 1 Clic (Dark Kitchen-Fire & Gastronómicos) ───
+const BRAND_THEMES = [
+  {
+    id: "dark-kitchen",
+    name: "Dark Kitchen-Fire",
+    tag: "Oficial Platlia",
+    icon: "🔥",
+    mode: "SOLID",
+    bgColor: "#171512",
+    bgGradient: "linear-gradient(135deg, #171512 0%, #2A1A14 60%, #3D1C14 100%)",
+    title: "Menú Digital & Domicilios",
+    subtitle: "Cocina en tiempo real · Despacho inmediato",
+    accent: "#FF4E1F",
+  },
+  {
+    id: "espresso-roble",
+    name: "Espresso & Roble",
+    tag: "Café / Brunch",
+    icon: "☕",
+    mode: "GRADIENT",
+    bgColor: "#1A130E",
+    bgGradient: "linear-gradient(135deg, #140E0A 0%, #2A1D15 50%, #473022 100%)",
+    title: "Café, Brunch & Repostería",
+    subtitle: "Pide directo a tu mesa o a domicilio",
+    accent: "#D97706",
+  },
+  {
+    id: "parrilla-carbon",
+    name: "Parrilla & Carbón",
+    tag: "Asador / Carnes",
+    icon: "🥩",
+    mode: "GRADIENT",
+    bgColor: "#150F0D",
+    bgGradient: "linear-gradient(135deg, #120B09 0%, #2C120C 50%, #5E1A0C 100%)",
+    title: "Parrilla, Carnes & Cortes",
+    subtitle: "Sabor ahumado artesanal directo al comensal",
+    accent: "#EF4444",
+  },
+  {
+    id: "gastrobar-esmeralda",
+    name: "Gastrobar & Botánica",
+    tag: "Cocteles / Autor",
+    icon: "🌿",
+    mode: "GRADIENT",
+    bgColor: "#0D1715",
+    bgGradient: "linear-gradient(135deg, #091210 0%, #122B26 50%, #1B4D43 100%)",
+    title: "Coctelería & Cocina de Autor",
+    subtitle: "Experiencia gourmet y pedidos rápidos",
+    accent: "#10B981",
+  },
+  {
+    id: "trattoria-pizza",
+    name: "Trattoria & Cava",
+    tag: "Italiana / Pizza",
+    icon: "🍕",
+    mode: "GRADIENT",
+    bgColor: "#170F11",
+    bgGradient: "linear-gradient(135deg, #120A0C 0%, #291218 50%, #4D1826 100%)",
+    title: "Pizzas Artesanales & Pastas",
+    subtitle: "Masa madre y recetas tradicionales",
+    accent: "#F43F5E",
+  },
+  {
+    id: "titanio-minimal",
+    name: "Titanio & Obsidiana",
+    tag: "Minimalista",
+    icon: "🌑",
+    mode: "GRADIENT",
+    bgColor: "#0F1115",
+    bgGradient: "linear-gradient(135deg, #0A0C0E 0%, #171B22 50%, #252D38 100%)",
+    title: "Carta Digital Seleccionada",
+    subtitle: "Explora nuestros platos y bebidas exclusivas",
+    accent: "#38BDF8",
+  },
 ];
 
+// ─── Paleta de Colores Sólidos Gastronómicos ───
+const COLOR_PRESETS = [
+  { name: "Hierro Fundido", hex: "#171512", desc: "Oscuro carbón de cocina" },
+  { name: "Brasa Ahumada", hex: "#2B140E", desc: "Cálido rojizo fuego" },
+  { name: "Café Tostado", hex: "#1F150F", desc: "Marrón espresso intenso" },
+  { name: "Esmeralda Noble", hex: "#0F211D", desc: "Verde bosque botánico" },
+  { name: "Azul Medianoche", hex: "#0F1724", desc: "Zafiro oscuro profundo" },
+  { name: "Borgoña Gourmet", hex: "#240E16", desc: "Ciruela vino selecto" },
+  { name: "Oliva Seco", hex: "#181D12", desc: "Verde oliva artesanal" },
+  { name: "Grafito Puro", hex: "#1E1E1E", desc: "Gris neutro mate" },
+];
+
+// ─── Degradados Atmosféricos de Alto Contraste ───
 const GRADIENT_PRESETS = [
-  { name: "Esmeralda Profundo", value: "linear-gradient(135deg, #101416 0%, #1D4E51 100%)" },
-  { name: "Atardecer Terracota", value: "linear-gradient(135deg, #101416 0%, #A75F39 100%)" },
-  { name: "Aurora Cosmológica", value: "linear-gradient(135deg, #090A0F 0%, #1A2639 50%, #114B5F 100%)" },
-  { name: "Noche Ámbar Dorada", value: "linear-gradient(135deg, #0D0D0D 0%, #2A1F13 50%, #6B4E28 100%)" },
-  { name: "Lujo Pavorreal", value: "linear-gradient(135deg, #0A192F 0%, #1E3A8A 50%, #0D9488 100%)" },
+  { name: "Brasa & Hierro", value: "linear-gradient(135deg, #171512 0%, #2D1610 50%, #4A1D13 100%)" },
+  { name: "Espresso & Ámbar", value: "linear-gradient(135deg, #140E0A 0%, #261910 50%, #422817 100%)" },
+  { name: "Esmeralda & Menta", value: "linear-gradient(135deg, #0A1412 0%, #112923 50%, #1A4238 100%)" },
+  { name: "Terracota Andino", value: "linear-gradient(135deg, #17120E 0%, #301E14 50%, #572F1C 100%)" },
+  { name: "Zafiro Cóctel", value: "linear-gradient(135deg, #0A1017 0%, #122030 50%, #1A344D 100%)" },
+  { name: "Cava & Rubí", value: "linear-gradient(135deg, #140A0D 0%, #261019 50%, #421627 100%)" },
+  { name: "Noche Dorada", value: "linear-gradient(135deg, #12100A 0%, #241D10 50%, #3D3017 100%)" },
+  { name: "Titanio & Acero", value: "linear-gradient(135deg, #0D0E12 0%, #191D24 50%, #28303B 100%)" },
+];
+
+// ─── Texturas y Patrones Gastronómicos (Data URI SVG) ───
+const TEXTURE_PRESETS = [
+  {
+    name: "Parrilla / Cuadrícula",
+    icon: "▦",
+    url: "data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h24v24H0z' fill='%23171512'/%3E%3Cpath d='M24 0H0v1h24V0zM0 24V0h1v24H0z' fill='%23EDE7DA' fill-opacity='0.05'/%3E%3C/svg%3E",
+  },
+  {
+    name: "Puntos de Comanda",
+    icon: "⁘",
+    url: "data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='20' height='20' fill='%23171512'/%3E%3Ccircle cx='10' cy='10' r='1.2' fill='%23EDE7DA' fill-opacity='0.08'/%3E%3C/svg%3E",
+  },
+  {
+    name: "Malla Diagonal",
+    icon: "▨",
+    url: "data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='20' height='20' fill='%23171512'/%3E%3Cpath d='M0 20L20 0H10L0 10V20zM10 20L20 10V0L0 20H10z' fill='%23EDE7DA' fill-opacity='0.04'/%3E%3C/svg%3E",
+  },
+  {
+    name: "Líneas Térmicas",
+    icon: "☰",
+    url: "data:image/svg+xml,%3Csvg width='32' height='16' viewBox='0 0 32 16' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='32' height='16' fill='%23171512'/%3E%3Cpath d='M0 8h32M0 16h32' stroke='%23EDE7DA' stroke-opacity='0.06' stroke-width='1' stroke-dasharray='3 3'/%3E%3C/svg%3E",
+  },
+];
+
+// ─── Presets Rápidos de Textos Gastronómicos ───
+const TITLE_PRESETS = [
+  "Menú Digital & Domicilios",
+  "Parrilla, Carnes & Cortes",
+  "Hamburguesas & Cervezas",
+  "Pizzas Artesanales & Pastas",
+  "Café de Especialidad & Brunch",
+  "Cocteles & Cocina de Autor",
+];
+
+const SUBTITLE_PRESETS = [
+  "¡Pide directo y recibe tus platos calientes!",
+  "Envíos gratis por compras superiores a $50.000",
+  "Escanea el QR para pedir a tu mesa sin esperas",
+  "Cocina abierta hoy hasta las 11:00 p.m.",
+  "Preparado en el momento con ingredientes frescos",
+  "Paga fácil con Nequi, Daviplata o Tarjeta",
 ];
 
 export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }) {
   const [estado, accion] = useActionState(guardarQrMenuSettings, ESTADO_INICIAL);
   const [habilitado, setHabilitado] = useState(settings.qrMenuEnabled);
+  const [tabActiva, setTabActiva] = useState<"tema" | "textos" | "qrs">("tema");
+
+  // Estado visual
   const [bgMode, setBgMode] = useState(settings.qrMenuBgMode || "SOLID");
-  const [bgColor, setBgColor] = useState(settings.qrMenuBgColor || "#101416");
+  const [bgColor, setBgColor] = useState(settings.qrMenuBgColor || "#171512");
   const [bgGradient, setBgGradient] = useState(
-    settings.qrMenuBgGradient || "linear-gradient(135deg, #101416 0%, #1D4E51 100%)",
+    settings.qrMenuBgGradient || "linear-gradient(135deg, #171512 0%, #2A1A14 60%, #3D1C14 100%)",
   );
   const [bgImageUrl, setBgImageUrl] = useState(settings.qrMenuBgImageUrl || "");
   const [logoUrl, setLogoUrl] = useState(settings.qrMenuLogoUrl || "");
-  const [headerTitle, setHeaderTitle] = useState(settings.qrMenuHeaderTitle || "");
-  const [headerSubtitle, setHeaderSubtitle] = useState(settings.qrMenuHeaderSubtitle || "");
+  const [headerTitle, setHeaderTitle] = useState(settings.qrMenuHeaderTitle || "Menú Digital & Domicilios");
+  const [headerSubtitle, setHeaderSubtitle] = useState(
+    settings.qrMenuHeaderSubtitle || "Pide directo y recibe tus platos calientes",
+  );
+
+  // Estado interactivo de UI
   const [subiendoLogo, setSubiendoLogo] = useState(false);
   const [subiendoFondo, setSubiendoFondo] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [previewModo, setPreviewModo] = useState<"domicilio" | "mesa">("domicilio");
   const [tarjetaImprimir, setTarjetaImprimir] = useState<{
     identificador: string;
     subtitulo: string;
@@ -733,11 +867,46 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
   const appUrl = typeof window !== "undefined" ? window.location.origin : "https://platlia.com";
   const urlDomicilio = `${appUrl}/m/${settings.slug}?tipo=domicilio`;
 
+  // Aplicar tema prediseñado en 1 solo clic
+  const aplicarTema = (tema: typeof BRAND_THEMES[0]) => {
+    setBgMode(tema.mode);
+    setBgColor(tema.bgColor);
+    setBgGradient(tema.bgGradient);
+    setHeaderTitle(tema.title);
+    setHeaderSubtitle(tema.subtitle);
+  };
+
   const copiarEnlace = (url: string, id: string) => {
     if (typeof navigator !== "undefined") {
       void navigator.clipboard.writeText(url);
       setCopiado(id);
       setTimeout(() => setCopiado(null), 2500);
+    }
+  };
+
+  const manejarSubidaArchivo = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    tipo: "logo" | "fondo",
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (tipo === "logo") setSubiendoLogo(true);
+    else setSubiendoFondo(true);
+
+    try {
+      const res = await subirImagenQrMenu(undefined, { tipo, file });
+      if (res.ok && res.data?.url) {
+        if (tipo === "logo") {
+          setLogoUrl(res.data.url);
+        } else {
+          setBgImageUrl(res.data.url);
+          setBgMode("PATTERN_IMAGE");
+        }
+      }
+    } finally {
+      if (tipo === "logo") setSubiendoLogo(false);
+      else setSubiendoFondo(false);
     }
   };
 
@@ -747,10 +916,10 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
     const win = window.open("", "_blank", "width=480,height=680");
     if (!win) return;
 
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(datos.url)}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(datos.url)}`;
     const logoHtml = logoUrl
       ? `<img src="${logoUrl}" class="logo" alt="Logo" />`
-      : `<div class="logo-text">${(headerTitle || "S").slice(0, 2).toUpperCase()}</div>`;
+      : `<div class="logo-badge">P</div>`;
 
     const html = `
       <!DOCTYPE html>
@@ -759,12 +928,12 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
         <meta charset="utf-8" />
         <title>Imprimir QR - ${datos.identificador}</title>
         <style>
-          @page { size: portrait; margin: 10mm; }
+          @page { size: portrait; margin: 8mm; }
           body {
             margin: 0;
-            padding: 24px;
+            padding: 16px;
             background: #ffffff;
-            color: #000000;
+            color: #171512;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             flex-direction: column;
@@ -774,113 +943,94 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
           }
           .card {
             width: 290px;
-            border: 3px solid #0f172a;
+            border: 3px solid #171512;
             border-radius: 20px;
             padding: 24px;
-            background: #ffffff;
+            background: #EDE7DA;
             text-align: center;
             display: flex;
             flex-direction: column;
             align-items: center;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.12);
             margin: 0 auto;
           }
           .logo {
-            width: 60px;
-            height: 60px;
+            width: 64px;
+            height: 64px;
             border-radius: 50%;
             object-fit: cover;
-            border: 1px solid #cbd5e1;
-            margin-bottom: 8px;
+            border: 2px solid #FF4E1F;
+            margin-bottom: 10px;
           }
-          .logo-text {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: #0f172a;
-            color: #ffffff;
+          .logo-badge {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: #171512;
+            color: #EDE7DA;
             font-weight: 900;
-            font-size: 18px;
+            font-size: 24px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            border: 2px solid #FF4E1F;
           }
           .title {
             font-size: 20px;
             font-weight: 900;
             margin: 0;
-            color: #0f172a;
-            line-height: 1.2;
+            color: #171512;
+            line-height: 1.15;
+            text-transform: uppercase;
           }
           .subtitle {
-            font-size: 11px;
-            color: #475569;
+            font-size: 11.5px;
+            color: #555047;
             margin: 4px 0 14px 0;
           }
           .badge {
-            background: #0f172a;
-            color: #ffffff;
+            background: #171512;
+            color: #FF4E1F;
             font-weight: 900;
-            font-size: 14px;
+            font-size: 13.5px;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             padding: 6px 16px;
-            border-radius: 12px;
+            border-radius: 10px;
             margin-bottom: 14px;
           }
           .qr-frame {
-            padding: 10px;
-            border: 2px solid #e2e8f0;
+            padding: 12px;
+            border: 2px solid #171512;
             border-radius: 16px;
             background: #ffffff;
             margin-bottom: 12px;
           }
           .qr-img {
-            width: 180px;
-            height: 180px;
+            width: 190px;
+            height: 190px;
             display: block;
           }
           .instructions {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 800;
-            color: #0f172a;
-            margin: 0 0 2px 0;
+            color: #171512;
+            margin: 0 0 3px 0;
           }
           .sub-instructions {
             font-size: 11px;
-            color: #64748b;
+            color: #555047;
             margin: 0;
           }
           .footer-url {
-            margin-top: 12px;
-            padding-top: 8px;
-            border-top: 1px solid #e2e8f0;
-            font-family: monospace;
             font-size: 9.5px;
-            color: #64748b;
-            word-break: break-all;
+            font-family: monospace;
+            color: #777063;
+            margin-top: 14px;
+            border-top: 1px dashed #C9C2AF;
+            padding-top: 6px;
             width: 100%;
-          }
-          .actions {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-          }
-          .btn-imprimir {
-            background: #1D4E51;
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 10px;
-            cursor: pointer;
-          }
-          @media print {
-            .actions { display: none !important; }
-            body { padding: 0; min-height: auto; }
-            .card { box-shadow: none !important; border: 3px solid #000 !important; }
           }
         </style>
       </head>
@@ -888,35 +1038,21 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
         <div class="card">
           ${logoHtml}
           <h1 class="title">${headerTitle || "Menú Digital"}</h1>
-          <p class="subtitle">${headerSubtitle || "Pedí directo desde tu celular"}</p>
+          <p class="subtitle">${headerSubtitle || "Pide directo desde tu celular"}</p>
           <div class="badge">${datos.identificador}</div>
           <div class="qr-frame">
             <img id="qr-image" src="${qrImageUrl}" class="qr-img" alt="QR Code" />
           </div>
-          <p class="instructions">📱 Escaneá con tu celular</p>
+          <p class="instructions">📱 Escaneá con tu cámara</p>
           <p class="sub-instructions">${datos.subtitulo}</p>
           <div class="footer-url">${datos.url}</div>
         </div>
-        <div class="actions">
-          <button class="btn-imprimir" onclick="window.print()">🖨️ Mandar a Imprimir</button>
-        </div>
         <script>
           const img = document.getElementById('qr-image');
-          function doPrint() {
-            setTimeout(() => {
-              window.focus();
-              window.print();
-            }, 350);
-          }
-          if (img) {
-            if (img.complete) {
-              doPrint();
-            } else {
-              img.onload = doPrint;
-              img.onerror = doPrint;
-            }
+          if (img.complete) {
+            window.print();
           } else {
-            doPrint();
+            img.onload = () => window.print();
           }
         </script>
       </body>
@@ -928,32 +1064,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
     win.document.close();
   };
 
-  const manejarSubidaArchivo = async (e: React.ChangeEvent<HTMLInputElement>, tipo: "logo" | "fondo") => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (tipo === "logo") setSubiendoLogo(true);
-    else setSubiendoFondo(true);
-
-    try {
-      const res = await subirImagenQrMenu(undefined, { tipo, file });
-      if (res.ok && res.data) {
-        if (tipo === "logo") {
-          setLogoUrl(res.data.url);
-        } else {
-          setBgImageUrl(res.data.url);
-          setBgMode("PATTERN_IMAGE");
-        }
-      }
-    } catch {
-      // Ignorar errores en UI
-    } finally {
-      if (tipo === "logo") setSubiendoLogo(false);
-      else setSubiendoFondo(false);
-    }
-  };
-
-  // Estilo preview en tiempo real
+  // Cálculo del estilo de fondo en vivo
   const previewBackgroundStyle = (() => {
     if (bgMode === "PATTERN_IMAGE" && bgImageUrl) {
       return { backgroundImage: `url(${bgImageUrl})`, backgroundRepeat: "repeat" };
@@ -966,499 +1077,792 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
   return (
     <div className="space-y-8">
+      {/* ─── Encabezado Principal & Interruptor Global ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-[var(--linea-30)] bg-[var(--panel-bg)] p-6 shadow-xl">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[var(--brasa)] animate-pulse" />
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--brasa)]">
+              SITIO WEB DE DOMICILIOS & MENÚ QR
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black font-display uppercase tracking-tight text-[var(--papel)]">
+            Personalización de la Experiencia del Cliente
+          </h2>
+          <p className="text-xs sm:text-sm text-[var(--linea)] max-w-xl">
+            Configura el aspecto visual de la carta web que tus clientes verán al escanear los códigos QR en mesa o al pedir domicilios por WhatsApp.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 self-start sm:self-center bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-xl px-4 py-2.5">
+          <span className="text-xs font-bold text-[var(--papel)]">
+            {habilitado ? "🟢 Servicio Activo" : "⚪ Servicio Desactivado"}
+          </span>
+          <input
+            type="checkbox"
+            checked={habilitado}
+            onChange={(e) => setHabilitado(e.target.checked)}
+            className="size-5 rounded border-[var(--linea-30)] text-[var(--brasa)] focus:ring-[var(--brasa)] cursor-pointer"
+          />
+        </div>
+      </div>
+
+      {/* ─── Navegación por Pestañas ─── */}
+      <div className="flex border-b border-dashed border-[var(--linea-30)] gap-2 pb-2 overflow-x-auto">
+        {[
+          { id: "tema", label: "🎨 1. Identidad Visual & Tema", desc: "Colores, degradados y logo" },
+          { id: "textos", label: "🛵 2. Domicilios & Mensajes", desc: "Tiempos, títulos y textos" },
+          { id: "qrs", label: "🖨️ 3. Códigos QR & Enlaces", desc: "Mesas, tirillas e impresión" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setTabActiva(tab.id as typeof tabActiva)}
+            className={cn(
+              "flex flex-col text-left px-4 py-2.5 rounded-xl border transition-all shrink-0 cursor-pointer",
+              tabActiva === tab.id
+                ? "border-[var(--brasa)] bg-[var(--panel-2)] text-[var(--papel)] shadow-md"
+                : "border-transparent text-[var(--linea)] hover:text-[var(--papel)] hover:bg-[var(--panel-2)]/50",
+            )}
+          >
+            <span className="text-xs sm:text-sm font-bold">{tab.label}</span>
+            <span className="text-[10px] text-[var(--linea)] opacity-80">{tab.desc}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Grilla Principal: Formulario Interactivo (7 cols) + Simulador Móvil (5 cols) ─── */}
       <div className="grid gap-8 lg:grid-cols-12 items-start">
         
-        {/* Formulario de Configuración (7 Columnas) */}
+        {/* Columna Izquierda: Opciones Interactivas sin código */}
         <form action={accion} className="space-y-6 lg:col-span-7">
           <Resultado estado={estado} />
 
-          {/* 1. Activar / Desactivar Menú QR */}
-          <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-4 shadow-sm">
-            <div className="space-y-0.5">
-              <Label className="text-base font-bold">Activar Menú Digital QR</Label>
-              <p className="text-muted-foreground text-xs">
-                Permite a los clientes ver la carta y hacer su pedido desde su celular leyendo un código QR.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              name="qrMenuEnabled"
-              checked={habilitado}
-              onChange={(e) => setHabilitado(e.target.checked)}
-              className="h-5 w-5 rounded border-border text-brand focus:ring-brand cursor-pointer"
-            />
-          </div>
+          <input type="hidden" name="qrMenuEnabled" value={habilitado ? "on" : "off"} />
+          <input type="hidden" name="qrMenuBgMode" value={bgMode} />
+          <input type="hidden" name="qrMenuBgColor" value={bgColor} />
+          <input type="hidden" name="qrMenuBgGradient" value={bgGradient} />
+          <input type="hidden" name="qrMenuBgImageUrl" value={bgImageUrl} />
+          <input type="hidden" name="qrMenuLogoUrl" value={logoUrl} />
+          <input type="hidden" name="qrMenuHeaderTitle" value={headerTitle} />
+          <input type="hidden" name="qrMenuHeaderSubtitle" value={headerSubtitle} />
 
-          {/* 2. Personalización Visual del Fondo */}
-          <div className="space-y-5 rounded-xl border border-border p-5 bg-card shadow-sm">
-            <h3 className="text-sm font-bold tracking-tight text-foreground flex items-center gap-2">
-              🎨 Estilo Visual y Fondo del Menú
-            </h3>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold">Modo de Fondo</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "SOLID", label: "Color Sólido" },
-                  { id: "GRADIENT", label: "Degradado" },
-                  { id: "PATTERN_IMAGE", label: "Imagen Repetida (Patrón)" },
-                ].map((modo) => (
-                  <button
-                    key={modo.id}
-                    type="button"
-                    onClick={() => setBgMode(modo.id)}
-                    className={cn(
-                      "rounded-lg border px-3 py-2 text-xs font-semibold transition-all text-center",
-                      bgMode === modo.id
-                        ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-sm"
-                        : "bg-[var(--panel-2)] text-[var(--muted)] hover:text-[var(--papel)] border-[var(--linea-30)]",
-                    )}
-                  >
-                    {modo.label}
-                  </button>
-                ))}
-              </div>
-              <input type="hidden" name="qrMenuBgMode" value={bgMode} />
-            </div>
-
-            {bgMode === "SOLID" && (
-              <div className="space-y-3 pt-1 border-t border-border/60">
-                <Label htmlFor="qrMenuBgColor" className="text-xs font-semibold">
-                  Color de Fondo (Personalizado o Presets)
-                </Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={bgColor}
-                    onChange={(e) => setBgColor(e.target.value)}
-                    className="h-9 w-12 rounded border border-border cursor-pointer bg-transparent"
-                  />
-                  <Input
-                    id="qrMenuBgColor"
-                    name="qrMenuBgColor"
-                    value={bgColor}
-                    onChange={(e) => setBgColor(e.target.value)}
-                    placeholder="#101416"
-                    className="font-mono text-xs"
-                  />
+          {/* ══════════════════════════════════════════════════════════════════
+              PESTAÑA 1: IDENTIDAD VISUAL & TEMA
+              ══════════════════════════════════════════════════════════════════ */}
+          {tabActiva === "tema" && (
+            <div className="space-y-6">
+              
+              {/* Temas Rápidos Listos en 1 Clic */}
+              <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <h3 className="text-sm font-bold text-[var(--papel)] flex items-center gap-2">
+                      <span>✨ Temas Gastronómicos Listos (1 Clic)</span>
+                    </h3>
+                    <p className="text-xs text-[var(--linea)]">
+                      Selecciona un estilo profesional pre-configurado para tu tipo de restaurante o bar.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Presets de Color */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] font-semibold text-muted-foreground block">Colores Predefinidos:</span>
-                  <div className="flex flex-wrap gap-2">
-                    {COLOR_PRESETS.map((preset) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {BRAND_THEMES.map((tema) => (
+                    <button
+                      key={tema.id}
+                      type="button"
+                      onClick={() => aplicarTema(tema)}
+                      className={cn(
+                        "rounded-xl border p-3.5 text-left transition-all hover:scale-[1.02] flex flex-col justify-between min-h-[95px] relative overflow-hidden group cursor-pointer",
+                        bgColor === tema.bgColor || bgGradient === tema.bgGradient
+                          ? "border-[var(--brasa)] ring-2 ring-[var(--brasa)]/30 bg-[var(--panel-2)]"
+                          : "border-[var(--linea-30)] bg-[var(--panel-2)]/50 hover:bg-[var(--panel-2)]",
+                      )}
+                    >
+                      {/* Fondo miniatura */}
+                      <div
+                        className="absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity pointer-events-none"
+                        style={{ background: tema.mode === "GRADIENT" ? tema.bgGradient : tema.bgColor }}
+                      />
+
+                      <div className="flex items-center justify-between z-10">
+                        <span className="text-lg">{tema.icon}</span>
+                        <span className="text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-[var(--tinta)]/80 text-[var(--papel)] border border-[var(--linea-30)]">
+                          {tema.tag}
+                        </span>
+                      </div>
+
+                      <div className="z-10 pt-2">
+                        <span className="font-bold text-xs text-[var(--papel)] block leading-tight">
+                          {tema.name}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Selector de Modo de Fondo */}
+              <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--linea)]">
+                    Estilo de Fondo de Pantalla
+                  </Label>
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    {[
+                      { id: "SOLID", label: "🎨 Color Sólido" },
+                      { id: "GRADIENT", label: "🌈 Degradado" },
+                      { id: "PATTERN_IMAGE", label: "🖼️ Textura / Patrón" },
+                    ].map((modo) => (
                       <button
-                        key={preset.hex}
+                        key={modo.id}
                         type="button"
-                        onClick={() => setBgColor(preset.hex)}
+                        onClick={() => setBgMode(modo.id)}
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all",
-                          bgColor === preset.hex ? "border-brand ring-2 ring-brand/30 font-bold" : "border-border hover:bg-accent",
+                          "rounded-xl border px-3 py-2.5 text-xs font-bold transition-all text-center cursor-pointer",
+                          bgMode === modo.id
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] shadow-md"
+                            : "bg-[var(--panel-2)] text-[var(--linea)] hover:text-[var(--papel)] border-[var(--linea-30)]",
                         )}
                       >
-                        <span className="size-3 rounded-full border border-black/20" style={{ backgroundColor: preset.hex }} />
-                        <span>{preset.name}</span>
+                        {modo.label}
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
 
-            {bgMode === "GRADIENT" && (
-              <div className="space-y-3 pt-1 border-t border-border/60">
-                <Label htmlFor="qrMenuBgGradient" className="text-xs font-semibold">
-                  Estilo de Degradado CSS
-                </Label>
-                <Input
-                  id="qrMenuBgGradient"
-                  name="qrMenuBgGradient"
-                  value={bgGradient}
-                  onChange={(e) => setBgGradient(e.target.value)}
-                  placeholder="linear-gradient(135deg, #101416 0%, #1D4E51 100%)"
-                  className="font-mono text-xs"
-                />
+                {/* Vista: Colores Sólidos en Cuadrícula */}
+                {bgMode === "SOLID" && (
+                  <div className="space-y-3 pt-3 border-t border-dashed border-[var(--linea-30)]">
+                    <span className="text-xs font-semibold text-[var(--linea)] block">
+                      Selecciona un Color Gastronómico:
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {COLOR_PRESETS.map((preset) => (
+                        <button
+                          key={preset.hex}
+                          type="button"
+                          onClick={() => setBgColor(preset.hex)}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-xl border p-2.5 text-left transition-all cursor-pointer",
+                            bgColor === preset.hex
+                              ? "border-[var(--brasa)] ring-2 ring-[var(--brasa)]/40 bg-[var(--panel-2)] font-bold"
+                              : "border-[var(--linea-30)] bg-[var(--panel-2)]/40 hover:bg-[var(--panel-2)]",
+                          )}
+                        >
+                          <span
+                            className="size-5 rounded-full border border-[var(--linea-30)] shrink-0 shadow-inner"
+                            style={{ backgroundColor: preset.hex }}
+                          />
+                          <div className="min-w-0">
+                            <span className="text-xs text-[var(--papel)] block truncate">{preset.name}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                {/* Presets de Degradado */}
-                <div className="space-y-2 pt-1">
-                  <span className="text-[11px] font-semibold text-muted-foreground block">Degradados Predefinidos:</span>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {GRADIENT_PRESETS.map((preset) => (
-                      <button
-                        key={preset.name}
-                        type="button"
-                        onClick={() => setBgGradient(preset.value)}
-                        className={cn(
-                          "flex items-center gap-2.5 rounded-lg border p-2 text-left text-xs transition-all",
-                          bgGradient === preset.value ? "border-brand ring-2 ring-brand/30 font-bold" : "border-border hover:bg-accent",
+                {/* Vista: Degradados en Cuadrícula */}
+                {bgMode === "GRADIENT" && (
+                  <div className="space-y-3 pt-3 border-t border-dashed border-[var(--linea-30)]">
+                    <span className="text-xs font-semibold text-[var(--linea)] block">
+                      Selecciona una Atmósfera de Degradado:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {GRADIENT_PRESETS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => setBgGradient(preset.value)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all cursor-pointer",
+                            bgGradient === preset.value
+                              ? "border-[var(--brasa)] ring-2 ring-[var(--brasa)]/40 bg-[var(--panel-2)] font-bold"
+                              : "border-[var(--linea-30)] bg-[var(--panel-2)]/40 hover:bg-[var(--panel-2)]",
+                          )}
+                        >
+                          <span
+                            className="size-7 rounded-lg border border-[var(--linea-30)] shrink-0 shadow-md"
+                            style={{ background: preset.value }}
+                          />
+                          <span className="text-xs text-[var(--papel)] font-medium truncate">{preset.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Vista: Texturas y Carga de Foto */}
+                {bgMode === "PATTERN_IMAGE" && (
+                  <div className="space-y-4 pt-3 border-t border-dashed border-[var(--linea-30)]">
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-[var(--linea)] block">
+                        Patrones de Textura Listos:
+                      </span>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {TEXTURE_PRESETS.map((patron) => (
+                          <button
+                            key={patron.name}
+                            type="button"
+                            onClick={() => setBgImageUrl(patron.url)}
+                            className={cn(
+                              "flex items-center gap-2.5 rounded-xl border p-2.5 text-left transition-all cursor-pointer",
+                              bgImageUrl === patron.url
+                                ? "border-[var(--brasa)] ring-2 ring-[var(--brasa)]/40 bg-[var(--panel-2)] font-bold"
+                                : "border-[var(--linea-30)] bg-[var(--panel-2)]/40 hover:bg-[var(--panel-2)]",
+                            )}
+                          >
+                            <span className="text-base">{patron.icon}</span>
+                            <span className="text-xs text-[var(--papel)] truncate">{patron.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between gap-3 bg-[var(--panel-2)] border border-[var(--linea-30)] p-3 rounded-xl">
+                      <span className="text-xs text-[var(--linea)]">
+                        O sube tu propia imagen de textura:
+                      </span>
+                      <div className="flex gap-2">
+                        <label className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brasa)] text-[var(--tinta)] px-3 py-1.5 text-xs font-bold cursor-pointer hover:bg-[var(--brasa-hover)] shadow-md transition-all">
+                          {subiendoFondo ? "Subiendo..." : "📤 Cargar Foto"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => void manejarSubidaArchivo(e, "fondo")}
+                            disabled={subiendoFondo}
+                            className="hidden"
+                          />
+                        </label>
+                        {bgImageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setBgImageUrl("")}
+                            className="p-1.5 rounded-lg border border-[var(--linea-30)] text-rose-400 hover:bg-rose-950/40 text-xs"
+                            title="Quitar imagen"
+                          >
+                            🗑️
+                          </button>
                         )}
-                      >
-                        <span className="size-6 rounded-md border border-white/20 shrink-0 shadow-sm" style={{ background: preset.value }} />
-                        <span className="truncate text-[11px] font-semibold">{preset.name}</span>
-                      </button>
-                    ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Subida de Logo en 1 Clic */}
+              <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--linea)]">
+                    Logo del Restaurante
+                  </Label>
+                  <p className="text-xs text-[var(--linea)]">
+                    Aparecerá en la parte superior del menú digital y en las tarjetas QR impresas.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4 bg-[var(--panel-2)] border border-[var(--linea-30)] p-4 rounded-xl">
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt="Logo"
+                      className="size-16 rounded-full object-cover border-2 border-[var(--brasa)] shadow-md"
+                    />
+                  ) : (
+                    <div className="size-16 rounded-full bg-[var(--tinta)] border-2 border-dashed border-[var(--linea-30)] flex items-center justify-center text-[var(--papel)] font-display font-black text-2xl">
+                      {(headerTitle || "P").slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex flex-wrap gap-2">
+                      <label className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brasa)] text-[var(--tinta)] px-3.5 py-2 text-xs font-bold cursor-pointer hover:bg-[var(--brasa-hover)] shadow-md transition-all">
+                        {subiendoLogo ? "Subiendo Logo..." : "📤 Subir Nuevo Logo"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => void manejarSubidaArchivo(e, "logo")}
+                          disabled={subiendoLogo}
+                          className="hidden"
+                        />
+                      </label>
+                      {logoUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLogoUrl("")}
+                          className="text-xs text-rose-400 border-rose-900/40 hover:bg-rose-950/30"
+                        >
+                          Quitar Logo
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[var(--linea)]">
+                      Formatos recomendados: PNG o JPG cuadrado (mínimo 200x200 px).
+                    </p>
                   </div>
                 </div>
               </div>
-            )}
 
-            {bgMode === "PATTERN_IMAGE" && (
-              <div className="space-y-3 pt-1 border-t border-border/60">
-                <Label htmlFor="qrMenuBgImageUrl" className="text-xs font-semibold">
-                  Imagen de Fondo Repetida (Patrón)
-                </Label>
-                
-                <div className="flex gap-2">
-                  <Input
-                    id="qrMenuBgImageUrl"
-                    name="qrMenuBgImageUrl"
-                    value={bgImageUrl}
-                    onChange={(e) => setBgImageUrl(e.target.value)}
-                    placeholder="https://res.cloudinary.com/..."
-                    className="text-xs flex-1"
-                  />
+            </div>
+          )}
 
-                  {/* Subida Cloudinary Fondo */}
-                  <label className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white hover:bg-brand/90 px-3 py-2 text-xs font-bold cursor-pointer shrink-0 shadow-sm transition-all">
-                    {subiendoFondo ? "Subiendo..." : "🖼️ Subir a Cloudinary"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => void manejarSubidaArchivo(e, "fondo")}
-                      disabled={subiendoFondo}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  La imagen se repetirá automáticamente hacia abajo para llenar la pantalla completa del celular del cliente.
-                </p>
-              </div>
-            )}
-
-            {/* 3. Branding del Menú */}
-            <div className="space-y-3 pt-3 border-t border-border/60">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Branding y Mensaje de Cabecera
-              </h4>
-
-              <div className="space-y-2">
-                <Label htmlFor="qrMenuLogoUrl" className="text-xs font-semibold">
-                  Logo del Restaurante
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="qrMenuLogoUrl"
-                    name="qrMenuLogoUrl"
-                    value={logoUrl}
-                    onChange={(e) => setLogoUrl(e.target.value)}
-                    placeholder="https://res.cloudinary.com/..."
-                    className="text-xs flex-1"
-                  />
-                  
-                  {/* Subida Cloudinary Logo */}
-                  <label className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white hover:bg-brand/90 px-3 py-2 text-xs font-bold cursor-pointer shrink-0 shadow-sm transition-all">
-                    {subiendoLogo ? "Subiendo..." : "📤 Subir Logo"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => void manejarSubidaArchivo(e, "logo")}
-                      disabled={subiendoLogo}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="qrMenuHeaderTitle" className="text-xs font-semibold">
-                    Título Principal
+          {/* ══════════════════════════════════════════════════════════════════
+              PESTAÑA 2: DOMICILIOS & TEXTOS
+              ══════════════════════════════════════════════════════════════════ */}
+          {tabActiva === "textos" && (
+            <div className="space-y-6">
+              
+              {/* Título y Mensaje de Bienvenida */}
+              <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--linea)]">
+                    Título Principal de la Carta
                   </Label>
                   <Input
-                    id="qrMenuHeaderTitle"
-                    name="qrMenuHeaderTitle"
                     value={headerTitle}
                     onChange={(e) => setHeaderTitle(e.target.value)}
-                    placeholder="Menú Digital"
-                    className="text-xs"
+                    placeholder="Ej. Menú Digital & Domicilios"
+                    className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)] text-sm font-bold"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="qrMenuHeaderSubtitle" className="text-xs font-semibold">
-                    Subtítulo / Bienvenida
+
+                {/* Presets de Títulos */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] text-[var(--linea)] block font-semibold">
+                    Frases rápidas sugeridas:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {TITLE_PRESETS.map((txt) => (
+                      <button
+                        key={txt}
+                        type="button"
+                        onClick={() => setHeaderTitle(txt)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs border transition-all cursor-pointer",
+                          headerTitle === txt
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold"
+                            : "bg-[var(--panel-2)] text-[var(--linea)] border-[var(--linea-30)] hover:text-[var(--papel)]",
+                        )}
+                      >
+                        {txt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1 pt-3 border-t border-dashed border-[var(--linea-30)]">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--linea)]">
+                    Subtítulo / Mensaje de Bienvenida
                   </Label>
                   <Input
-                    id="qrMenuHeaderSubtitle"
-                    name="qrMenuHeaderSubtitle"
                     value={headerSubtitle}
                     onChange={(e) => setHeaderSubtitle(e.target.value)}
-                    placeholder="¡Pedí directamente desde tu celular!"
-                    className="text-xs"
+                    placeholder="Ej. Pide directo y recibe tus platos calientes"
+                    className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)] text-sm"
                   />
                 </div>
+
+                {/* Presets de Subtítulos */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] text-[var(--linea)] block font-semibold">
+                    Mensajes de llamado a la acción:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {SUBTITLE_PRESETS.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => setHeaderSubtitle(sub)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs border transition-all cursor-pointer",
+                          headerSubtitle === sub
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold"
+                            : "bg-[var(--panel-2)] text-[var(--linea)] border-[var(--linea-30)] hover:text-[var(--papel)]",
+                        )}
+                      >
+                        {sub}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
+
+              {/* Configuración de Domicilios Operativa */}
+              <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🛵</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-[var(--papel)]">Módulo de Pedidos a Domicilio</h3>
+                    <p className="text-xs text-[var(--linea)]">Los pedidos web se reciben directamente en la pantalla de Domicilios y Cocina.</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3 pt-2">
+                  <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl text-center space-y-1">
+                    <span className="text-xs text-[var(--linea)] block">Tiempo promedio:</span>
+                    <span className="font-mono font-bold text-sm text-[var(--brasa)]">25 - 40 MIN</span>
+                  </div>
+                  <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl text-center space-y-1">
+                    <span className="text-xs text-[var(--linea)] block">Canal de entrega:</span>
+                    <span className="font-mono font-bold text-sm text-[var(--papel)]">PROPIO / WHATSAPP</span>
+                  </div>
+                  <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl text-center space-y-1">
+                    <span className="text-xs text-[var(--linea)] block">Notificación:</span>
+                    <span className="font-mono font-bold text-sm text-emerald-400">EN TIEMPO REAL</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              PESTAÑA 3: CÓDIGOS QR & ENLACES
+              ══════════════════════════════════════════════════════════════════ */}
+          {tabActiva === "qrs" && (
+            <div className="space-y-6">
+              
+              {/* Tarjeta de Domicilio Global */}
+              <div className="rounded-2xl border-2 border-[var(--brasa)] bg-[var(--panel-bg)] p-6 space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="size-2 rounded-full bg-[var(--brasa)] animate-pulse" />
+                      <span className="font-mono text-xs font-bold text-[var(--brasa)] uppercase">
+                        ENLACE GLOBAL DE DOMICILIOS & CARTA
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-black font-display uppercase text-[var(--papel)]">
+                      Tu Menú Web para Redes y WhatsApp
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => copiarEnlace(urlDomicilio, "domicilio-btn")}
+                      className="bg-[var(--brasa)] text-[var(--tinta)] font-bold text-xs h-9 hover:bg-[var(--brasa-hover)] cursor-pointer"
+                    >
+                      {copiado === "domicilio-btn" ? "✔ Copiado" : "📋 Copiar Enlace"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        ejecutarImpresion({
+                          identificador: "DOMICILIOS & LLEVAR",
+                          subtitulo: "Pide directo desde tu celular para entrega a domicilio",
+                          url: urlDomicilio,
+                        })
+                      }
+                      className="border-[var(--linea-30)] text-[var(--papel)] text-xs h-9 hover:bg-[var(--panel-2)] cursor-pointer"
+                    >
+                      🖨️ Imprimir QR
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(urlDomicilio)}`}
+                    alt="QR Domicilio"
+                    className="size-20 rounded-lg border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-md"
+                  />
+                  <div className="min-w-0 space-y-1 flex-1">
+                    <span className="font-mono text-xs text-[var(--papel)] font-bold block truncate">
+                      {urlDomicilio}
+                    </span>
+                    <a
+                      href={urlDomicilio}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[var(--brasa)] font-bold hover:underline inline-flex items-center gap-1"
+                    >
+                      Abrir menú en nueva pestaña ↗
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Códigos QR por Mesa */}
+              {settings.mesas.length > 0 && (
+                <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--papel)]">
+                      Códigos QR por Mesa en Salón ({settings.mesas.length})
+                    </h4>
+                    <span className="text-xs font-mono text-[var(--linea)]">Auto-asignación de mesa</span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {settings.mesas.map((mesa) => {
+                      const urlMesa = `${appUrl}/m/${settings.slug}?mesa=${encodeURIComponent(mesa.name)}&tableId=${mesa.id}`;
+                      return (
+                        <div
+                          key={mesa.id}
+                          className="rounded-xl border border-[var(--linea-30)] bg-[var(--panel-2)] p-3.5 space-y-2.5 shadow-sm"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-display font-black text-base text-[var(--papel)]">
+                              🪑 MESA {mesa.name}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  ejecutarImpresion({
+                                    identificador: `MESA ${mesa.name}`,
+                                    subtitulo: `Pedido asignado automáticamente a la Mesa ${mesa.name}`,
+                                    url: urlMesa,
+                                  })
+                                }
+                                className="h-7 text-xs font-semibold px-2 text-[var(--papel)] hover:bg-[var(--panel-3)]"
+                              >
+                                🖨️ Imprimir
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copiarEnlace(urlMesa, mesa.id)}
+                                className="h-7 text-xs font-semibold px-2 text-[var(--linea)] hover:text-[var(--papel)] hover:bg-[var(--panel-3)]"
+                              >
+                                {copiado === mesa.id ? "✔" : "Copiar"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(urlMesa)}`}
+                              alt={`QR Mesa ${mesa.name}`}
+                              className="size-16 rounded-lg border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-sm"
+                            />
+                            <div className="text-xs space-y-1 min-w-0 flex-1">
+                              <span className="text-[11px] text-[var(--linea)] block truncate font-mono">
+                                /m/{settings.slug}?mesa={mesa.name}
+                              </span>
+                              <a
+                                href={urlMesa}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--brasa)] font-bold hover:underline block text-xs"
+                              >
+                                Probar QR →
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* Botón Guardar Cambios */}
+          <div className="pt-2">
+            <Button
+              type="submit"
+              className="w-full bg-[var(--brasa)] text-[var(--tinta)] hover:bg-[var(--brasa-hover)] font-bold text-base h-12 shadow-xl shadow-[var(--brasa)]/20 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+            >
+              💾 Guardar Personalización del Menú & Domicilios
+            </Button>
+          </div>
+        </form>
+
+        {/* ══════════════════════════════════════════════════════════════════
+            COLUMNA DERECHA: SIMULADOR DE SMARTPHONE EN VIVO
+            ══════════════════════════════════════════════════════════════════ */}
+        <div className="space-y-3 lg:col-span-5 sticky top-6">
+          <div className="flex items-center justify-between px-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[var(--linea)] flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-[var(--brasa)] animate-pulse" />
+              SIMULADOR MÓVIL EN VIVO
+            </span>
+
+            {/* Alternador de vista previa */}
+            <div className="flex bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-lg p-0.5 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setPreviewModo("domicilio")}
+                className={cn(
+                  "px-2 py-1 rounded-md font-bold transition-all",
+                  previewModo === "domicilio" ? "bg-[var(--brasa)] text-[var(--tinta)]" : "text-[var(--linea)]",
+                )}
+              >
+                🛵 Domicilio
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewModo("mesa")}
+                className={cn(
+                  "px-2 py-1 rounded-md font-bold transition-all",
+                  previewModo === "mesa" ? "bg-[var(--brasa)] text-[var(--tinta)]" : "text-[var(--linea)]",
+                )}
+              >
+                🍽️ Mesa 04
+              </button>
             </div>
           </div>
 
-          <Enviar>Guardar Configuración del Menú QR</Enviar>
-        </form>
-
-        {/* Simulador Interactivo de Dispositivo Celular (5 Columnas) */}
-        <div className="space-y-3 lg:col-span-5 sticky top-6">
-          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block text-center">
-            📱 Vista Previa en Vivo (Celular del Cliente)
-          </span>
-
-          <div className="rounded-[2.5rem] border-4 border-slate-800 bg-slate-950 p-3 shadow-2xl overflow-hidden max-w-xs mx-auto">
-            {/* Pantalla Celular */}
-            <div className="rounded-[2rem] overflow-hidden text-white min-h-[520px] flex flex-col relative text-xs shadow-inner" style={previewBackgroundStyle}>
-              {/* Notch cel */}
-              <div className="w-24 h-4 bg-slate-900 mx-auto rounded-b-xl mb-3 flex items-center justify-center">
-                <div className="size-1.5 rounded-full bg-slate-700" />
+          {/* Marco del Teléfono */}
+          <div className="rounded-[2.5rem] border-4 border-[#2D2A26] bg-[#12100E] p-3 shadow-2xl overflow-hidden max-w-xs mx-auto">
+            <div
+              className="rounded-[2rem] overflow-hidden text-[var(--papel)] min-h-[520px] flex flex-col relative text-xs shadow-inner transition-all duration-300"
+              style={previewBackgroundStyle}
+            >
+              {/* Notch y Bocina */}
+              <div className="w-24 h-4 bg-[#171512] mx-auto rounded-b-xl mb-2 flex items-center justify-center shadow-md">
+                <div className="size-1.5 rounded-full bg-[#3A3733]" />
               </div>
 
-              {/* Header Celular */}
-              <div className="p-4 text-center space-y-2 bg-black/40 backdrop-blur-sm border-b border-white/10">
+              {/* Cabecera del Menú */}
+              <div className="p-4 text-center space-y-2 bg-black/50 backdrop-blur-md border-b border-white/10">
                 {logoUrl ? (
-                  <img src={logoUrl} alt="Logo" className="size-14 mx-auto rounded-full object-cover border-2 border-brand/60 shadow-md" />
+                  <img
+                    src={logoUrl}
+                    alt="Logo"
+                    className="size-14 mx-auto rounded-full object-cover border-2 border-[var(--brasa)] shadow-lg animate-card-in"
+                  />
                 ) : (
-                  <div className="size-12 mx-auto rounded-full bg-brand/30 border border-brand/50 flex items-center justify-center font-black text-white text-base">
-                    S
+                  <div className="size-12 mx-auto rounded-full bg-[var(--brasa)]/20 border border-[var(--brasa)] flex items-center justify-center font-display font-black text-[var(--papel)] text-xl shadow-md">
+                    {(headerTitle || "P").slice(0, 1).toUpperCase()}
                   </div>
                 )}
 
                 <div>
-                  <h4 className="font-extrabold text-base leading-tight">{headerTitle || "Menú Digital"}</h4>
-                  <p className="text-[11px] text-slate-300/90 leading-tight mt-0.5">{headerSubtitle || "¡Pedí directamente desde tu celular!"}</p>
+                  <h4 className="font-black font-display text-base leading-tight uppercase tracking-tight text-[var(--papel)]">
+                    {headerTitle || "Menú Digital"}
+                  </h4>
+                  <p className="text-[10.5px] text-[var(--linea)] leading-tight mt-0.5">
+                    {headerSubtitle || "Pide directo desde tu celular"}
+                  </p>
                 </div>
 
-                <Badge className="bg-emerald-500 text-slate-950 font-bold px-2 py-0.5 text-[10px] mx-auto">
-                  🪑 Mesa 01
-                </Badge>
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--panel-2)]/90 border border-[var(--linea-30)] text-[10px] font-mono font-bold text-[var(--brasa)]">
+                  {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : "🛵 Domicilio · 25-40 min"}
+                </div>
               </div>
 
-              {/* Contenido Simulado */}
-              <div className="p-3 flex-1 space-y-2 bg-black/20">
-                <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-[10px] text-slate-400">
-                  🔍 Buscar hamburguesa, bebida...
+              {/* Contenido Simulado de la Carta */}
+              <div className="p-3 flex-1 space-y-2.5 bg-black/20 overflow-y-auto">
+                {/* Buscador ficticio */}
+                <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-[10px] text-[var(--linea)] border border-white/10">
+                  🔍 Buscar hamburguesa, cerveza...
                 </div>
 
+                {/* Categorías simuladas */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 text-[9.5px] font-mono">
+                  <span className="px-2 py-0.5 rounded-full bg-[var(--brasa)] text-[var(--tinta)] font-bold shrink-0">
+                    Todas (12)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/10 text-[var(--papel)] shrink-0">
+                    🍔 Burgers
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/10 text-[var(--papel)] shrink-0">
+                    🍺 Bebidas
+                  </span>
+                </div>
+
+                {/* Tarjetas de platos simulados */}
                 <div className="space-y-2 pt-1">
                   {[
-                    { nombre: "Hamburguesa Saja Doble", precio: "$28.000 COP", desc: "Carne artesanal, queso cheddar, tocineta" },
-                    { nombre: "Cerveza Club Colombia", precio: "$8.000 COP", desc: "Dorada 330 ml helada" },
-                  ].map((p, idx) => (
-                    <div key={idx} className="p-2.5 rounded-xl bg-white/10 border border-white/10 space-y-1">
-                      <div className="flex justify-between font-bold text-[11px]">
-                        <span>{p.nombre}</span>
-                        <span className="text-brand-accent font-extrabold">{p.precio}</span>
+                    {
+                      nombre: "Burger Especial Ahumada",
+                      precio: "$28.000 COP",
+                      desc: "Carne artesanal 180g, queso cheddar, tocineta crocante",
+                    },
+                    {
+                      nombre: "Papas Rústicas con Queso",
+                      precio: "$14.000 COP",
+                      desc: "Con tocineta picada y salsa de la casa",
+                    },
+                    {
+                      nombre: "Cerveza Artesanal IPA",
+                      precio: "$12.000 COP",
+                      desc: "Botella 330ml bien fría",
+                    },
+                  ].map((plato, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/10 bg-black/40 p-2.5 space-y-1 backdrop-blur-sm"
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-xs text-[var(--papel)]">{plato.nombre}</span>
+                        <span className="font-mono font-bold text-xs text-[var(--brasa)]">{plato.precio}</span>
                       </div>
-                      <p className="text-[10px] text-slate-300 line-clamp-1">{p.desc}</p>
+                      <p className="text-[10px] text-[var(--linea)] leading-tight">{plato.desc}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Botón flotante pedido */}
-              <div className="p-3 bg-black/60 backdrop-blur-md border-t border-white/10">
-                <div className="bg-emerald-600 font-extrabold text-white text-center py-2 rounded-xl text-xs shadow-lg">
-                  🛒 Ver mi pedido (1) · $28.000
+              {/* Barra Flotante de Pedido en Celular */}
+              <div className="p-2.5 bg-[#171512]/95 border-t border-white/10">
+                <div className="w-full bg-[var(--brasa)] text-[var(--tinta)] py-2 px-3 rounded-xl font-bold font-mono text-xs flex items-center justify-between shadow-lg">
+                  <span>🛒 Ver Pedido (2)</span>
+                  <span>$42.000 COP</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          4. GENERADOR Y DESCARGADOR DE CÓDIGOS QR
-          ───────────────────────────────────────────────────────────── */}
-      <div className="space-y-6 pt-6 border-t border-border">
-        <div>
-          <h3 className="text-base font-bold tracking-tight">
-            {settings.deliveryEnabled !== false
-              ? "Códigos QR para Mesas y Domicilios"
-              : "Códigos QR para Mesas"}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {settings.deliveryEnabled !== false
-              ? "Imprimí estas tarjetas para tus mesas o compartí el enlace directo de domicilio."
-              : "Imprimí estas tarjetas para los códigos QR de tus mesas."}
-          </p>
-        </div>
-
-        {/* QR Domicilio / General (Solo si el negocio reparte a domicilio) */}
-        {settings.deliveryEnabled !== false && (
-          <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="font-bold text-sm">🛵 QR Menú Domicilios / Para Llevar</span>
-                <p className="text-xs text-muted-foreground">El cliente ingresa su nombre, celular y dirección.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    ejecutarImpresion({
-                      identificador: "DOMICILIOS Y PARA LLEVAR",
-                      subtitulo: "Escaneá para hacer tu pedido a domicilio",
-                      url: urlDomicilio,
-                    })
-                  }
-                  className="text-xs font-semibold gap-1"
-                >
-                  🖨️ Imprimir Tarjeta
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copiarEnlace(urlDomicilio, "domicilio")}
-                  className="text-xs font-semibold"
-                >
-                  {copiado === "domicilio" ? "✔ ¡Copiado!" : "Copiar Enlace"}
-                </Button>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 pt-2">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(urlDomicilio)}`}
-                alt="QR Domicilio"
-                className="size-24 rounded-lg border border-border p-1 bg-white shrink-0 shadow-sm"
-              />
-              <div className="text-xs space-y-1.5 truncate">
-                <span className="font-semibold block truncate text-foreground">{urlDomicilio}</span>
-                <a
-                  href={urlDomicilio}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-brand font-bold hover:underline inline-block"
-                >
-                  Abrir Menú Digital →
-                </a>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* QRs por Mesa */}
-        {settings.mesas.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Códigos QR por Mesa ({settings.mesas.length})
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {settings.mesas.map((mesa) => {
-                const urlMesa = `${appUrl}/m/${settings.slug}?mesa=${encodeURIComponent(mesa.name)}&tableId=${mesa.id}`;
-                return (
-                  <div key={mesa.id} className="rounded-xl border border-border/80 bg-card p-3 space-y-2.5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm">🪑 Mesa {mesa.name}</span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            ejecutarImpresion({
-                              identificador: `MESA ${mesa.name}`,
-                              subtitulo: `Pedido asignado automáticamente a la Mesa ${mesa.name}`,
-                              url: urlMesa,
-                            })
-                          }
-                          className="h-7 text-xs font-semibold px-2"
-                        >
-                          🖨️ Imprimir
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copiarEnlace(urlMesa, mesa.id)}
-                          className="h-7 text-xs font-semibold px-2"
-                        >
-                          {copiado === mesa.id ? "✔ ¡Copiado!" : "Copiar"}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(urlMesa)}`}
-                        alt={`QR Mesa ${mesa.name}`}
-                        className="size-20 rounded-md border border-border p-1 bg-white shrink-0 shadow-sm"
-                      />
-                      <div className="text-xs space-y-1 min-w-0">
-                        <span className="text-muted-foreground block text-[11px]">Asigna automáticamente la mesa</span>
-                        <a
-                          href={urlMesa}
-                          target="_blank"
-                          rel="noopener"
-                          className="text-brand font-semibold hover:underline block truncate"
-                        >
-                          Probar Menú →
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          MODAL Y TARJETA DE IMPRESIÓN DE CÓDIGO QR CON IDENTIFICADOR
-          ───────────────────────────────────────────────────────────── */}
+      {/* ─── Modal de Impresión de Tarjeta QR ─── */}
       {tarjetaImprimir && (
         <Dialog open={!!tarjetaImprimir} onOpenChange={(open) => !open && setTarjetaImprimir(null)}>
-          <DialogContent className="max-w-md p-6 text-center space-y-4 max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-md p-6 text-center space-y-4 max-h-[90vh] overflow-y-auto bg-[var(--panel-bg)] text-[var(--papel)] border border-[var(--linea-30)]">
             <DialogHeader className="no-print">
-              <DialogTitle className="text-center font-extrabold text-lg">
+              <DialogTitle className="text-center font-display font-black text-xl uppercase tracking-tight">
                 Tarjeta QR Imprimible
               </DialogTitle>
             </DialogHeader>
 
-            {/* Contenedor Centrado Compacto (Sin Estirar) */}
             <div id="tarjeta-qr-print-wrapper" className="flex items-center justify-center p-2 w-full my-auto">
               <div
                 id="tarjeta-qr-print"
-                className="w-[290px] min-w-[290px] max-w-[290px] rounded-2xl border-2 border-slate-900 bg-white p-5 text-slate-950 flex flex-col items-center text-center space-y-3.5 shadow-xl shrink-0 mx-auto"
+                className="w-[290px] min-w-[290px] max-w-[290px] rounded-2xl border-2 border-slate-900 bg-[#EDE7DA] p-5 text-[#171512] flex flex-col items-center text-center space-y-3.5 shadow-xl shrink-0 mx-auto"
               >
-                {/* Header / Logo */}
+                {/* Logo / Header */}
                 <div className="flex flex-col items-center space-y-1 w-full">
                   {logoUrl ? (
                     <img
                       src={logoUrl}
                       alt="Logo"
-                      className="size-14 rounded-full object-cover border border-slate-300 shadow-sm block mx-auto"
+                      className="size-14 rounded-full object-cover border-2 border-[#FF4E1F] shadow-sm block mx-auto"
                     />
                   ) : (
-                    <div className="size-12 rounded-full bg-slate-900 text-white font-black flex items-center justify-center text-lg shadow-sm mx-auto">
-                      {headerTitle ? headerTitle.slice(0, 2).toUpperCase() : "S"}
+                    <div className="size-12 rounded-xl bg-[#171512] text-[#EDE7DA] font-black flex items-center justify-center text-lg shadow-sm mx-auto border-2 border-[#FF4E1F]">
+                      {(headerTitle || "P").slice(0, 1).toUpperCase()}
                     </div>
                   )}
-                  <h3 className="font-black text-lg tracking-tight text-slate-900 leading-tight w-full truncate text-center">
+                  <h3 className="font-black text-base uppercase tracking-tight text-[#171512] leading-tight w-full truncate text-center">
                     {headerTitle || "Menú Digital"}
                   </h3>
-                  <p className="text-[11px] text-slate-600 font-medium leading-tight max-w-[240px] mx-auto text-center">
-                    {headerSubtitle || "Pedí directo desde tu celular"}
+                  <p className="text-[11px] text-[#555047] font-medium leading-tight max-w-[240px] mx-auto text-center">
+                    {headerSubtitle || "Pide directo desde tu celular"}
                   </p>
                 </div>
 
-                {/* Identificador Destacado Centrado */}
+                {/* Identificador Destacado */}
                 <div className="w-full flex justify-center">
-                  <div className="bg-slate-900 text-white py-1.5 px-4 rounded-xl font-black text-sm uppercase tracking-widest text-center shadow-md max-w-full truncate">
+                  <div className="bg-[#171512] text-[#FF4E1F] py-1.5 px-4 rounded-xl font-mono font-black text-xs uppercase tracking-widest text-center shadow-md max-w-full truncate">
                     {tarjetaImprimir.identificador}
                   </div>
                 </div>
 
-                {/* Código QR Centrado Proporcional */}
-                <div className="p-2.5 bg-white border-2 border-slate-200 rounded-2xl flex items-center justify-center shadow-inner mx-auto">
+                {/* Código QR */}
+                <div className="p-2.5 bg-white border-2 border-[#171512] rounded-2xl flex items-center justify-center shadow-inner mx-auto">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(tarjetaImprimir.url)}`}
                     alt={tarjetaImprimir.identificador}
@@ -1467,15 +1871,15 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 </div>
 
                 {/* Instrucciones */}
-                <div className="space-y-0.5 text-xs text-slate-700 w-full text-center">
-                  <p className="font-extrabold text-slate-900 text-center text-xs">📱 Escaneá con tu celular</p>
-                  <p className="text-[10.5px] text-slate-600 max-w-[230px] mx-auto leading-tight text-center">
+                <div className="space-y-0.5 text-xs text-[#171512] w-full text-center">
+                  <p className="font-extrabold text-[#171512] text-center text-xs">📱 Escaneá con tu celular</p>
+                  <p className="text-[10.5px] text-[#555047] max-w-[230px] mx-auto leading-tight text-center">
                     {tarjetaImprimir.subtitulo}
                   </p>
                 </div>
 
                 {/* URL Footer */}
-                <div className="w-full text-[9.5px] font-mono text-slate-500 border-t border-slate-200 pt-2 text-center truncate">
+                <div className="w-full text-[9.5px] font-mono text-[#777063] border-t border-[#C9C2AF] pt-2 text-center truncate">
                   {tarjetaImprimir.url}
                 </div>
               </div>
@@ -1483,10 +1887,13 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
             {/* Acciones del Modal */}
             <div className="flex gap-2 justify-end pt-2 no-print">
-              <Button variant="outline" onClick={() => setTarjetaImprimir(null)} className="text-xs">
+              <Button variant="outline" onClick={() => setTarjetaImprimir(null)} className="text-xs border-[var(--linea-30)]">
                 Cerrar
               </Button>
-              <Button onClick={() => ejecutarImpresion(tarjetaImprimir)} className="bg-brand text-white font-bold text-xs gap-1.5 shadow-md">
+              <Button
+                onClick={() => ejecutarImpresion(tarjetaImprimir)}
+                className="bg-[var(--brasa)] text-[var(--tinta)] font-bold text-xs gap-1.5 shadow-md hover:bg-[var(--brasa-hover)]"
+              >
                 🖨️ Imprimir Ahora
               </Button>
             </div>
@@ -1529,7 +1936,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   border: 2px solid #000000 !important;
                   border-radius: 16px !important;
                   box-shadow: none !important;
-                  background: #ffffff !important;
+                  background: #EDE7DA !important;
                   color: #000000 !important;
                   page-break-inside: avoid !important;
                   break-inside: avoid !important;
