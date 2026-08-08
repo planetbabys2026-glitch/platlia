@@ -106,7 +106,6 @@ export function SubirImagen({ valorInicial }: { valorInicial?: string | null }) 
           )}
         >
           {tieneImagen ? (
-            // eslint-disable-next-line @next/next/no-img-element -- preview local, nunca la URL final.
             <img
               src={estado.previewUrl}
               alt=""
