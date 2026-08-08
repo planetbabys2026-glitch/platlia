@@ -13,7 +13,6 @@
 
 const BRASA = "#ff4e1f";
 const TINTA = "#171512";
-const PAPEL = "#ede7da";
 const SUAVE = "#5a554c";
 const BORDE = "#e5e0d3";
 

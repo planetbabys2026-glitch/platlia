@@ -1,4 +1,4 @@
-import { Clock, Smile, TrendingUp, Zap, ArrowUpRight, ShieldCheck } from "lucide-react";
+import { Smile, TrendingUp, Zap, ShieldCheck } from "lucide-react";
 
 export function EfficiencyManifesto() {
   return (

@@ -57,28 +57,20 @@ const ORDERS: OrderDemo[] = [
   },
 ];
 
-export function Hero() {
-  const [orderIndex, setOrderIndex] = useState(0);
+function ActiveHeroTicket({ order, onNext }: { order: OrderDemo; onNext: () => void }) {
   const [visibleItemsCount, setVisibleItemsCount] = useState(0);
   const [ticketStamped, setTicketStamped] = useState(false);
   const [stampTimeText, setStampTimeText] = useState("EN COCINA");
   const [chronoText, setChronoText] = useState("00:00.0");
   const [ticketFadeOut, setTicketFadeOut] = useState(false);
 
-  // Animación interactiva en vivo del ticket térmico
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    let chronoInterval: NodeJS.Timeout;
-    let startTime = Date.now();
-
-    const currentOrder = ORDERS[orderIndex];
-    setVisibleItemsCount(0);
-    setTicketStamped(false);
-    setTicketFadeOut(false);
-    setStampTimeText("EN COCINA");
+    const startTime = Date.now();
+    let stampTimer: NodeJS.Timeout | undefined;
+    let fadeTimer: NodeJS.Timeout | undefined;
 
     // Cronómetro en milisegundos
-    chronoInterval = setInterval(() => {
+    const chronoInterval = setInterval(() => {
       const d = Date.now() - startTime;
       const mm = String(Math.floor(d / 60000)).padStart(2, "0");
       const ss = String(Math.floor((d % 60000) / 1000)).padStart(2, "0");
@@ -91,11 +83,11 @@ export function Hero() {
     const itemInterval = setInterval(() => {
       count++;
       setVisibleItemsCount(count);
-      if (count >= currentOrder.items.length) {
+      if (count >= order.items.length) {
         clearInterval(itemInterval);
 
         // Estampado de despacho con sello
-        timer = setTimeout(() => {
+        stampTimer = setTimeout(() => {
           clearInterval(chronoInterval);
           const elapsed = Date.now() - startTime;
           const mm = String(Math.floor(elapsed / 60000)).padStart(2, "0");
@@ -104,10 +96,10 @@ export function Hero() {
           setTicketStamped(true);
 
           // Transición al siguiente pedido
-          setTimeout(() => {
+          fadeTimer = setTimeout(() => {
             setTicketFadeOut(true);
             setTimeout(() => {
-              setOrderIndex((prev) => (prev + 1) % ORDERS.length);
+              onNext();
             }, 400);
           }, 3500);
         }, 1200);
@@ -117,11 +109,122 @@ export function Hero() {
     return () => {
       clearInterval(chronoInterval);
       clearInterval(itemInterval);
-      clearTimeout(timer);
+      if (stampTimer) clearTimeout(stampTimer);
+      if (fadeTimer) clearTimeout(fadeTimer);
     };
-  }, [orderIndex]);
+  }, [order, onNext]);
 
-  const currentOrder = ORDERS[orderIndex];
+  return (
+    <div
+      className={`w-full max-w-md bg-[var(--panel-bg)] border border-[var(--linea-16)] rounded-2xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 ${
+        ticketFadeOut ? "opacity-30 scale-95" : "opacity-100 scale-100"
+      }`}
+    >
+      {/* Sello animado de despacho (stamp-in) */}
+      {ticketStamped && (
+        <div className="absolute top-10 right-6 z-20 pointer-events-none animate-stamp-in">
+          <div className="border-4 border-[var(--brasa)] bg-[var(--tinta)]/95 text-[var(--brasa)] font-display font-black text-xl px-4 py-1.5 rounded-xl uppercase tracking-wider shadow-2xl rotate-[-7deg] flex items-center gap-2">
+            <Flame className="size-5 animate-pulse" />
+            {stampTimeText}
+          </div>
+        </div>
+      )}
+
+      {/* Encabezado del Ticket */}
+      <div className="flex items-center justify-between border-b border-dashed border-[var(--linea-30)] pb-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="size-2.5 rounded-full bg-[var(--brasa)] animate-pulse" />
+          <span className="font-mono text-xs font-bold tracking-wider uppercase text-[var(--papel)]">
+            PLATLIA EN VIVO
+          </span>
+        </div>
+        <span className="font-mono text-[11px] text-[var(--linea)]">
+          COMANDA #{order.id} · {order.origen}
+        </span>
+      </div>
+
+      {/* Cronómetro en vivo */}
+      <div className="flex items-center justify-between bg-[var(--panel-2)] rounded-lg px-3.5 py-2 mb-4 border border-[var(--linea-16)]">
+        <span className="font-mono text-xs text-[var(--linea)] flex items-center gap-1.5">
+          <Clock className="size-3.5 text-[var(--brasa)]" /> TIEMPO EN FUEGO:
+        </span>
+        <span className="font-mono font-bold text-sm text-[var(--brasa)] tracking-wider">
+          {chronoText}
+        </span>
+      </div>
+
+      {/* Lista de Platos en Vivo */}
+      <div className="space-y-3 font-mono text-xs border-b border-dashed border-[var(--linea-30)] pb-4 mb-4 min-h-[140px]">
+        {order.items.slice(0, visibleItemsCount).map(([qty, name, price, area, notes], idx) => (
+          <div key={idx} className="flex justify-between items-start animate-card-in">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-[var(--papel)]">
+                  {qty}x {name}
+                </span>
+                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-[var(--panel-3)] text-[var(--linea)] font-bold">
+                  {area}
+                </span>
+              </div>
+              {notes && <p className="text-[11px] text-[var(--linea)] italic pl-2">· {notes}</p>}
+            </div>
+            <span className="text-[var(--papel)] font-semibold shrink-0 pl-2">
+              ${price.toLocaleString("es-CO")}
+            </span>
+          </div>
+        ))}
+
+        {visibleItemsCount < order.items.length && (
+          <div className="flex items-center gap-2 text-[var(--linea)] italic pt-1 animate-pulse">
+            <span className="size-1.5 rounded-full bg-[var(--brasa)]" />
+            <span>Imprimiendo comanda...</span>
+          </div>
+        )}
+      </div>
+
+      {/* Indicador de optimización de tiempo */}
+      <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-lg p-2.5 mb-3 flex items-center justify-between text-xs font-mono">
+        <span className="text-[var(--papel)] font-bold flex items-center gap-1.5">
+          <Sparkles className="size-3.5 text-[var(--brasa)]" /> Optimización de turno:
+        </span>
+        <span className="text-[var(--brasa)] font-bold">-4.5 min por servicio</span>
+      </div>
+
+      {/* Liquidación de Totales */}
+      <div className="space-y-1.5 font-mono text-xs text-[var(--linea)]">
+        <div className="flex justify-between">
+          <span>Subtotal Neto:</span>
+          <span className="text-[var(--papel)]">${order.subtotal.toLocaleString("es-CO")}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Impoconsumo (8% ICO):</span>
+          <span className="text-[var(--papel)]">${order.ico.toLocaleString("es-CO")}</span>
+        </div>
+        <div className="flex justify-between font-bold text-sm text-[var(--papel)] pt-2 border-t border-dashed border-[var(--linea-30)]">
+          <span>TOTAL CUENTA:</span>
+          <span className="text-[var(--brasa)] text-base font-black">
+            ${order.total.toLocaleString("es-CO")} COP
+          </span>
+        </div>
+      </div>
+
+      {/* Sello de comanda activa */}
+      <div className="mt-4 pt-3 border-t border-[var(--linea-16)] flex items-center justify-between">
+        <span className={`chip ${ticketStamped ? "is-hot" : ""} font-bold transition-all`}>
+          <Flame className="size-3" />
+          {ticketStamped ? "DESPACHADO A MESA" : "EN COCINA (KDS)"}
+        </span>
+        <span className="text-[11px] font-mono text-[var(--linea)]">
+          PAGO: {order.pago}
+        </span>
+      </div>
+
+    </div>
+  );
+}
+
+export function Hero() {
+  const [orderIndex, setOrderIndex] = useState(0);
 
   return (
     <section className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-28 bg-[radial-gradient(720px_460px_at_50%_0%,color-mix(in_oklch,var(--brasa)_8%,transparent),transparent_70%)] border-b border-dashed border-[var(--linea-30)]">
@@ -179,111 +282,11 @@ export function Hero() {
 
           {/* Columna Derecha - Simulación de Comanda Térmica en Vivo Animada */}
           <div className="lg:col-span-6 flex justify-center">
-            <div
-              className={`w-full max-w-md bg-[var(--panel-bg)] border border-[var(--linea-16)] rounded-2xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 ${
-                ticketFadeOut ? "opacity-30 scale-95" : "opacity-100 scale-100"
-              }`}
-            >
-              {/* Sello animado de despacho (stamp-in) */}
-              {ticketStamped && (
-                <div className="absolute top-10 right-6 z-20 pointer-events-none animate-stamp-in">
-                  <div className="border-4 border-[var(--brasa)] bg-[var(--tinta)]/95 text-[var(--brasa)] font-display font-black text-xl px-4 py-1.5 rounded-xl uppercase tracking-wider shadow-2xl rotate-[-7deg] flex items-center gap-2">
-                    <Flame className="size-5 animate-pulse" />
-                    {stampTimeText}
-                  </div>
-                </div>
-              )}
-
-              {/* Encabezado del Ticket */}
-              <div className="flex items-center justify-between border-b border-dashed border-[var(--linea-30)] pb-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-[var(--brasa)] animate-pulse" />
-                  <span className="font-mono text-xs font-bold tracking-wider uppercase text-[var(--papel)]">
-                    PLATLIA EN VIVO
-                  </span>
-                </div>
-                <span className="font-mono text-[11px] text-[var(--linea)]">
-                  COMANDA #{currentOrder.id} · {currentOrder.origen}
-                </span>
-              </div>
-
-              {/* Cronómetro en vivo */}
-              <div className="flex items-center justify-between bg-[var(--panel-2)] rounded-lg px-3.5 py-2 mb-4 border border-[var(--linea-16)]">
-                <span className="font-mono text-xs text-[var(--linea)] flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-[var(--brasa)]" /> TIEMPO EN FUEGO:
-                </span>
-                <span className="font-mono font-bold text-sm text-[var(--brasa)] tracking-wider">
-                  {chronoText}
-                </span>
-              </div>
-
-              {/* Lista de Platos en Vivo (Impresión renglón por renglón con animate-card-in) */}
-              <div className="space-y-3 font-mono text-xs border-b border-dashed border-[var(--linea-30)] pb-4 mb-4 min-h-[140px]">
-                {currentOrder.items.slice(0, visibleItemsCount).map(([qty, name, price, area, notes], idx) => (
-                  <div key={idx} className="flex justify-between items-start animate-card-in">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-[var(--papel)]">
-                          {qty}x {name}
-                        </span>
-                        <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-[var(--panel-3)] text-[var(--linea)] font-bold">
-                          {area}
-                        </span>
-                      </div>
-                      {notes && <p className="text-[11px] text-[var(--linea)] italic pl-2">· {notes}</p>}
-                    </div>
-                    <span className="text-[var(--papel)] font-semibold shrink-0 pl-2">
-                      ${price.toLocaleString("es-CO")}
-                    </span>
-                  </div>
-                ))}
-
-                {visibleItemsCount < currentOrder.items.length && (
-                  <div className="flex items-center gap-2 text-[var(--linea)] italic pt-1 animate-pulse">
-                    <span className="size-1.5 rounded-full bg-[var(--brasa)]" />
-                    <span>Imprimiendo comanda...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Indicador de optimización de tiempo */}
-              <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-lg p-2.5 mb-3 flex items-center justify-between text-xs font-mono">
-                <span className="text-[var(--papel)] font-bold flex items-center gap-1.5">
-                  <Sparkles className="size-3.5 text-[var(--brasa)]" /> Optimización de turno:
-                </span>
-                <span className="text-[var(--brasa)] font-bold">-4.5 min por servicio</span>
-              </div>
-
-              {/* Liquidación de Totales */}
-              <div className="space-y-1.5 font-mono text-xs text-[var(--linea)]">
-                <div className="flex justify-between">
-                  <span>Subtotal Neto:</span>
-                  <span className="text-[var(--papel)]">${currentOrder.subtotal.toLocaleString("es-CO")}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Impoconsumo (8% ICO):</span>
-                  <span className="text-[var(--papel)]">${currentOrder.ico.toLocaleString("es-CO")}</span>
-                </div>
-                <div className="flex justify-between font-bold text-sm text-[var(--papel)] pt-2 border-t border-dashed border-[var(--linea-30)]">
-                  <span>TOTAL CUENTA:</span>
-                  <span className="text-[var(--brasa)] text-base font-black">
-                    ${currentOrder.total.toLocaleString("es-CO")} COP
-                  </span>
-                </div>
-              </div>
-
-              {/* Sello de comanda activa */}
-              <div className="mt-4 pt-3 border-t border-[var(--linea-16)] flex items-center justify-between">
-                <span className={`chip ${ticketStamped ? "is-hot" : ""} font-bold transition-all`}>
-                  <Flame className="size-3" />
-                  {ticketStamped ? "DESPACHADO A MESA" : "EN COCINA (KDS)"}
-                </span>
-                <span className="text-[11px] font-mono text-[var(--linea)]">
-                  PAGO: {currentOrder.pago}
-                </span>
-              </div>
-
-            </div>
+            <ActiveHeroTicket
+              key={orderIndex}
+              order={ORDERS[orderIndex]}
+              onNext={() => setOrderIndex((prev) => (prev + 1) % ORDERS.length)}
+            />
           </div>
 
         </div>

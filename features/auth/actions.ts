@@ -32,7 +32,6 @@ import { enviarCorreoSinBloquear } from "@/lib/email/enviar";
 
 const DIA_MS = 86_400_000;
 const DIAS_DE_PRUEBA = 7;
-const DIAS_DE_GRACIA = 3;
 
 /** Tras 10 intentos fallidos la cuenta descansa 15 minutos. */
 const INTENTOS_MAXIMOS = 10;

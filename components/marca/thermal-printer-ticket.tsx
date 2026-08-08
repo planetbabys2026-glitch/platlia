@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Clock, Flame, Sparkles } from "lucide-react";
+import { Flame } from "lucide-react";
 
 interface OrderDemo {
   id: string;
@@ -45,8 +45,7 @@ const ORDERS: OrderDemo[] = [
   },
 ];
 
-export function ThermalPrinterTicket() {
-  const [orderIndex, setOrderIndex] = useState(0);
+function ActiveTicket({ order, onNext }: { order: OrderDemo; onNext: () => void }) {
   const [lineIndex, setLineIndex] = useState(0);
   const [stamped, setStamped] = useState(false);
   const [stampText, setStampText] = useState("LISTO · 00:00");
@@ -54,21 +53,12 @@ export function ThermalPrinterTicket() {
   const [liveLabel, setLiveLabel] = useState("EN COCINA");
   const [tearOff, setTearOff] = useState(false);
 
-  const order = ORDERS[orderIndex];
-
   useEffect(() => {
-    let chronoTimer: NodeJS.Timeout;
-    let lineTimer: NodeJS.Timeout;
-    let tearTimer: NodeJS.Timeout;
     const startTime = Date.now();
-
-    setLineIndex(0);
-    setStamped(false);
-    setTearOff(false);
-    setLiveLabel("EN COCINA");
+    let tearTimer: NodeJS.Timeout | undefined;
 
     // Cronómetro en vivo
-    chronoTimer = setInterval(() => {
+    const chronoTimer = setInterval(() => {
       const d = Date.now() - startTime;
       const mm = String(Math.floor(d / 60000)).padStart(2, "0");
       const ss = String(Math.floor((d % 60000) / 1000)).padStart(2, "0");
@@ -78,16 +68,16 @@ export function ThermalPrinterTicket() {
 
     // Impresión progresiva de líneas simulando salida del cabezal térmico
     let currentLine = 0;
-    const totalLines = 5 + order.items.length * 2; // cabecera, renglones, totales, pie
+    const totalLines = 5 + order.items.length * 2;
 
-    lineTimer = setInterval(() => {
+    const lineTimer = setInterval(() => {
       currentLine++;
       setLineIndex(currentLine);
 
       if (currentLine >= totalLines) {
         clearInterval(lineTimer);
 
-        // Estampado
+        // Estampado de comanda
         setTimeout(() => {
           clearInterval(chronoTimer);
           const elapsed = Date.now() - startTime;
@@ -101,29 +91,22 @@ export function ThermalPrinterTicket() {
           tearTimer = setTimeout(() => {
             setTearOff(true);
             setTimeout(() => {
-              setOrderIndex((prev) => (prev + 1) % ORDERS.length);
-            }, 500);
+              onNext();
+            }, 450);
           }, 3200);
-        }, 800);
+        }, 700);
       }
     }, 280);
 
     return () => {
       clearInterval(chronoTimer);
       clearInterval(lineTimer);
-      clearTimeout(tearTimer);
+      if (tearTimer) clearTimeout(tearTimer);
     };
-  }, [orderIndex]);
+  }, [order, onNext]);
 
   return (
-    <div className="w-full max-w-[430px] mx-auto flex flex-col items-center select-none">
-      
-      {/* ─── Boca de la Impresora Térmica (Hardware Slot) ─── */}
-      <div className="w-full h-9 rounded-t-xl bg-[#2a2723] border border-[var(--linea-30)] border-b-0 flex items-center justify-center relative shadow-lg z-20">
-        <span className="w-3/4 h-1.5 rounded-full bg-[#12100e] shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]" />
-        <span className="absolute right-4 size-2 rounded-full bg-[var(--brasa)] animate-pulse shadow-[0_0_8px_var(--brasa)]" />
-      </div>
-
+    <>
       {/* ─── Escenario del Ticket que emerge de la ranura ─── */}
       <div
         className={`w-full relative transition-all duration-500 ease-in-out ${
@@ -224,7 +207,27 @@ export function ThermalPrinterTicket() {
         <span>{liveLabel}</span>
         <span className="text-[var(--papel)] tabular-nums font-mono">[{chronoText}]</span>
       </div>
+    </>
+  );
+}
 
+export function ThermalPrinterTicket() {
+  const [orderIndex, setOrderIndex] = useState(0);
+
+  return (
+    <div className="w-full max-w-[430px] mx-auto flex flex-col items-center select-none">
+      {/* ─── Boca de la Impresora Térmica (Hardware Slot) ─── */}
+      <div className="w-full h-9 rounded-t-xl bg-[#2a2723] border border-[var(--linea-30)] border-b-0 flex items-center justify-center relative shadow-lg z-20">
+        <span className="w-3/4 h-1.5 rounded-full bg-[#12100e] shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]" />
+        <span className="absolute right-4 size-2 rounded-full bg-[var(--brasa)] animate-pulse shadow-[0_0_8px_var(--brasa)]" />
+      </div>
+
+      {/* Ticket activo animado */}
+      <ActiveTicket
+        key={orderIndex}
+        order={ORDERS[orderIndex]}
+        onNext={() => setOrderIndex((prev) => (prev + 1) % ORDERS.length)}
+      />
     </div>
   );
 }
