@@ -34,7 +34,9 @@ export function CampoContrasena({
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">
+        {label}
+      </Label>
       <div className="relative">
         <Input
           id={id}

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Send, CheckCircle2, Phone, Mail, MapPin, Clock } from "lucide-react";
 
@@ -37,61 +36,61 @@ export function ContactSection() {
   };
 
   return (
-    <section id="contacto" className="py-20 bg-background relative">
+    <section id="contacto" className="py-24 bg-[var(--tinta)] relative border-t border-dashed border-[var(--linea-30)]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           
           {/* Información Comercial */}
           <div className="lg:col-span-5 space-y-6">
-            <Badge variant="outline" className="border-brand/40 bg-brand/10 text-brand dark:text-[#3E9EA2] px-3 py-1 text-xs sm:text-sm font-medium">
-              Contacto Comercial
-            </Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+              — Asesoría Gastronómica Directa
+            </span>
+            <h2 className="font-display font-black text-4xl sm:text-5xl uppercase tracking-tight text-[var(--papel)] leading-[0.94]">
               Hablemos de tu restaurante o bar
             </h2>
-            <p className="text-muted-foreground text-base leading-relaxed">
-              ¿Tienes dudas sobre cómo implementar Platlia en tu local o necesitas una demostración guiada para tu equipo? Completa el formulario y te responderemos en menos de 2 horas.
+            <p className="text-[var(--muted)] text-base leading-relaxed">
+              ¿Tienes dudas sobre cómo implementar Platlia en tu local o necesitas una demostración guiada para tu equipo? Déjanos un mensaje y te responderemos en menos de 2 horas.
             </p>
 
-            <div className="space-y-4 pt-4 border-t border-border">
-              <div className="flex items-start gap-3 text-sm">
-                <div className="size-9 rounded-lg bg-brand/10 text-brand dark:text-[#3E9EA2] flex items-center justify-center shrink-0 mt-0.5">
+            <div className="space-y-4 pt-6 border-t border-dashed border-[var(--linea-30)]">
+              <div className="flex items-start gap-3.5 text-sm">
+                <div className="size-10 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] text-[var(--brasa)] flex items-center justify-center shrink-0">
                   <Phone className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">WhatsApp & Línea Comercial</p>
-                  <p className="text-muted-foreground">+57 (300) 123-4567</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">WhatsApp & Línea Comercial</p>
+                  <p className="font-bold text-[var(--papel)] text-base">+57 (310) 574-2111</p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 text-sm">
-                <div className="size-9 rounded-lg bg-brand/10 text-brand dark:text-[#3E9EA2] flex items-center justify-center shrink-0 mt-0.5">
+              <div className="flex items-start gap-3.5 text-sm">
+                <div className="size-10 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] text-[var(--brasa)] flex items-center justify-center shrink-0">
                   <Mail className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">Correo de Ventas & Soporte</p>
-                  <p className="text-muted-foreground">contacto@platlia.com</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">Correo de Ventas & Soporte</p>
+                  <p className="font-bold text-[var(--papel)] text-base">contacto@platlia.com</p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 text-sm">
-                <div className="size-9 rounded-lg bg-brand/10 text-brand dark:text-[#3E9EA2] flex items-center justify-center shrink-0 mt-0.5">
+              <div className="flex items-start gap-3.5 text-sm">
+                <div className="size-10 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] text-[var(--brasa)] flex items-center justify-center shrink-0">
                   <MapPin className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">Cobertura Nacional</p>
-                  <p className="text-muted-foreground">Bogotá, Medellín, Cali, Barranquilla, Bucaramanga y toda Colombia</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">Cobertura Nacional</p>
+                  <p className="font-bold text-[var(--papel)] text-base">Bogotá, Medellín, Cali, Barranquilla y toda Colombia</p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 text-sm">
-                <div className="size-9 rounded-lg bg-brand/10 text-brand dark:text-[#3E9EA2] flex items-center justify-center shrink-0 mt-0.5">
+              <div className="flex items-start gap-3.5 text-sm">
+                <div className="size-10 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] text-[var(--brasa)] flex items-center justify-center shrink-0">
                   <Clock className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">Horario de Atención Comercial</p>
-                  <p className="text-muted-foreground">Lunes a Sábado: 8:00 a.m. – 8:00 p.m.</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">Horario de Atención</p>
+                  <p className="font-bold text-[var(--papel)] text-base">Lunes a Domingo: 8:00 a.m. – 10:00 p.m.</p>
                 </div>
               </div>
             </div>
@@ -99,126 +98,132 @@ export function ContactSection() {
 
           {/* Formulario */}
           <div className="lg:col-span-7">
-            <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+            <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-8 sm:p-10 shadow-2xl">
               {enviado ? (
-                <div className="py-12 text-center space-y-4">
-                  <div className="size-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="size-8" />
+                <div className="text-center py-12 space-y-4">
+                  <div className="size-16 rounded-full bg-[var(--papel)] text-[var(--tinta)] flex items-center justify-center mx-auto shadow-lg">
+                    <CheckCircle2 className="size-8 stroke-[2.5]" />
                   </div>
-                  <h3 className="text-2xl font-bold text-foreground">¡Solicitud recibida con éxito!</h3>
-                  <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                    Gracias por escribirnos, <strong>{formData.nombre}</strong>. Un especialista en gastronomía se pondrá en contacto contigo al número <strong>{formData.telefono}</strong> o correo <strong>{formData.correo}</strong>.
+                  <h3 className="font-display font-black text-3xl uppercase text-[var(--papel)]">
+                    ¡Mensaje recibido con éxito!
+                  </h3>
+                  <p className="text-[var(--muted)] text-sm max-w-md mx-auto">
+                    Gracias por tu interés en Platlia. Nuestro equipo de soporte comercial se pondrá en contacto contigo muy pronto.
                   </p>
                   <Button
+                    type="button"
                     onClick={() => {
                       setEnviado(false);
                       setFormData({ nombre: "", negocio: "", correo: "", telefono: "", ciudad: "", mensaje: "" });
                     }}
                     variant="outline"
-                    className="mt-4"
+                    className="border-[var(--linea-30)] text-[var(--papel)] hover:bg-[var(--panel-2)] mt-4"
                   >
-                    Enviar otra consulta
+                    Enviar otro mensaje
                   </Button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="nombre" className="text-xs font-semibold">
-                        Nombre completo *
+                      <Label htmlFor="contact-nombre" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                        Tu nombre *
                       </Label>
                       <Input
-                        id="nombre"
+                        id="contact-nombre"
                         required
-                        placeholder="Ej. Alejandro Gómez"
+                        placeholder="Ej. Carlos Restrepo"
                         value={formData.nombre}
                         onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                        className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)]"
                       />
                     </div>
+
                     <div className="space-y-1.5">
-                      <Label htmlFor="negocio" className="text-xs font-semibold">
+                      <Label htmlFor="contact-negocio" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
                         Nombre del restaurante / bar
                       </Label>
                       <Input
-                        id="negocio"
-                        placeholder="Ej. Bar El Destilería"
+                        id="contact-negocio"
+                        placeholder="Ej. Hamburguesas La Brasa"
                         value={formData.negocio}
                         onChange={(e) => setFormData({ ...formData, negocio: e.target.value })}
+                        className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)]"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="correo" className="text-xs font-semibold">
+                      <Label htmlFor="contact-correo" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
                         Correo electrónico *
                       </Label>
                       <Input
-                        id="correo"
+                        id="contact-correo"
                         type="email"
                         required
-                        placeholder="ejemplo@restaurante.com"
+                        placeholder="carlos@mitiendadecomidas.com"
                         value={formData.correo}
                         onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
+                        className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)]"
                       />
                     </div>
+
                     <div className="space-y-1.5">
-                      <Label htmlFor="telefono" className="text-xs font-semibold">
-                        Teléfono / WhatsApp *
+                      <Label htmlFor="contact-telefono" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                        Celular / WhatsApp *
                       </Label>
                       <Input
-                        id="telefono"
+                        id="contact-telefono"
+                        type="tel"
                         required
-                        placeholder="Ej. 300 123 4567"
+                        placeholder="310 123 4567"
                         value={formData.telefono}
                         onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                        className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)]"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="ciudad" className="text-xs font-semibold">
-                      Ciudad o Municipio
+                    <Label htmlFor="contact-ciudad" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                      Ciudad o municipio
                     </Label>
                     <Input
-                      id="ciudad"
-                      placeholder="Ej. Medellín, Antioquia"
+                      id="contact-ciudad"
+                      placeholder="Ej. Medellín / Envigado"
                       value={formData.ciudad}
                       onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
+                      className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)]"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="mensaje" className="text-xs font-semibold">
-                      ¿En qué podemos ayudarte? (Opcional)
+                    <Label htmlFor="contact-mensaje" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                      ¿Cómo te podemos ayudar?
                     </Label>
                     <textarea
-                      id="mensaje"
+                      id="contact-mensaje"
                       rows={4}
-                      className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      placeholder="Cuéntanos cuántas mesas o sucursales tienes..."
+                      placeholder="Cuéntanos cuántas mesas tienes, si manejas domicilios o si deseas asesoría para migrar desde otro software..."
                       value={formData.mensaje}
                       onChange={(e) => setFormData({ ...formData, mensaje: e.target.value })}
+                      className="w-full rounded-lg border border-[var(--linea-30)] bg-[var(--panel-2)] px-3.5 py-2.5 text-sm text-[var(--papel)] outline-none focus:border-[var(--brasa)] focus:ring-2 focus:ring-[var(--brasa)]/30 resize-none"
                     />
                   </div>
 
                   <Button
                     type="submit"
                     disabled={enviando}
-                    className="w-full bg-brand text-brand-foreground hover:bg-brand/90 font-semibold h-11"
+                    className="w-full bg-[var(--brasa)] text-[var(--tinta)] font-bold hover:bg-[var(--brasa-hover)] h-12 text-base transition-all"
                   >
-                    {enviando ? (
-                      <span>Enviando mensaje...</span>
-                    ) : (
-                      <span className="flex items-center gap-2">
+                    {enviando ? "Enviando mensaje…" : (
+                      <span className="flex items-center justify-center gap-2">
                         <Send className="size-4" />
-                        Enviar consulta comercial
+                        <span>Enviar mensaje a ventas</span>
                       </span>
                     )}
                   </Button>
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    Al enviar este formulario aceptas nuestras políticas de Tratamiento de Datos (Habeas Data).
-                  </p>
                 </form>
               )}
             </div>

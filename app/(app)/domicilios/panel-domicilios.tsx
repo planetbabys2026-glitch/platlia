@@ -97,8 +97,8 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                 className={cn(
                   "rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 border",
                   filtroEstado === est.id
-                    ? "bg-brand text-white border-brand shadow-sm dark:bg-brand-accent dark:text-slate-950"
-                    : "bg-card text-muted-foreground hover:bg-accent border-border",
+                    ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] shadow-sm font-bold"
+                    : "bg-[var(--panel-2)] text-[var(--muted)] hover:text-[var(--papel)] border-[var(--linea-30)]",
                 )}
               >
                 {est.label} ({count})

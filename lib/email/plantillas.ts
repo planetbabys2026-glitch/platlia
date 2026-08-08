@@ -5,17 +5,17 @@
  * clientes de correo —Outlook sobre todo— no entienden flexbox ni grid, y un
  * correo que se ve roto en Gmail es peor que no mandarlo.
  *
- * Los colores son los de la marca, escritos a mano: acá no llegan las variables
- * CSS del producto.
+ * Los colores son los de la marca (Dark Kitchen-Fire):
+ * Brasa #ff4e1f, Tinta #171512, Papel #ede7da, Línea #c9c2af.
  *
  * Módulo puro: arma cadenas, no envía nada.
  */
 
-const VERDE = "#1d4e51";
-const TERRACOTA = "#a75f39";
-const TEXTO = "#12171a";
-const SUAVE = "#59656d";
-const BORDE = "#dde3e6";
+const BRASA = "#ff4e1f";
+const TINTA = "#171512";
+const PAPEL = "#ede7da";
+const SUAVE = "#5a554c";
+const BORDE = "#e5e0d3";
 
 function escapar(texto: string): string {
   return texto
@@ -28,17 +28,17 @@ function escapar(texto: string): string {
 function marco(contenido: string): string {
   return `<!doctype html>
 <html lang="es">
-<body style="margin:0;padding:24px;background:#f4f6f7;font-family:Helvetica,Arial,sans-serif;color:${TEXTO}">
+<body style="margin:0;padding:24px;background:#f5f2eb;font-family:Helvetica,Arial,sans-serif;color:${TINTA}">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid ${BORDE};border-radius:12px">
     <tr>
       <td style="padding:24px 28px">
-        <p style="margin:0 0 20px;font-size:18px;font-weight:bold;color:${VERDE}">Platlia</p>
+        <p style="margin:0 0 20px;font-size:20px;font-weight:900;letter-spacing:-0.5px;color:${BRASA}">PLATLIA</p>
         ${contenido}
       </td>
     </tr>
   </table>
   <p style="max-width:520px;margin:16px auto 0;font-size:12px;color:${SUAVE};text-align:center">
-    Platlia · Gestión de restaurantes y bares
+    Platlia · Sistema gastronómico para bares y restaurantes en Colombia
   </p>
 </body>
 </html>`;
@@ -46,8 +46,8 @@ function marco(contenido: string): string {
 
 function boton(url: string, texto: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0">
-    <tr><td style="background:${VERDE};border-radius:8px">
-      <a href="${escapar(url)}" style="display:inline-block;padding:12px 20px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px">${escapar(texto)}</a>
+    <tr><td style="background:${BRASA};border-radius:8px">
+      <a href="${escapar(url)}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px">${escapar(texto)}</a>
     </td></tr>
   </table>`;
 }
@@ -72,7 +72,7 @@ export function correoDeBienvenida(args: {
     <p style="margin:0 0 12px;font-size:15px">Hola ${escapar(args.nombre)},</p>
     <p style="margin:0 0 12px;font-size:15px;line-height:1.5">
       Te agregaron a <strong>${escapar(args.negocio)}</strong> como
-      <strong style="color:${TERRACOTA}">${escapar(args.rol.toLowerCase())}</strong>.
+      <strong style="color:${BRASA}">${escapar(args.rol.toLowerCase())}</strong>.
       Ya podés entrar con este correo.
     </p>
     ${boton(args.urlDeIngreso, "Entrar a Platlia")}

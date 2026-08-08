@@ -1010,8 +1010,8 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                     className={cn(
                       "rounded-lg border px-3 py-2 text-xs font-semibold transition-all text-center",
                       bgMode === modo.id
-                        ? "bg-brand text-white border-brand shadow-sm dark:bg-brand-accent dark:text-slate-950 font-bold"
-                        : "bg-card text-muted-foreground hover:bg-accent border-border",
+                        ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-sm"
+                        : "bg-[var(--panel-2)] text-[var(--muted)] hover:text-[var(--papel)] border-[var(--linea-30)]",
                     )}
                   >
                     {modo.label}

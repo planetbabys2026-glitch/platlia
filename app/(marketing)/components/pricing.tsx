@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles, ShieldCheck, CreditCard, Building2, HelpCircle, Store, PhoneCall, ArrowRight } from "lucide-react";
+import { Check, Sparkles, Building2, Store, PhoneCall, ArrowRight } from "lucide-react";
 
 export function Pricing() {
   const [sucursales, setSucursales] = useState<1 | 2 | "3+">(1);
@@ -53,19 +52,19 @@ export function Pricing() {
   const precio = calcularPrecio();
 
   return (
-    <section id="precios" className="py-20 bg-muted/30 border-y border-border relative">
+    <section id="precios" className="py-24 bg-[var(--tinta)] border-t border-dashed border-[var(--linea-30)] relative">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         {/* Encabezado */}
-        <div className="text-center max-w-3xl mx-auto space-y-4 mb-12">
-          <Badge variant="outline" className="border-brand-accent/40 bg-brand-accent/10 text-brand-accent px-3 py-1 text-xs sm:text-sm font-medium">
-            Precios Claros y Transparentes
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-            Elige el plan ideal para tus sucursales
+        <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
+          <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+            — Tarifas en Pesos Colombianos (COP)
+          </span>
+          <h2 className="font-display font-black text-4xl sm:text-6xl uppercase tracking-tight text-[var(--papel)] leading-[0.92]">
+            Tarifa plana sin letras pequeñas
           </h2>
-          <p className="text-muted-foreground text-lg leading-relaxed text-pretty">
-            Tarifa plana sin límite de mesas, meseros ni comandas. Disfruta de 7 días de prueba totalmente gratis.
+          <p className="text-[var(--muted)] text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
+            Sin límite de mesas, meseros, comandas ni pantallas conectadas. 7 días de prueba gratis sin ingresar tarjeta de crédito.
           </p>
 
           {/* Selectores de Sucursales y Frecuencia */}
@@ -73,51 +72,45 @@ export function Pricing() {
             
             {/* Selector de Sucursales */}
             <div className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-                1. Selecciona el número de sucursales:
+              <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--muted)] block">
+                1. SELECCIONA EL NÚMERO DE SUCURSALES:
               </span>
-              <div className="inline-flex flex-wrap justify-center items-center p-1 rounded-2xl bg-card border border-border shadow-sm gap-1">
+              <div className="inline-flex flex-wrap justify-center items-center p-1 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] gap-1">
                 <button
                   type="button"
                   onClick={() => setSucursales(1)}
-                  className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
                     sucursales === 1
-                      ? "bg-brand text-brand-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-[var(--papel)] text-[var(--tinta)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--papel)]"
                   }`}
                 >
-                  <Store className="size-4" />
-                  <span>1 Sucursal ($50k/mes)</span>
+                  <Store className="size-3.5" />
+                  <span>1 SUCURSAL ($50k/mes)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSucursales(2)}
-                  className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
                     sucursales === 2
-                      ? "bg-brand text-brand-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-[var(--papel)] text-[var(--tinta)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--papel)]"
                   }`}
                 >
-                  <Store className="size-4" />
-                  <span>2 Sucursales ($80k/mes)</span>
-                  <span className="bg-brand-accent text-brand-accent-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    Ahorras $20k/mes
-                  </span>
+                  <Store className="size-3.5" />
+                  <span>2 SUCURSALES ($80k/mes)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSucursales("3+")}
-                  className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
                     sucursales === "3+"
-                      ? "bg-brand text-brand-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-[var(--papel)] text-[var(--tinta)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--papel)]"
                   }`}
                 >
-                  <Building2 className="size-4" />
-                  <span>3+ Sucursales (Plan Cadena)</span>
-                  <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    Cotización Especial
-                  </span>
+                  <Building2 className="size-3.5" />
+                  <span>3+ SUCURSALES (CADENAS)</span>
                 </button>
               </div>
             </div>
@@ -125,47 +118,47 @@ export function Pricing() {
             {/* Selector de Frecuencia (Solo si no es 3+) */}
             {sucursales !== "3+" && (
               <div className="space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-                  2. Selecciona la frecuencia de pago:
+                <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--muted)] block">
+                  2. SELECCIONA LA FRECUENCIA DE PAGO:
                 </span>
-                <div className="inline-flex flex-wrap justify-center items-center p-1 rounded-2xl bg-card border border-border shadow-sm gap-1">
+                <div className="inline-flex flex-wrap justify-center items-center p-1 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] gap-1">
                   <button
                     type="button"
                     onClick={() => setFrecuencia("mensual")}
-                    className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                    className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all ${
                       frecuencia === "mensual"
-                        ? "bg-muted text-foreground font-semibold shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-[var(--papel)] text-[var(--tinta)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--papel)]"
                     }`}
                   >
-                    Mensual
+                    MENSUAL
                   </button>
                   <button
                     type="button"
                     onClick={() => setFrecuencia("6meses")}
-                    className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 ${
+                    className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
                       frecuencia === "6meses"
-                        ? "bg-brand text-brand-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-[var(--papel)] text-[var(--tinta)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--papel)]"
                     }`}
                   >
-                    <span>6 Meses</span>
-                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                    <span>6 MESES</span>
+                    <span className="bg-[var(--brasa)] text-[var(--tinta)] text-[10px] font-bold px-1.5 py-0.5 rounded">
                       -10%
                     </span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFrecuencia("12meses")}
-                    className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 ${
+                    className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
                       frecuencia === "12meses"
-                        ? "bg-brand text-brand-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs"
+                        : "text-[var(--muted)] hover:text-[var(--papel)]"
                     }`}
                   >
-                    <span>12 Meses (Anual)</span>
-                    <span className="bg-brand-accent text-brand-accent-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                      -20% (2 meses gratis)
+                    <span>12 MESES (ANUAL)</span>
+                    <span className="bg-[var(--tinta)] text-[var(--papel)] text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      -20%
                     </span>
                   </button>
                 </div>
@@ -176,11 +169,11 @@ export function Pricing() {
         </div>
 
         {/* Tarjeta Principal de Precio */}
-        <div className="max-w-xl mx-auto rounded-3xl border-2 border-brand/40 bg-card p-8 sm:p-10 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-brand text-brand-foreground font-semibold text-xs px-4 py-1.5 rounded-bl-xl shadow-sm flex items-center gap-1">
+        <div className="max-w-xl mx-auto rounded-2xl border border-[var(--brasa)]/60 bg-[var(--panel-bg)] p-8 sm:p-10 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 bg-[var(--brasa)] text-[var(--tinta)] font-bold text-xs font-mono px-4 py-1.5 rounded-bl-xl flex items-center gap-1">
             <Sparkles className="size-3.5" />
             <span>
-              {sucursales === 1 ? "1 Sucursal" : sucursales === 2 ? "2 Sucursales" : "3+ Sucursales"}
+              {sucursales === 1 ? "1 SUCURSAL" : sucursales === 2 ? "2 SUCURSALES" : "3+ SUCURSALES"}
             </span>
           </div>
 
@@ -188,167 +181,120 @@ export function Pricing() {
             /* Vista para 3 o más sucursales */
             <div className="space-y-6">
               <div>
-                <h3 className="text-2xl font-bold text-foreground">
-                  Plan Empresarial para Cadenas Gastronómicas
+                <h3 className="font-display font-black text-3xl uppercase text-[var(--papel)]">
+                  Plan Cadenas & Franquicias
                 </h3>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Para grupos gastronómicos, franquicias y marcas con 3 o más locales.
+                <p className="text-[var(--muted)] text-sm mt-1">
+                  Para grupos gastronómicos y marcas con 3 o más locales.
                 </p>
               </div>
 
-              <div className="py-6 border-y border-border/60 space-y-2">
-                <div className="text-3xl sm:text-4xl font-bold text-brand dark:text-[#3E9EA2]">
-                  Cotización Personalizada
+              <div className="py-6 border-y border-dashed border-[var(--linea-30)] space-y-2">
+                <div className="font-display font-black text-4xl text-[var(--brasa)]">
+                  Cotización Especial
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Ofrecemos tarifas preferenciales por volumen, consolidación multi-negocio y acompañamiento en la carga inicial de menús e insumos.
+                <p className="text-xs text-[var(--muted)]">
+                  Ofrecemos tarifas preferenciales por volumen, consolidación multi-negocio y acompañamiento en la carga inicial.
                 </p>
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Beneficios del Plan Empresarial (3+ locales):
+                <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">
+                  Beneficios del Plan Empresarial:
                 </p>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-foreground">
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[var(--papel)]">
                   {[
                     "Sucursales y marcas ilimitadas",
                     "Descuentos progresivos por volumen",
-                    "Consola matriz con reportes consolidados",
+                    "Consola matriz de informes consolidados",
                     "Capacitación guiada para el personal",
-                    "Migración e importación de catálogo",
-                    "Gerente de cuenta y soporte 24/7",
+                    "Migración de menú e inventario",
+                    "Soporte prioritario 1 a 1 por WhatsApp",
                   ].map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-xs sm:text-sm">
-                      <Check className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <li key={idx} className="flex items-center gap-2">
+                      <Check className="size-3.5 text-[var(--brasa)] shrink-0 stroke-[3]" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="pt-4 space-y-3">
-                <Button asChild size="lg" className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-base font-semibold h-13 shadow-md">
-                  <a href="#contacto" className="flex items-center justify-center gap-2">
-                    <PhoneCall className="size-4" />
-                    Contactar para definir precio
-                    <ArrowRight className="size-4" />
-                  </a>
-                </Button>
-                <p className="text-center text-xs text-muted-foreground">
-                  Respuesta comercial garantizada en menos de 2 horas hábiles.
-                </p>
-              </div>
+              <Button asChild className="w-full bg-[var(--brasa)] text-[var(--tinta)] font-bold hover:bg-[var(--brasa-hover)] h-12 text-base">
+                <a href="https://wa.me/573105742111?text=Hola%2C%20quisiera%20cotizar%20Platlia%20para%20un%20grupo%20gastron%C3%B3mico%20de%20varias%20sucursales" target="_blank" rel="noopener">
+                  <PhoneCall className="size-4 mr-2" />
+                  Hablar con un Asesor por WhatsApp
+                </a>
+              </Button>
             </div>
-          ) : (
-            /* Vista para 1 o 2 sucursales */
+          ) : precio ? (
+            /* Vista para 1 o 2 sucursales con calculadora */
             <div className="space-y-6">
               <div>
-                <h3 className="text-2xl font-bold text-foreground">
-                  Licencia Platlia {sucursales === 1 ? "Individual" : "Doble Sucursal"}
-                </h3>
-                <p className="text-muted-foreground text-sm mt-1">
-                  {sucursales === 1
-                    ? "Incluye 1 restaurante o bar con todos los módulos."
-                    : "Incluye 2 restaurantes o bares en el mismo grupo con consola unificada."}
-                </p>
-              </div>
-
-              {/* Cifra de precio calculada */}
-              {precio && (
-                <div className="py-4 border-y border-border/60 flex items-baseline gap-2">
-                  <span className="text-muted-foreground text-2xl font-medium">$</span>
-                  <div className="flex flex-col">
-                    <div className="flex items-baseline gap-2">
-                      <span className="numeral text-5xl sm:text-6xl font-bold tracking-tight text-foreground">
-                        {precio.mensualEquiv.toLocaleString("es-CO")}
-                      </span>
-                      <span className="text-muted-foreground text-sm font-medium">
-                        COP / mes equivalente
-                      </span>
-                    </div>
-                    <span className="text-xs text-brand-accent font-semibold mt-1">
-                      {precio.periodoText} · {precio.ahorroText}
-                    </span>
-                  </div>
+                <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--muted)]">
+                  PLAN PROFESIONAL ILIMITADO
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                  <span className="font-display font-black text-5xl sm:text-6xl text-[var(--papel)] leading-none tracking-tight">
+                    ${precio.mensualEquiv.toLocaleString("es-CO")}
+                  </span>
+                  <span className="font-mono text-xs text-[var(--muted)] uppercase">
+                    COP / MES
+                  </span>
                 </div>
-              )}
-
-              <div className="p-3.5 rounded-xl bg-brand/10 border border-brand/20 text-brand dark:text-[#3E9EA2] text-xs font-medium flex items-center gap-2">
-                <ShieldCheck className="size-4 shrink-0" />
-                <span>Prueba gratis durante 7 días sin tarjeta de crédito ni compromisos.</span>
+                <p className="font-mono text-xs text-[var(--brasa)] font-bold mt-2">
+                  {precio.ahorroText}
+                </p>
               </div>
 
-              {/* Lista de características incluidas */}
-              <div className="space-y-3 pt-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Características incluidas en la licencia:
+              <div className="py-4 border-y border-dashed border-[var(--linea-30)] space-y-2 text-xs text-[var(--muted)]">
+                <div className="flex justify-between font-mono">
+                  <span>Facturación:</span>
+                  <span className="text-[var(--papel)] font-bold">{precio.periodoText}</span>
+                </div>
+                <div className="flex justify-between font-mono">
+                  <span>Mesas y comandas:</span>
+                  <span className="text-[var(--papel)] font-bold">100% Ilimitadas</span>
+                </div>
+                <div className="flex justify-between font-mono">
+                  <span>Pantallas KDS conectadas:</span>
+                  <span className="text-[var(--papel)] font-bold">Sin límite</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--muted)]">
+                  Todo lo que incluye tu suscripción:
                 </p>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-foreground">
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-[var(--papel)]">
                   {[
-                    `${sucursales} ${sucursales === 1 ? "Sucursal completa incluida" : "Sucursales incluidas"}`,
-                    "📱 Menú Digital QR con autopedido (Colores, Logos, Cloudinary)",
-                    "🛵 Domicilios con trazabilidad Redis SSE y WhatsApp",
-                    "💰 Caja Dividida en 2 módulos (Cobros + Movimientos & Cierre)",
-                    "👨‍🍳 Comandas KDS a cocina con notas e integración Turnero TV",
-                    "📊 Inventario automático por costo de recetas",
-                    "🪑 Mesas, salones y usuarios ilimitados",
-                    "🖨️ Impresión de tiquetes térmicos y tarjetas QR",
-                    "🌙 Informes por jornada nocturna (corte 5:00 a.m.)",
-                    "🇨🇴 Soporte técnico preferencial en Colombia",
+                    "Plano de mesas en vivo",
+                    "POS mostrador táctil ultra-rápido",
+                    "Pantallas de cocina KDS ilimitadas",
+                    "Menú QR autopedidos personalizable",
+                    "Trazabilidad de domicilios y SSE",
+                    "Caja arqueo ciego y tirilla 55/80mm",
+                    "Recetas y descuento de stock",
+                    "Turnero TV para entrega de órdenes",
                   ].map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-xs sm:text-sm font-medium">
-                      <Check className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <li key={idx} className="flex items-center gap-2">
+                      <Check className="size-3.5 text-[var(--papel)] shrink-0 stroke-[3]" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              {/* Botón CTA */}
-              <div className="pt-4 space-y-3">
-                <Button asChild size="lg" className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-base font-semibold h-13 shadow-md">
-                  <Link href="/registro">
-                    Comenzar prueba gratis de 7 días
-                  </Link>
-                </Button>
-                <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-                  <CreditCard className="size-3.5" />
-                  <span>Cobro seguro administrado con MercadoPago</span>
-                </p>
-              </div>
-
+              <Button asChild className="w-full bg-[var(--brasa)] text-[var(--tinta)] font-bold hover:bg-[var(--brasa-hover)] h-12 text-base">
+                <Link href="/registro" className="flex items-center justify-center gap-2">
+                  <span>Empezar 7 días gratis</span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
             </div>
-          )}
-        </div>
+          ) : null}
 
-        {/* FAQ rápido */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          <div className="p-5 rounded-xl border border-border bg-card">
-            <h4 className="font-semibold text-sm text-foreground flex items-center gap-2 mb-2">
-              <HelpCircle className="size-4 text-brand" />
-              ¿Cómo funciona el descuento de 6 y 12 meses?
-            </h4>
-            <p className="text-xs text-muted-foreground">
-              Al contratar 6 meses obtienes un 10% de descuento. Al contratar 12 meses ahorras el 20%, equivalente a 2 meses totalmente gratis.
-            </p>
-          </div>
-          <div className="p-5 rounded-xl border border-border bg-card">
-            <h4 className="font-semibold text-sm text-foreground flex items-center gap-2 mb-2">
-              <Building2 className="size-4 text-brand" />
-              ¿Qué ocurre si tengo 3 o más sucursales?
-            </h4>
-            <p className="text-xs text-muted-foreground">
-              Para cadenas y grupos gastronómicos de 3 o más locales diseñamos un plan personalizado con tarifa por volumen y soporte dedicado.
-            </p>
-          </div>
-          <div className="p-5 rounded-xl border border-border bg-card">
-            <h4 className="font-semibold text-sm text-foreground flex items-center gap-2 mb-2">
-              <CreditCard className="size-4 text-brand" />
-              ¿Qué medios de pago aceptan?
-            </h4>
-            <p className="text-xs text-muted-foreground">
-              Tarjetas de crédito/débito, PSE, Nequi, Daviplata y puntos de efectivo en Colombia con factura electrónica enviada a tu correo.
-            </p>
+          <div className="pt-4 text-center font-mono text-[11px] text-[var(--linea-55)] tracking-wider">
+            SIN CONTRATO DE PERMANENCIA · CANCELA CUANDO QUIERAS
           </div>
         </div>
 

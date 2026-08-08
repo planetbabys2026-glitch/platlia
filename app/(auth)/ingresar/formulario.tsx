@@ -9,13 +9,27 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ingresar } from "@/features/auth/actions";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { ArrowRight, Loader2 } from "lucide-react";
 
 function Enviar({ children }: { children: React.ReactNode }) {
-  // useFormStatus solo funciona dentro del <form>, en un componente aparte.
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? "Un momento…" : children}
+    <Button
+      type="submit"
+      className="w-full bg-[var(--brasa)] text-[var(--tinta)] hover:bg-[var(--brasa-hover)] font-bold text-base h-12 shadow-lg shadow-[var(--brasa)]/20 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+      disabled={pending}
+    >
+      {pending ? (
+        <span className="flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          Verificando credenciales…
+        </span>
+      ) : (
+        <span className="flex items-center gap-2">
+          {children}
+          <ArrowRight className="size-4" />
+        </span>
+      )}
     </Button>
   );
 }
@@ -28,7 +42,7 @@ export function FormularioIngreso({ desde }: { desde?: string }) {
       {desde && <input type="hidden" name="desde" value={desde} />}
 
       {!estado.ok && estado.error && (
-        <Alert variant="destructive" role="alert">
+        <Alert variant="destructive" role="alert" className="animate-shake border-destructive/40 bg-destructive/15 text-rose-300 rounded-xl">
           <AlertDescription>{estado.error}</AlertDescription>
         </Alert>
       )}
@@ -50,14 +64,14 @@ export function FormularioIngreso({ desde }: { desde?: string }) {
           required
           errores={!estado.ok ? estado.campos?.password : undefined}
         />
-        <p className="text-right text-sm">
-          <Link href="/recuperar" className="text-muted-foreground hover:text-foreground">
+        <p className="text-right text-xs pt-1">
+          <Link href="/recuperar" className="text-[var(--linea)] hover:text-[var(--papel)] transition-colors">
             ¿Olvidaste tu contraseña?
           </Link>
         </p>
       </div>
 
-      <Enviar>Ingresar</Enviar>
+      <Enviar>Ingresar al panel</Enviar>
     </form>
   );
 }

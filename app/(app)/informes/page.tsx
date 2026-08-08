@@ -13,19 +13,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireModule } from "@/lib/auth/dal";
 import { formatCop, formatRateBp, promedioCop, variacionPorcentual } from "@/lib/money";
 import { currentBusinessDate, formatBusinessDate, parseBusinessDate } from "@/lib/time";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
-export const metadata: Metadata = { title: "Informes" };
+export const metadata: Metadata = { title: "Informes & Ventas · Platlia" };
 export const dynamic = "force-dynamic";
 
 const METODO: Record<string, string> = {
-  EFECTIVO: "Efectivo",
+  EFECTIVO: "Efectivo en caja",
   TARJETA_DEBITO: "Tarjeta débito",
   TARJETA_CREDITO: "Tarjeta crédito",
   NEQUI: "Nequi",
   DAVIPLATA: "Daviplata",
-  TRANSFERENCIA: "Transferencia",
-  BONO: "Bono",
-  OTRO: "Otro",
+  TRANSFERENCIA: "Transferencia bancaria",
+  BONO: "Bono / Vale",
+  OTRO: "Otro medio de pago",
 };
 
 const DIA_MS = 86_400_000;
@@ -65,69 +66,92 @@ export default async function InformesPage({
   const esHoy = dia.getTime() === hoy.getTime();
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Informes</h1>
-          <p className="text-muted-foreground text-sm">
-            Jornada del <span className="numeral">{formatBusinessDate(dia)}</span>
-            {esHoy && " · en curso"}
+    <div className="space-y-8 max-w-7xl">
+      {/* ─── Header Informes Dark Kitchen-Fire ─── */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
+        <div>
+          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-foreground leading-[0.95]">
+            Informes & Ventas
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1.5 font-sans">
+            Jornada del <span className="font-mono font-bold text-foreground">{formatBusinessDate(dia)}</span>
+            {esHoy && <span className="text-brand font-semibold ml-2">● En curso (Corte 5:00 a.m.)</span>}
           </p>
         </div>
 
-        {/* La jornada empieza a las {corte}, no a medianoche: lo vendido en la
-            madrugada cuenta para el día anterior. */}
-        <nav className="flex items-center gap-3 text-sm">
+        <nav className="flex items-center gap-2">
           <Link
             href={`/informes?jornada=${formatBusinessDate(anterior)}`}
-            className="text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
           >
-            ← Día anterior
+            <ArrowLeft className="size-3.5" /> Día anterior
           </Link>
           {!esHoy && (
-            <Link href="/informes" className="text-primary hover:underline">
-              Hoy
+            <Link
+              href="/informes"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/50 bg-brand/10 text-xs font-mono text-brand font-bold hover:bg-brand/20 transition-colors"
+            >
+              Ver hoy <ArrowRight className="size-3.5" />
             </Link>
           )}
         </nav>
       </div>
 
+      {/* ─── KPIs Gastronómicos Principales ─── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Indicador
-          titulo="Ventas"
+          titulo="VENTAS FACTURADAS"
           valor={formatCop(resumen.ventasCop)}
           detalle={
             variacion === null
-              ? "sin ventas el día anterior"
+              ? "Sin ventas registradas el día anterior"
               : `${variacion >= 0 ? "+" : ""}${variacion}% vs. día anterior`
           }
+          isPositive={variacion !== null && variacion >= 0}
         />
-        <Indicador titulo="Pedidos" valor={resumen.pedidos} />
-        <Indicador titulo="Ticket promedio" valor={formatCop(ticket)} />
         <Indicador
-          titulo="Propinas"
+          titulo="TOTAL COMANDAS"
+          valor={`${resumen.pedidos} pedidos`}
+          detalle="Comandas de salón, mostrador y domicilios"
+        />
+        <Indicador
+          titulo="TICKET PROMEDIO"
+          valor={formatCop(ticket)}
+          detalle="Gasto promedio por orden cerrada"
+        />
+        <Indicador
+          titulo="PROPINAS SUGERIDAS"
           valor={formatCop(resumen.propinasCop)}
-          detalle="no son ingreso del negocio"
+          detalle="10% voluntario recaudado para el equipo"
         />
       </div>
 
+      {/* ─── Medios de Pago & Impuestos ─── */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardContent className="space-y-3">
-            <h2 className="font-medium">Cómo pagaron</h2>
+        <Card className="border-border/80 bg-card">
+          <CardContent className="space-y-4 pt-5">
+            <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+              <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                Medios de Pago
+              </h2>
+              <span className="font-mono text-[10px] text-muted-foreground">RECAUDO</span>
+            </div>
+
             {porMetodo.length === 0 ? (
               <Vacio />
             ) : (
-              <ul className="divide-border divide-y text-sm">
+              <ul className="divide-border/60 divide-y divide-dashed text-sm">
                 {porMetodo.map((m) => (
-                  <li key={m.method} className="flex justify-between gap-2 py-2 first:pt-0">
-                    <span>
-                      {METODO[m.method] ?? m.method}
-                      <span className="text-muted-foreground ml-2 text-xs">
-                        {m.cantidad} {m.cantidad === 1 ? "cobro" : "cobros"}
+                  <li key={m.method} className="flex justify-between items-center py-2.5 first:pt-0">
+                    <div>
+                      <span className="font-medium text-foreground">{METODO[m.method] ?? m.method}</span>
+                      <span className="text-muted-foreground ml-2 font-mono text-xs">
+                        ({m.cantidad} {m.cantidad === 1 ? "cobro" : "cobros"})
                       </span>
+                    </div>
+                    <span className="numeral font-mono font-bold text-foreground text-sm">
+                      {formatCop(m.totalCop)}
                     </span>
-                    <span className="numeral font-medium">{formatCop(m.totalCop)}</span>
                   </li>
                 ))}
               </ul>
@@ -135,26 +159,34 @@ export default async function InformesPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="space-y-3">
-            <h2 className="font-medium">Impuesto por tarifa</h2>
+        <Card className="border-border/80 bg-card">
+          <CardContent className="space-y-4 pt-5">
+            <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+              <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                Impuestos & Tarifas
+              </h2>
+              <span className="font-mono text-[10px] text-muted-foreground">IMPOCONSUMO (ICO) / IVA</span>
+            </div>
+
             {porTarifa.length === 0 ? (
               <Vacio />
             ) : (
-              <ul className="divide-border divide-y text-sm">
+              <ul className="divide-border/60 divide-y divide-dashed text-sm">
                 {porTarifa.map((t) => (
-                  <li key={`${t.nombre}-${t.rateBp}`} className="space-y-0.5 py-2 first:pt-0">
-                    <div className="flex justify-between gap-2">
-                      <span>
+                  <li key={`${t.nombre}-${t.rateBp}`} className="space-y-1 py-2.5 first:pt-0">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-foreground">
                         {t.nombre}{" "}
-                        <span className="text-muted-foreground text-xs">
-                          {formatRateBp(t.rateBp)}
+                        <span className="text-brand font-mono text-xs font-bold ml-1">
+                          ({formatRateBp(t.rateBp)})
                         </span>
                       </span>
-                      <span className="numeral font-medium">{formatCop(t.impuestoCop)}</span>
+                      <span className="numeral font-mono font-bold text-foreground">
+                        {formatCop(t.impuestoCop)}
+                      </span>
                     </div>
-                    <div className="text-muted-foreground flex justify-between gap-2 text-xs">
-                      <span>base gravable</span>
+                    <div className="text-muted-foreground flex justify-between font-mono text-xs">
+                      <span>Base gravable neta:</span>
                       <span className="numeral">{formatCop(t.baseCop)}</span>
                     </div>
                   </li>
@@ -165,20 +197,34 @@ export default async function InformesPage({
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="space-y-3">
-          <h2 className="font-medium">Lo más vendido</h2>
+      {/* ─── Lo Más Vendido ─── */}
+      <Card className="border-border/80 bg-card">
+        <CardContent className="space-y-4 pt-5">
+          <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+            <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+              Ranking de Platos y Bebidas Más Vendidos
+            </h2>
+            <span className="font-mono text-[10px] text-muted-foreground">TOP DE LA JORNADA</span>
+          </div>
+
           {top.length === 0 ? (
             <Vacio />
           ) : (
-            <ul className="divide-border divide-y text-sm">
-              {top.map((p) => (
-                <li key={p.nombre} className="flex justify-between gap-2 py-2 first:pt-0">
-                  <span>
-                    <span className="numeral text-muted-foreground mr-2">{p.unidades}</span>
-                    {p.nombre}
+            <ul className="divide-border/60 divide-y divide-dashed text-sm">
+              {top.map((p, idx) => (
+                <li key={p.nombre} className="flex justify-between items-center py-2.5 first:pt-0">
+                  <div className="flex items-center gap-3">
+                    <span className="size-6 rounded-full bg-muted/60 text-muted-foreground font-mono text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <span className="font-medium text-foreground">{p.nombre}</span>
+                    <span className="text-muted-foreground font-mono text-xs">
+                      ({p.unidades} {p.unidades === 1 ? "unidad" : "unidades"})
+                    </span>
+                  </div>
+                  <span className="numeral font-mono font-bold text-foreground">
+                    {formatCop(p.totalCop)}
                   </span>
-                  <span className="numeral font-medium">{formatCop(p.totalCop)}</span>
                 </li>
               ))}
             </ul>
@@ -186,31 +232,35 @@ export default async function InformesPage({
         </CardContent>
       </Card>
 
+      {/* ─── Anulaciones ─── */}
       {(anulaciones.renglones.length > 0 || anulaciones.pedidosAnulados > 0) && (
-        <Card>
-          <CardContent className="space-y-3">
-            <h2 className="font-medium">Anulaciones</h2>
-            <p className="text-muted-foreground text-xs">
-              {anulaciones.pedidosAnulados > 0 &&
-                `${anulaciones.pedidosAnulados} ${anulaciones.pedidosAnulados === 1 ? "pedido anulado" : "pedidos anulados"}. `}
-              Quedan registradas con quién y por qué.
-            </p>
-            <ul className="divide-border divide-y text-sm">
+        <Card className="border-border/80 bg-card">
+          <CardContent className="space-y-4 pt-5">
+            <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+              <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                Auditoría de Anulaciones
+              </h2>
+              <span className="font-mono text-[10px] text-brand font-bold">SEGURIDAD FISCAL</span>
+            </div>
+
+            <ul className="divide-border/60 divide-y divide-dashed text-sm">
               {anulaciones.renglones.map((r) => (
-                <li key={r.id} className="space-y-0.5 py-2 first:pt-0">
-                  <div className="flex justify-between gap-2">
-                    <span>
-                      <span className="numeral text-muted-foreground mr-2">{r.quantity}</span>
+                <li key={r.id} className="space-y-1 py-2.5 first:pt-0">
+                  <div className="flex justify-between items-center">
+                    <span className="text-foreground">
+                      <span className="numeral font-bold text-brand mr-2">{r.quantity}x</span>
                       {r.nameSnapshot}
-                      <span className="text-muted-foreground ml-2 text-xs">
-                        pedido {r.order.code}
+                      <span className="text-muted-foreground ml-2 font-mono text-xs">
+                        (Pedido #{r.order.code})
                       </span>
                     </span>
-                    <span className="numeral">{formatCop(r.lineTotalCop)}</span>
+                    <span className="numeral font-mono font-bold text-foreground">
+                      {formatCop(r.lineTotalCop)}
+                    </span>
                   </div>
-                  <p className="text-muted-foreground text-xs">
-                    {r.canceledReason}
-                    {r.canceledBy && ` · ${r.canceledBy.name}`}
+                  <p className="text-muted-foreground text-xs font-mono">
+                    Motivo: {r.canceledReason}
+                    {r.canceledBy && ` · Anulado por ${r.canceledBy.name}`}
                   </p>
                 </li>
               ))}
@@ -226,22 +276,32 @@ function Indicador({
   titulo,
   valor,
   detalle,
+  isPositive,
 }: {
   titulo: string;
   valor: string | number;
   detalle?: string;
+  isPositive?: boolean;
 }) {
   return (
-    <Card>
-      <CardContent className="space-y-1">
-        <p className="text-muted-foreground text-sm">{titulo}</p>
-        <p className="numeral text-2xl font-semibold">{valor}</p>
-        {detalle && <p className="text-muted-foreground text-xs">{detalle}</p>}
+    <Card className="border-border/80 bg-card">
+      <CardContent className="space-y-2 pt-5">
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          {titulo}
+        </p>
+        <p className="font-display font-black text-3xl numeral text-foreground leading-none">
+          {valor}
+        </p>
+        {detalle && (
+          <p className={`font-mono text-[11px] ${isPositive ? "text-brand font-bold" : "text-muted-foreground"}`}>
+            {detalle}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function Vacio() {
-  return <p className="text-muted-foreground text-sm">No hubo movimiento en esta jornada.</p>;
+  return <p className="text-muted-foreground text-sm py-4 text-center">No hubo movimientos registrados en esta jornada.</p>;
 }

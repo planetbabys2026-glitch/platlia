@@ -79,8 +79,8 @@ export function PanelCaja({
             className={cn(
               "inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
               tabActiva === "cobros"
-                ? "bg-brand text-white border-brand shadow-md dark:bg-brand-accent dark:text-slate-950 font-bold scale-[1.02]"
-                : "bg-card text-muted-foreground border-border hover:bg-accent hover:text-foreground",
+                ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
+                : "bg-[var(--panel-2)] text-[var(--muted)] border-[var(--linea-30)] hover:text-[var(--papel)]",
             )}
           >
             <CreditCard className="h-4 w-4 shrink-0" />
@@ -90,8 +90,8 @@ export function PanelCaja({
                 className={cn(
                   "ml-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold",
                   tabActiva === "cobros"
-                    ? "bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
-                    : "bg-brand/20 text-brand dark:text-brand-accent",
+                    ? "bg-[var(--tinta)] text-[var(--papel)]"
+                    : "bg-[var(--brasa)]/20 text-[var(--brasa)]",
                 )}
               >
                 {cuentas.length}
@@ -106,8 +106,8 @@ export function PanelCaja({
           className={cn(
             "inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
             tabActiva === "movimientos"
-              ? "bg-brand text-white border-brand shadow-md dark:bg-brand-accent dark:text-slate-950 font-bold scale-[1.02]"
-              : "bg-card text-muted-foreground border-border hover:bg-accent hover:text-foreground",
+              ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
+              : "bg-[var(--panel-2)] text-[var(--muted)] border-[var(--linea-30)] hover:text-[var(--papel)]",
           )}
         >
           <ArrowDownUp className="h-4 w-4 shrink-0" />

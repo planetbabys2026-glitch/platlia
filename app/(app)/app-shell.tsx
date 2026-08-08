@@ -180,20 +180,20 @@ export function AppShell({
           ───────────────────────────────────────────────────────────── */}
       <aside
         className={cn(
-          "hidden md:flex flex-col sticky top-0 h-screen border-r border-border bg-card transition-all duration-300 z-30 shrink-0",
+          "hidden md:flex flex-col sticky top-0 h-screen border-r border-[var(--linea-16)] bg-[var(--tinta)] transition-all duration-300 z-30 shrink-0",
           collapsed ? "w-20" : "w-64",
         )}
       >
         {/* Header de la Barra Lateral */}
-        <div className="flex h-16 items-center justify-between px-4 border-b border-border/80">
+        <div className="flex h-16 items-center justify-between px-4 border-b border-[var(--linea-16)]">
           <Link
             href="/panel"
-            className="flex items-center gap-2 overflow-hidden focus:outline-none focus:ring-2 focus:ring-brand rounded-lg p-1"
+            className="flex items-center gap-2 overflow-hidden focus:outline-none focus:ring-2 focus:ring-[var(--brasa)] rounded-lg p-1"
           >
             {collapsed ? (
               <Isotipo className="h-7 w-auto shrink-0" />
             ) : (
-              <Logotipo className="h-7 w-auto" />
+              <Logotipo size="sm" />
             )}
           </Link>
 
@@ -203,7 +203,7 @@ export function AppShell({
             size="icon"
             onClick={toggleCollapsed}
             title={collapsed ? "Expandir menú" : "Colapsar menú"}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+            className="h-8 w-8 text-[var(--muted)] hover:text-[var(--papel)] hover:bg-[var(--panel-2)] shrink-0"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
@@ -214,8 +214,8 @@ export function AppShell({
           {/* Grupo: Operación */}
           <div className="space-y-1">
             {!collapsed && (
-              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-2">
-                Operación
+              <p className="px-3 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--muted)] mb-2">
+                — Operación
               </p>
             )}
             {operacionItems.map((item) => {
@@ -228,21 +228,21 @@ export function AppShell({
                   href={item.href}
                   title={collapsed ? item.titulo : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group relative",
                     activo
-                      ? "bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-accent font-bold"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      ? "bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold"
+                      : "text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--papel)]",
                   )}
                 >
                   <Icono
                     className={cn(
-                      "h-5 w-5 shrink-0 transition-transform group-hover:scale-110",
-                      activo ? "text-brand dark:text-brand-accent" : "text-muted-foreground",
+                      "h-4.5 w-4.5 shrink-0 transition-transform group-hover:scale-110",
+                      activo ? "text-[var(--brasa)]" : "text-[var(--muted)]",
                     )}
                   />
                   {!collapsed && <span className="truncate">{item.titulo}</span>}
                   {activo && (
-                    <span className="absolute right-0 top-2 bottom-2 w-1 bg-brand rounded-l-full" />
+                    <span className="absolute right-0 top-1.5 bottom-1.5 w-1 bg-[var(--brasa)] rounded-l-full" />
                   )}
                 </Link>
               );
@@ -252,8 +252,8 @@ export function AppShell({
           {/* Grupo: Gestión + Acordeón de Administración */}
           <div className="space-y-1">
             {!collapsed && (
-              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-2">
-                Gestión
+              <p className="px-3 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--muted)] mb-2">
+                — Gestión
               </p>
             )}
             {gestionItems.map((item) => {
@@ -266,21 +266,21 @@ export function AppShell({
                   href={item.href}
                   title={collapsed ? item.titulo : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group relative",
                     activo
-                      ? "bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-accent font-bold"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      ? "bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold"
+                      : "text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--papel)]",
                   )}
                 >
                   <Icono
                     className={cn(
-                      "h-5 w-5 shrink-0 transition-transform group-hover:scale-110",
-                      activo ? "text-brand dark:text-brand-accent" : "text-muted-foreground",
+                      "h-4.5 w-4.5 shrink-0 transition-transform group-hover:scale-110",
+                      activo ? "text-[var(--brasa)]" : "text-[var(--muted)]",
                     )}
                   />
                   {!collapsed && <span className="truncate">{item.titulo}</span>}
                   {activo && (
-                    <span className="absolute right-0 top-2 bottom-2 w-1 bg-brand rounded-l-full" />
+                    <span className="absolute right-0 top-1.5 bottom-1.5 w-1 bg-[var(--brasa)] rounded-l-full" />
                   )}
                 </Link>
               );
@@ -296,17 +296,17 @@ export function AppShell({
                 }}
                 title={collapsed ? "Administración" : undefined}
                 className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative",
+                  "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group relative",
                   esAdminActivo
-                    ? "bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-accent font-bold"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold"
+                    : "text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--papel)]",
                 )}
               >
                 <div className="flex items-center gap-3 truncate">
                   <Settings
                     className={cn(
-                      "h-5 w-5 shrink-0 transition-transform group-hover:scale-110",
-                      esAdminActivo ? "text-brand dark:text-brand-accent" : "text-muted-foreground",
+                      "h-4.5 w-4.5 shrink-0 transition-transform group-hover:scale-110",
+                      esAdminActivo ? "text-[var(--brasa)]" : "text-[var(--muted)]",
                     )}
                   />
                   {!collapsed && <span className="truncate">Administración</span>}
@@ -314,7 +314,7 @@ export function AppShell({
                 {!collapsed && (
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 shrink-0 transition-transform duration-200",
+                      "h-4 w-4 shrink-0 transition-transform duration-200 text-[var(--muted)]",
                       adminOpen && "rotate-180",
                     )}
                   />
@@ -323,7 +323,7 @@ export function AppShell({
 
               {/* Subniveles desplegables en Acordeón */}
               {adminOpen && !collapsed && (
-                <div className="ml-4 pl-3 border-l-2 border-border/70 space-y-1 pt-1">
+                <div className="ml-4 pl-3 border-l border-dashed border-[var(--linea-30)] space-y-1 pt-1">
                   {adminSubItems.map((sub) => {
                     const SubIcono = sub.icono;
                     const activo = pathname === sub.href;
@@ -333,13 +333,13 @@ export function AppShell({
                         key={sub.href}
                         href={sub.href}
                         className={cn(
-                          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all",
+                          "flex items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium transition-all",
                           activo
-                            ? "bg-brand text-white dark:bg-brand-accent dark:text-slate-950 font-bold shadow-sm"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] font-bold shadow-sm"
+                            : "text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--papel)]",
                         )}
                       >
-                        <SubIcono className="h-4 w-4 shrink-0" />
+                        <SubIcono className="h-3.5 w-3.5 shrink-0" />
                         <span>{sub.titulo}</span>
                       </Link>
                     );
@@ -351,19 +351,19 @@ export function AppShell({
         </nav>
 
         {/* Footer de la Barra Lateral (Usuario, Cambiar Sucursal y Salir) */}
-        <div className="border-t border-border/80 p-3 bg-muted/20 space-y-2">
+        <div className="border-t border-[var(--linea-16)] p-3 bg-[var(--panel-bg)] space-y-2">
           {!collapsed && businessName && (
             <Link
               href="/elegir-negocio"
-              className="flex items-center justify-between p-2 rounded-xl bg-card border border-border/80 hover:border-brand hover:bg-brand/5 transition-all text-xs"
+              className="flex items-center justify-between p-2 rounded-lg bg-[var(--panel-2)] border border-[var(--linea-30)] hover:border-[var(--brasa)] transition-all text-xs"
               title="Cambiar de sucursal / Ver mis locales"
             >
               <div className="flex items-center gap-2 truncate">
-                <Store className="size-3.5 text-brand dark:text-brand-accent shrink-0" />
-                <span className="font-bold text-foreground truncate">{businessName}</span>
+                <Store className="size-3.5 text-[var(--brasa)] shrink-0" />
+                <span className="font-bold text-[var(--papel)] truncate">{businessName}</span>
               </div>
-              <span className="text-[10px] font-bold bg-brand/10 text-brand px-1.5 py-0.5 rounded shrink-0">
-                Cambiar 🔄
+              <span className="text-[10px] font-mono font-bold bg-[var(--brasa)]/15 text-[var(--brasa)] px-1.5 py-0.5 rounded shrink-0">
+                CAMBIAR
               </span>
             </Link>
           )}
@@ -371,11 +371,11 @@ export function AppShell({
           <div className={cn("flex items-center gap-2", collapsed ? "justify-center" : "justify-between")}>
             {user && !collapsed && (
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand font-bold text-xs uppercase border border-brand/30">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--panel-2)] border border-[var(--linea-30)] text-[var(--papel)] font-mono font-bold text-xs uppercase">
                   {user.name.slice(0, 2)}
                 </div>
                 <div className="truncate text-xs">
-                  <p className="font-semibold truncate text-foreground">{user.name}</p>
+                  <p className="font-semibold truncate text-[var(--papel)]">{user.name}</p>
                 </div>
               </div>
             )}
@@ -495,16 +495,16 @@ export function AppShell({
                         href={item.href}
                         onClick={() => setMobileOpen(false)}
                         className={cn(
-                          "flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base font-medium transition-colors",
+                          "flex items-center gap-3.5 rounded-lg px-3.5 py-3 text-base font-medium transition-colors",
                           activo
-                            ? "bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-accent font-bold"
-                            : "text-foreground hover:bg-accent",
+                            ? "bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold"
+                            : "text-[var(--papel)] hover:bg-[var(--panel-2)]",
                         )}
                       >
                         <Icono
                           className={cn(
                             "h-5 w-5 shrink-0",
-                            activo ? "text-brand dark:text-brand-accent" : "text-muted-foreground",
+                            activo ? "text-[var(--brasa)]" : "text-[var(--muted)]",
                           )}
                         />
                         <span>{item.titulo}</span>
@@ -515,8 +515,8 @@ export function AppShell({
 
                 {/* Gestión + Administración Acordeón */}
                 <div className="space-y-1">
-                  <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                    Gestión
+                  <p className="px-3 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--muted)] mb-2">
+                    — Gestión
                   </p>
                   {gestionItems.map((item) => {
                     const activo = esRutaActiva(item.href);
@@ -528,16 +528,16 @@ export function AppShell({
                         href={item.href}
                         onClick={() => setMobileOpen(false)}
                         className={cn(
-                          "flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base font-medium transition-colors",
+                          "flex items-center gap-3.5 rounded-lg px-3.5 py-3 text-base font-medium transition-colors",
                           activo
-                            ? "bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-accent font-bold"
-                            : "text-foreground hover:bg-accent",
+                            ? "bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold"
+                            : "text-[var(--papel)] hover:bg-[var(--panel-2)]",
                         )}
                       >
                         <Icono
                           className={cn(
                             "h-5 w-5 shrink-0",
-                            activo ? "text-brand dark:text-brand-accent" : "text-muted-foreground",
+                            activo ? "text-[var(--brasa)]" : "text-[var(--muted)]",
                           )}
                         />
                         <span>{item.titulo}</span>
@@ -547,11 +547,11 @@ export function AppShell({
 
                   {/* Acordeón Móvil de Administración */}
                   <div className="space-y-1 pt-2">
-                    <div className="px-3 text-sm font-bold text-foreground flex items-center gap-2 mb-1">
-                      <Settings className="h-4 w-4 text-brand" />
+                    <div className="px-3 text-sm font-bold text-[var(--papel)] flex items-center gap-2 mb-1">
+                      <Settings className="h-4 w-4 text-[var(--brasa)]" />
                       <span>Administración</span>
                     </div>
-                    <div className="ml-3 pl-3 border-l-2 border-border space-y-1">
+                    <div className="ml-3 pl-3 border-l border-dashed border-[var(--linea-30)] space-y-1">
                       {adminSubItems.map((sub) => {
                         const SubIcono = sub.icono;
                         const activo = pathname === sub.href;
@@ -562,10 +562,10 @@ export function AppShell({
                             href={sub.href}
                             onClick={() => setMobileOpen(false)}
                             className={cn(
-                              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                              "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
                               activo
-                                ? "bg-brand text-white dark:bg-brand-accent dark:text-slate-950 font-bold"
-                                : "text-muted-foreground hover:bg-accent",
+                                ? "bg-[var(--brasa)] text-[var(--tinta)] font-bold"
+                                : "text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--papel)]",
                             )}
                           >
                             <SubIcono className="h-4 w-4 shrink-0" />

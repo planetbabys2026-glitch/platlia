@@ -1,5 +1,6 @@
 import { Navbar } from "./components/navbar";
 import { Hero } from "./components/hero";
+import { EfficiencyManifesto } from "./components/efficiency-manifesto";
 import { Features } from "./components/features";
 import { Pricing } from "./components/pricing";
 import { ContactSection } from "./components/contact-section";
@@ -12,8 +13,11 @@ export default function LandingPage() {
       <Navbar />
 
       <main className="flex-1">
-        {/* Banner principal e interfaz interactiva en vivo */}
+        {/* Banner principal con propuesta de valor de optimización en vivo */}
         <Hero />
+
+        {/* Manifiesto de impacto: Cada segundo optimizado = Comensales felices y mayor rentabilidad */}
+        <EfficiencyManifesto />
 
         {/* Virtudes y Módulos del Sistema */}
         <Features />
