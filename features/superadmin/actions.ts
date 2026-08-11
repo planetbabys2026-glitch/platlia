@@ -4,10 +4,12 @@ import { timingSafeEqual } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  actualizarLimiteSucursalesSchema,
   agregarSuperAdminSchema,
   bootstrapSchema,
   editarSuperAdminSchema,
   extenderSchema,
+  gestionFacturacionElectronicaSchema,
   ingresoSchema,
   quitarSuperAdminSchema,
   restablecerContrasenaSuperAdminSchema,
@@ -435,5 +437,78 @@ export const quitarSuperAdmin = definePublicAction({
     });
 
     revalidatePath("/superadmin/equipo");
+  },
+});
+
+export const actualizarLimiteSucursales = definePublicAction({
+  schema: actualizarLimiteSucursalesSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const sub = await rootDb.subscription.findUnique({
+      where: { businessId: input.businessId },
+    });
+    if (!sub) throw new ErrorDeUsuario("Esa empresa no tiene suscripción.");
+
+    await rootDb.subscription.update({
+      where: { id: sub.id },
+      data: { maxBranches: input.maxBranches },
+    });
+
+    await rootDb.auditLog.create({
+      data: {
+        businessId: input.businessId,
+        userId: superAdmin.id,
+        action: "superadmin.sucursales.limite",
+        entity: "Subscription",
+        entityId: sub.id,
+        metadata: { maxBranches: input.maxBranches, motivo: input.motivo },
+      },
+    });
+
+    revalidatePath("/superadmin");
+  },
+});
+
+export const gestionarPaqueteFacturacionElectronica = definePublicAction({
+  schema: gestionFacturacionElectronicaSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const settings = await rootDb.businessSettings.findUnique({
+      where: { businessId: input.businessId },
+    });
+
+    if (!settings) throw new ErrorDeUsuario("Esa empresa no tiene configuración registrada.");
+
+    const nuevosDisponibles = (settings.paquetesDocumentosDisponibles ?? 0) + input.sumarDocumentos;
+
+    await rootDb.businessSettings.update({
+      where: { businessId: input.businessId },
+      data: {
+        facturacionElectronicaHabilitada: input.habilitar,
+        paquetesDocumentosDisponibles: nuevosDisponibles,
+      },
+    });
+
+    await rootDb.auditLog.create({
+      data: {
+        businessId: input.businessId,
+        userId: superAdmin.id,
+        action: "superadmin.facturacion_electronica.paquete",
+        entity: "BusinessSettings",
+        entityId: settings.id,
+        metadata: {
+          habilitado: input.habilitar,
+          documentosSumados: input.sumarDocumentos,
+          totalDisponible: nuevosDisponibles,
+          motivo: input.motivo,
+        },
+      },
+    });
+
+    revalidatePath("/superadmin");
   },
 });

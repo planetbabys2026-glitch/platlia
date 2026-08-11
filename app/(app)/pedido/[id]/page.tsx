@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
-import { getCarta, getPedido } from "@/features/pedidos/queries";
+import { getCajaAbierta } from "@/features/caja/queries";
+import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
+import { getSettings } from "@/features/negocio/queries";
+import { ModuloPosInteractive } from "@/app/(app)/pos/modulo-pos-interactive";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireModule, tieneRol } from "@/lib/auth/dal";
@@ -12,6 +15,7 @@ import { Carta } from "./carta";
 import {
   AnularPedido,
   AnularRenglon,
+  Cobrar,
   ConfirmarPedido,
   ControlCantidad,
   NotaRenglon,
@@ -47,9 +51,31 @@ export default async function PedidoPage({
   // negocio no aparece: es un 404 igual que uno inexistente.
   if (!pedido) notFound();
 
-  // Sin mesas, /salon no existe: el mismo criterio que ya usa el shell de la
-  // app para decidir entre "Salón" y "POS" en la barra de navegación.
   const usaMesas = ctx.modules.has(AppModule.MESAS);
+
+  if (pedido.type !== "MESA" || !usaMesas) {
+    const [caja, pedidos, settings] = await Promise.all([
+      getCajaAbierta(ctx.business.id),
+      getPedidosAbiertos(ctx.business.id),
+      getSettings(ctx.business.id),
+    ]);
+
+    return (
+      <ModuloPosInteractive
+        carta={carta}
+        caja={caja}
+        pedidosAbiertos={pedidos}
+        pedidoInicial={pedido}
+        settings={{
+          deliveryEnabled: settings.deliveryEnabled,
+          requireOpenCashSession: settings.requireOpenCashSession,
+          cashRoundingCop: settings.cashRoundingCop,
+          pricesIncludeTax: settings.pricesIncludeTax,
+        }}
+      />
+    );
+  }
+
   const editable = pedido.status === "ABIERTA" || pedido.status === "CUENTA_PEDIDA";
   const renglones = pedido.items.filter((i) => i.status !== "ANULADO");
   const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);
@@ -190,8 +216,30 @@ export default async function PedidoPage({
             </CardContent>
           </Card>
 
-          {pedido.status === "ABIERTA" && renglones.length > 0 && (
-            <PedirCuenta orderId={pedido.id} esMesa={pedido.type === "MESA"} />
+          {/* Botón para imprimir ticket con el turno asignado */}
+          <a
+            href={`/imprimir/pedido/${pedido.id}`}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-all shadow-sm"
+          >
+            🖨️ Imprimir ticket {pedido.turnNumber !== null ? `(Turno ${formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")})` : ""}
+          </a>
+
+          {pedido.status === "ABIERTA" && renglones.length > 0 && pedido.type === "MESA" && (
+            <PedirCuenta orderId={pedido.id} esMesa={true} />
+          )}
+
+          {/* En modo POS (pedido rápido), se permite facturar/cobrar directamente sin enviar a caja */}
+          {editable && renglones.length > 0 && pedido.type !== "MESA" && (
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="pt-4 space-y-3">
+                <h2 className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">
+                  💳 Facturar y cobrar pedido (POS)
+                </h2>
+                <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
+              </CardContent>
+            </Card>
           )}
 
           {editable && puedeCobrar && (

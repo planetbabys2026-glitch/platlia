@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSuperAdmin } from "@/lib/auth/dal";
+import { requireSuperAdmin } from "@/lib/auth/dal";
 import { salirSuperAdmin } from "@/features/superadmin/actions";
 import { Isotipo } from "@/components/marca/logo";
 import { NavConsola } from "./nav";
@@ -9,7 +9,7 @@ import { NavConsola } from "./nav";
  *
  * No verifica nada —un layout no se re-renderiza al navegar del lado del
  * cliente y por lo tanto no es frontera—: cada página llama a
- * `requireSuperAdmin()` por su cuenta. `getSuperAdmin()` acá es solo para
+ * `requireSuperAdmin()` por su cuenta. `requireSuperAdmin()` acá es solo para
  * pintar el encabezado, igual que el layout de `(app)` con `getCurrentUser()`.
  *
  * La barra es del color de marca, no del gris neutro que usa el resto de la
@@ -20,7 +20,7 @@ import { NavConsola } from "./nav";
  * fondo de color arbitrario.
  */
 export default async function ConsolaLayout({ children }: { children: React.ReactNode }) {
-  const superAdmin = await getSuperAdmin();
+  const superAdmin = await requireSuperAdmin();
 
   return (
     <>

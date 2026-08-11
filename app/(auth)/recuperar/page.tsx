@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
 import { FormularioRecuperar } from "./formulario";
 
-export const metadata: Metadata = { title: "Recuperar contraseña" };
+export const metadata: Metadata = { title: "Recuperar contraseña · Platlia" };
 
 export default function RecuperarPage() {
   return (
     <div className="space-y-6">
-      <div className="space-y-1 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">¿Olvidaste tu contraseña?</h1>
-        <p className="text-muted-foreground text-sm">
-          Escribí el correo con el que te registraste y te mandamos cómo elegir una
-          nueva.
+      <div className="space-y-2">
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--linea)]">
+          — Seguridad de la cuenta
+        </p>
+        <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-[var(--papel)] leading-[0.95]">
+          Recuperar contraseña
+        </h1>
+        <p className="text-[var(--linea)] text-sm">
+          Ingresa el correo registrado y te enviaremos las instrucciones de recuperación.
         </p>
       </div>
 

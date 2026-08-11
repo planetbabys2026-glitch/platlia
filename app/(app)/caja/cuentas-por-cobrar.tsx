@@ -64,21 +64,21 @@ function FormularioCobro({ cuenta }: { cuenta: Cuenta }) {
       {/* Botón de impresión de pre-cuenta para entregar a la mesera antes de cobrar */}
       <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5">
         <div className="space-y-0.5">
-          <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Ticket de Pre-cuenta</p>
-          <p className="text-[11px] text-muted-foreground">Imprimir factura para llevar a la mesa</p>
+          <p className="text-xs font-bold text-amber-300">Ticket de Pre-cuenta</p>
+          <p className="text-[11px] text-[var(--muted)]">Imprimir factura para llevar a la mesa</p>
         </div>
         <a
           href={`/imprimir/pedido/${cuenta.id}`}
           target="_blank"
           rel="noopener"
-          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 py-1.5 text-xs shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-[#171512] font-bold px-3 py-1.5 text-xs shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
         >
           🖨️ Imprimir ticket
         </a>
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <Label className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--muted)]">
           Método de pago
         </Label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -90,8 +90,8 @@ function FormularioCobro({ cuenta }: { cuenta: Cuenta }) {
               className={cn(
                 "rounded-lg border px-2.5 py-2 text-xs font-medium transition-all text-center",
                 metodo === clave
-                  ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold ring-1 ring-emerald-500/30"
-                  : "border-border/80 bg-muted/40 hover:bg-accent text-foreground",
+                  ? "border-[var(--brasa)] bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold ring-1 ring-[var(--brasa)]/30"
+                  : "border-[var(--linea-30)] bg-[var(--panel-2)] hover:bg-[var(--panel-3)] text-[var(--papel)]",
               )}
             >
               {etiqueta}
@@ -202,38 +202,38 @@ export function CuentasPorCobrar({ cuentas }: { cuentas: Cuenta[] }) {
                         variant={cuenta.status === "CUENTA_PEDIDA" ? "default" : "outline"}
                         className={cn(
                           cuenta.status === "CUENTA_PEDIDA"
-                            ? "bg-amber-500 text-slate-950 font-bold"
-                            : "text-muted-foreground",
+                            ? "bg-amber-500 text-[#171512] font-bold"
+                            : "border-[var(--linea-30)] text-[var(--muted)]",
                         )}
                       >
                         {cuenta.status === "CUENTA_PEDIDA" ? "CUENTA PEDIDA 🧾" : "Abierta"}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-[var(--muted)]">
                       Pedido #{cuenta.code} · Abrió {cuenta.openedBy.name}
                       {cuenta.customerName && ` · ${cuenta.customerName}`}
                     </p>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="numeral text-xl font-extrabold text-foreground block">
+                    <span className="numeral text-xl font-extrabold text-[var(--papel)] block font-display">
                       {formatCop(cuenta.totalCop)}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-[11px] text-[var(--muted)] font-mono">
                       {cuenta.items.length} {cuenta.items.length === 1 ? "producto" : "productos"}
                     </span>
                   </div>
                 </div>
 
                 {/* Resumen de items del ticket */}
-                <div className="rounded-lg bg-muted/30 p-2.5 space-y-1 text-xs">
+                <div className="rounded-lg bg-[var(--panel-2)] border border-[var(--linea-16)] p-2.5 space-y-1 text-xs">
                   {cuenta.items.map((item) => (
                     <div key={item.id} className="flex justify-between gap-2">
                       <span className="truncate">
-                        <strong className="text-brand font-semibold">{item.quantity}x</strong>{" "}
+                        <strong className="text-[var(--brasa)] font-semibold">{item.quantity}x</strong>{" "}
                         {item.nameSnapshot}
                       </span>
-                      <span className="numeral text-muted-foreground font-medium shrink-0">
+                      <span className="numeral text-[var(--muted)] font-medium shrink-0 font-mono">
                         {formatCop(item.lineTotalCop)}
                       </span>
                     </div>
@@ -247,7 +247,7 @@ export function CuentasPorCobrar({ cuentas }: { cuentas: Cuenta[] }) {
                       href={`/imprimir/pedido/${cuenta.id}`}
                       target="_blank"
                       rel="noopener"
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
                     >
                       🖨️ Pre-cuenta
                     </a>

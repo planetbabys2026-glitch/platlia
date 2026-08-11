@@ -107,10 +107,25 @@ export async function readSession(
     },
   });
 
-  if (!sesion || sesion.kind !== kind) return null;
-  if (sesion.revokedAt || sesion.expiresAt <= new Date()) return null;
-  if (sesion.user.status !== "ACTIVO" || sesion.user.deletedAt) return null;
-  if (kind === "SUPERADMIN" && !sesion.user.isSuperAdmin) return null;
+  if (
+    !sesion ||
+    sesion.kind !== kind ||
+    sesion.revokedAt ||
+    sesion.expiresAt <= new Date() ||
+    sesion.user.status !== "ACTIVO" ||
+    sesion.user.deletedAt ||
+    (kind === "SUPERADMIN" && !sesion.user.isSuperAdmin)
+  ) {
+    try {
+      cookieStore.delete({
+        name: kind === "SUPERADMIN" ? COOKIE_SUPERADMIN : COOKIE_SESION,
+        path: kind === "SUPERADMIN" ? "/superadmin" : "/",
+      });
+    } catch {
+      // Ignorar si se evalúa durante prerender estático
+    }
+    return null;
+  }
 
   return {
     sessionId: sesion.id,

@@ -30,12 +30,18 @@ const PUBLICAS = new Set([
 
 function esPublica(pathname: string): boolean {
   if (PUBLICAS.has(pathname)) return true;
+  // Menú Digital QR público para clientes (mesas y domicilios)
+  if (pathname.startsWith("/m/")) return true;
+  // Pantalla del televisor del salón (Turnero TV)
+  if (pathname === "/turnero" || pathname.startsWith("/turnero/")) return true;
   // El health check lo consulta el monitoreo externo, sin cookie.
   if (pathname === "/api/health") return true;
   // Los webhooks los llama un servidor ajeno, que no tiene sesión ni la va a
   // tener. Se autentican con su firma, no con una cookie: si el middleware los
   // mandara al login, MercadoPago recibiría un 307 y el pago nunca se aplicaría.
   if (pathname.startsWith("/api/webhooks/")) return true;
+  // Streams SSE para actualización en tiempo real de domicilios y turnero
+  if (pathname.startsWith("/api/domicilios/stream") || pathname.startsWith("/api/turnero/stream")) return true;
   return false;
 }
 
@@ -46,16 +52,6 @@ export async function middleware(request: NextRequest) {
   const cookie = request.cookies.get(esSuperadmin ? COOKIE_SUPERADMIN : COOKIE_SESION);
 
   if (esPublica(pathname)) {
-    // Quien ya entró no tiene por qué volver a ver el formulario de ingreso.
-    const formularioDeIngreso =
-      pathname === "/ingresar" || pathname === "/registro" || pathname === "/superadmin/ingresar";
-
-    if (formularioDeIngreso && cookie?.value) {
-      const claims = await verifySessionToken(cookie.value);
-      if (claims?.kind === (esSuperadmin ? "SUPERADMIN" : "APP")) {
-        return NextResponse.redirect(new URL(esSuperadmin ? "/superadmin" : "/panel", request.url));
-      }
-    }
     return NextResponse.next();
   }
 
@@ -74,7 +70,9 @@ export async function middleware(request: NextRequest) {
 
 function aIngresar(request: NextRequest, destino: string, esSuperadmin: boolean) {
   const url = new URL(esSuperadmin ? "/superadmin/ingresar" : "/ingresar", request.url);
-  if (!esSuperadmin && destino !== "/") url.searchParams.set("desde", destino);
+  if (destino !== "/" && destino !== "/ingresar" && destino !== "/superadmin/ingresar") {
+    url.searchParams.set("desde", destino);
+  }
   return NextResponse.redirect(url);
 }
 

@@ -129,8 +129,10 @@ export function isSameBusinessDay(
 }
 
 /** Un día de negocio como "2026-08-04", para claves, URLs y filtros. */
-export function formatBusinessDate(businessDate: Date): string {
-  return `${businessDate.getUTCFullYear()}-${dosDigitos(businessDate.getUTCMonth() + 1)}-${dosDigitos(businessDate.getUTCDate())}`;
+export function formatBusinessDate(businessDate: Date | string): string {
+  const d = new Date(businessDate);
+  if (isNaN(d.getTime())) return String(businessDate);
+  return `${d.getUTCFullYear()}-${dosDigitos(d.getUTCMonth() + 1)}-${dosDigitos(d.getUTCDate())}`;
 }
 
 /** El inverso de formatBusinessDate. Rechaza cualquier cosa que no sea YYYY-MM-DD. */
@@ -156,16 +158,20 @@ export function parseBusinessDate(iso: string): Date {
  * Escrito a mano y no con Intl: estas cadenas van al tiquete térmico, que se
  * compone a un ancho fijo, y la salida de Intl cambia entre versiones de ICU.
  */
-export function formatDayInTimeZone(instant: Date, timeZone: string): string {
-  const local = new TZDate(instant, assertTimeZone(timeZone));
+export function formatDayInTimeZone(instant: Date | string, timeZone: string): string {
+  const d = new Date(instant);
+  if (isNaN(d.getTime())) return "";
+  const local = new TZDate(d, assertTimeZone(timeZone));
   return `${local.getFullYear()}-${dosDigitos(local.getMonth() + 1)}-${dosDigitos(local.getDate())}`;
 }
 
-export function formatTimeInTimeZone(instant: Date, timeZone: string): string {
-  const local = new TZDate(instant, assertTimeZone(timeZone));
+export function formatTimeInTimeZone(instant: Date | string, timeZone: string): string {
+  const d = new Date(instant);
+  if (isNaN(d.getTime())) return "";
+  const local = new TZDate(d, assertTimeZone(timeZone));
   return `${dosDigitos(local.getHours())}:${dosDigitos(local.getMinutes())}`;
 }
 
-export function formatDateTimeInTimeZone(instant: Date, timeZone: string): string {
+export function formatDateTimeInTimeZone(instant: Date | string, timeZone: string): string {
   return `${formatDayInTimeZone(instant, timeZone)} ${formatTimeInTimeZone(instant, timeZone)}`;
 }

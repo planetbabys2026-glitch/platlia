@@ -251,7 +251,7 @@ async function main() {
     });
 
     for (const [orden, producto] of grupo.productos.entries()) {
-      const creado = await rootDb.product.upsert({
+      await rootDb.product.upsert({
         where: { businessId_sku: { businessId: business.id, sku: producto.sku } },
         update: {},
         create: {

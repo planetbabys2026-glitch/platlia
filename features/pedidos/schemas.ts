@@ -13,14 +13,19 @@ export const abrirPedidoSchema = z
     customerName: textoOpcional(120),
     customerPhone: textoOpcional(40),
     deliveryAddress: textoOpcional(300),
+    notes: textoOpcional(300),
   })
   .refine((v) => v.type !== OrderType.MESA || Boolean(v.tableId), {
     error: "Elegí una mesa.",
     path: ["tableId"],
   })
-  .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.deliveryAddress), {
-    error: "Un domicilio necesita dirección.",
+  .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.deliveryAddress?.trim()), {
+    error: "Ingresá la dirección de entrega para el domicilio.",
     path: ["deliveryAddress"],
+  })
+  .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.customerPhone?.trim()), {
+    error: "Ingresá el número celular de contacto para el domicilio.",
+    path: ["customerPhone"],
   });
 
 export const agregarItemSchema = z.object({
@@ -78,3 +83,42 @@ export const pagoSchema = z.object({
   ),
   reference: textoOpcional(60),
 });
+
+export const procesarVentaPosCompletaSchema = z
+  .object({
+    orderId: id.optional(),
+    type: z.enum([OrderType.LLEVAR, OrderType.DOMICILIO]).default(OrderType.LLEVAR),
+    customerName: textoOpcional(120),
+    customerPhone: textoOpcional(40),
+    deliveryAddress: textoOpcional(300),
+    notes: textoOpcional(300),
+    items: z
+      .array(
+        z.object({
+          productId: id,
+          quantity: cantidad,
+          notes: textoOpcional(200),
+        }),
+      )
+      .min(1, "Agregá al menos un producto al pedido."),
+    accion: z.enum(["PAGAR_DIRECTO", "ENVIAR_COCINA", "PARQUEAR"]),
+    pago: z
+      .object({
+        method: z.enum(PaymentMethod),
+        amountCop: montoCopPositivo,
+        tenderedCop: z.preprocess(
+          (v) => (v === "" || v === undefined ? undefined : Number(v)),
+          montoCopPositivo.optional(),
+        ),
+        reference: textoOpcional(60),
+      })
+      .optional(),
+  })
+  .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.deliveryAddress?.trim()), {
+    error: "Ingresá la dirección de entrega para el domicilio.",
+    path: ["deliveryAddress"],
+  })
+  .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.customerPhone?.trim()), {
+    error: "Ingresá el teléfono celular del cliente para el domicilio.",
+    path: ["customerPhone"],
+  });

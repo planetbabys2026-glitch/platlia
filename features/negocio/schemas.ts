@@ -97,3 +97,32 @@ export const turneroSchema = z.object({
   turneroYoutubeUrl: textoOpcional(500),
   turneroBadgePosition: z.enum(["TOP_LEFT", "TOP_RIGHT"]),
 });
+
+export const qrMenuSchema = z.object({
+  qrMenuEnabled: casilla,
+  qrMenuBgMode: z.enum(["SOLID", "GRADIENT", "PATTERN_IMAGE"]),
+  qrMenuBgColor: z.string().trim().default("#101416"),
+  qrMenuBgGradient: z.string().trim().default("linear-gradient(135deg, #101416 0%, #1D4E51 100%)"),
+  qrMenuBgImageUrl: textoOpcional(500),
+  qrMenuLogoUrl: textoOpcional(500),
+  qrMenuHeaderTitle: textoOpcional(120),
+  qrMenuHeaderSubtitle: textoOpcional(200),
+});
+
+export const crearSucursalSchema = z.object({
+  name: z.string().trim().min(2, "Escribí el nombre de la sucursal.").max(120),
+  address: textoOpcional(200),
+  phone: textoOpcional(40),
+});
+
+export const configuracionFactusSchema = z.object({
+  factusNumberingRangeId: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? undefined : Number(v)),
+    z.number().int().min(1, "Ingresa un ID de rango de numeración válido de la DIAN."),
+  ),
+  municipalityCode: z.string().trim().min(4, "Ingresa el código DANE del municipio (ej. 05001).").max(10),
+  identificationDocumentCode: z.string().trim().default("31"),
+  legalOrganizationCode: z.string().trim().default("1"),
+  tributeCode: z.string().trim().default("ZZ"),
+  responsibilities: z.string().trim().default("R-99-PN"),
+});

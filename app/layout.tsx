@@ -1,33 +1,31 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Inter, JetBrains_Mono } from "next/font/google";
+import { Big_Shoulders, Inter, Space_Mono } from "next/font/google";
 import { RegistroServiceWorker } from "@/components/pwa/registro-sw";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-// Inter para toda la interfaz: es la que mejor aguanta pantallas densas y
-// tiene cifras tabulares de verdad, que en este producto se usan en todas partes.
+// Inter para la interfaz operativa y paneles táctiles
 const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
 });
 
-// Archivo para títulos y cifras grandes. Es una grotesca más ancha e industrial
-// que Inter, así que el número de mesa y el turno se leen a dos metros —que es
-// exactamente como se usan, en la pantalla de cocina y en el televisor del salón—
-// sin que la interfaz cambie de voz.
-const archivo = Archivo({
+// Big Shoulders para números gigantes de mesa, títulos de comanda y cabeceras
+const bigShoulders = Big_Shoulders({
   variable: "--font-display",
   subsets: ["latin"],
   display: "swap",
+  weight: ["700", "800", "900"],
+  adjustFontFallback: false,
 });
 
-// Monoespaciada para tiquetes térmicos y códigos: el recibo se compone a 32 o 48
-// caracteres por línea, así que la métrica fija no es estética, es funcional.
-const jetbrainsMono = JetBrains_Mono({
+// Space Mono para precios en COP, tiempos de cocina y códigos de comanda térmica
+const spaceMono = Space_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -40,16 +38,22 @@ export const metadata: Metadata = {
   applicationName: "Platlia",
   appleWebApp: { capable: true, title: "Platlia", statusBarStyle: "default" },
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
-// En Next 15 themeColor va en el export `viewport`, no dentro de `metadata`.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#101416" },
-  ],
+  themeColor: "#171512",
 };
 
 export default function RootLayout({
@@ -60,7 +64,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${inter.variable} ${archivo.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`dark ${inter.variable} ${bigShoulders.variable} ${spaceMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         {children}

@@ -58,7 +58,7 @@ function Cuadro({
           COLOR[mesa.status],
         )}
       />
-      <span className="numeral text-2xl leading-none font-bold tracking-tight transition-transform duration-300 group-hover:scale-110 group-hover:text-brand">
+      <span className="font-display font-black text-2xl sm:text-3xl leading-none tracking-tight text-foreground transition-transform duration-300 group-hover:scale-110 group-hover:text-brand">
         {mesa.name}
       </span>
       {children}

@@ -214,20 +214,21 @@ runtime: `next build` importa `lib/env.ts` al recolectar las rutas y aborta sin 
 Las migraciones no corren en el despliegue. Se aplican aparte con `pnpm db:deploy` contra la
 base del VPS, para que un deploy no cambie el esquema mientras hay gente cobrando.
 
-## Marca
+## Marca (Dark Kitchen-Fire)
 
-Dos colores: verde azulado profundo **`#1D4E51`** y terracota cálido **`#A75F39`**. Están en
-`--brand` y `--brand-accent` (clases `bg-brand`, `text-brand-accent`), y el verde azulado es
-además `--primary`. En modo oscuro **no se usan esos valores** —el verde azulado sobre `#101416`
-da 1,7:1—: se aclaran a `#3E9EA2` y `#C8855F`, que pasan 4,5:1. Los tokens de marca son
-identidad, no función; para decir "esto está bien" o "esto falló" están `--success`,
-`--warning` y `--destructive`.
+La paleta cromática se basa en el acero inoxidable de cocina, el papel de tirilla térmica, la tinta de impresión y el fuego de las brasas:
+- **`--tinta: #171512`**: Fondo principal oscuro (hierro fundido y carbón).
+- **`--papel: #EDE7DA`**: Texto principal, fondos de ticket y alto contraste.
+- **`--brasa: #FF4E1F`**: Acento institucional, fuego de cocina, alertas y sellos (mapeado a `--brand` y `--primary`).
+- **`--acero: #3A3733`**: Paneles secundarios, tarjetas y superficies de soporte (`--panel-bg`, `--panel-2`, `--panel-3`).
+- **`--linea: #C9C2AF`**: Líneas guía punteadas, bordes y texto secundario / bajadas (mapeado a `--muted` y `--muted-foreground`).
 
-Las piezas se usan por `components/marca/logo.tsx`, nunca con `<img>` suelto: `Logo` (con
-bajada, de 80 px de alto para arriba), `Logotipo` (sin bajada, para la interfaz) e `Isotipo`.
-Cada una pinta la versión clara y la inversa y las alterna con la clase `dark`, porque elegir
-en el cliente haría parpadear el logo equivocado en cada carga. Los iconos de la app salen de
-`app/{favicon.ico,icon.png,apple-icon.png}` por convención de archivos de Next.
+Sistema tipográfico:
+1. **Display (Títulos & Números Gigantes)**: `Big Shoulders Display` (`--font-display` / 900 Black) para números de mesa, encabezados de comanda y contadores de turno.
+2. **Body (Lectura en Piso)**: `Inter` (`--font-sans` / 400, 500, 600) para legibilidad optimizada en piso bajo baja iluminación.
+3. **Monospaced (Dinero COP & Tiempos)**: `Space Mono` (`--font-mono` / 400, 700 con `.numeral tabular-nums`) para moneda colombiana, cronómetros y sellos.
+
+Las piezas de marca se usan por `components/marca/logo.tsx`: `Logo`, `Logotipo` e `Isotipo` (silueta de tirilla térmica dentada de 22 picos con monograma "P" y acento Brasa).
 
 ## Estructura
 

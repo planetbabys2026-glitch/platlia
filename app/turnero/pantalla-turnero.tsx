@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Logotipo } from "@/components/marca/logo";
 import { formatTurno } from "@/lib/turns";
-import { RefrescoDeTelevisor, PantallaSiempreEncendida } from "./pantalla";
+import { PantallaSiempreEncendida } from "./pantalla";
 
 type TurnoItem = {
   orderId: string;
@@ -87,7 +87,7 @@ function playChimeSound() {
 export function PantallaTurnero({
   businessName,
   turnNumberMax,
-  listos,
+  listos: initialListos,
   mediaMode,
   imagesRaw,
   imageIntervalSeconds,
@@ -96,6 +96,42 @@ export function PantallaTurnero({
 }: TurneroProps) {
   const images = parseImageUrls(imagesRaw);
   const youtubeId = extractYoutubeId(youtubeUrl);
+
+  // Estado local de turnos listos (se actualiza vía SSE Redis Pub/Sub sin polling)
+  const [listos, setListos] = useState<TurnoItem[]>(initialListos);
+
+  // Sincronizar estado inicial
+  useEffect(() => {
+    setListos(initialListos);
+  }, [initialListos]);
+
+  // Conexión SSE en tiempo real usando Redis Pub/Sub
+  useEffect(() => {
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource("/api/turnero/stream");
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (
+            (data.type === "init" || data.type === "update") &&
+            Array.isArray(data.listos)
+          ) {
+            setListos(data.listos);
+          }
+        } catch {
+          // Ignorar errores de sintaxis en el stream
+        }
+      };
+    } catch {
+      // Si el navegador no soporta EventSource
+    }
+
+    return () => {
+      if (es) es.close();
+    };
+  }, []);
 
   // Estado del carrusel de imágenes
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
@@ -114,7 +150,7 @@ export function PantallaTurnero({
     return () => clearInterval(interval);
   }, [mediaMode, images, imageIntervalSeconds]);
 
-  // Refs de temporizadores que persisten a través de re-renders de sondeo
+  // Refs de temporizadores que persisten a través de re-renders
   const timerTransicionRef = useRef<NodeJS.Timeout | null>(null);
   const timerFinalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -183,7 +219,7 @@ export function PantallaTurnero({
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-neutral-950 text-white font-sans select-none">
-      <RefrescoDeTelevisor segundos={4} />
+      <PantallaSiempreEncendida />
       <PantallaSiempreEncendida />
 
       {/* ─────────────────────────────────────────────────────────────
@@ -224,10 +260,10 @@ export function PantallaTurnero({
         </div>
       )}
 
-      {/* C: Fondo Oscuro por Defecto (Platlia Standard) */}
+      {/* C: Fondo Oscuro por Defecto (Platlia Dark Kitchen-Fire) */}
       {(mediaMode === "NONE" || (mediaMode === "IMAGES" && images.length === 0) || (mediaMode === "YOUTUBE" && !youtubeId)) && (
-        <div className="absolute inset-0 z-0 bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950">
-          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#1D4E51_1px,transparent_1px)] [background-size:24px_24px]" />
+        <div className="absolute inset-0 z-0 bg-[#171512]">
+          <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#ff4e1f_1px,transparent_1px)] [background-size:32px_32px]" />
         </div>
       )}
 
@@ -240,21 +276,21 @@ export function PantallaTurnero({
             setNuevoTurnoDestacado(null);
             setAnimandoHaciaEsquina(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md cursor-pointer transition-all duration-700 ease-in-out"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md cursor-pointer transition-all duration-700 ease-in-out"
         >
           <div
-            className={`flex flex-col items-center justify-center rounded-3xl border-4 border-emerald-500 bg-gradient-to-b from-neutral-900 to-neutral-950 p-10 text-center shadow-2xl shadow-emerald-500/30 transition-all duration-700 ease-in-out ${
+            className={`flex flex-col items-center justify-center rounded-3xl border-4 border-brand bg-[#171512] p-10 text-center shadow-2xl shadow-brand/40 transition-all duration-700 ease-in-out ${
               animandoHaciaEsquina
                 ? `scale-30 opacity-0 translate-y-[-200px] ${isTopLeft ? "-translate-x-[400px]" : "translate-x-[400px]"}`
                 : "scale-100 opacity-100 animate-pulse"
             }`}
           >
-            <span className="text-xl font-bold uppercase tracking-[0.3em] text-emerald-400 sm:text-3xl">
+            <span className="text-xl font-bold uppercase tracking-[0.3em] text-brand sm:text-3xl font-mono">
               ¡Orden Lista para Entregar!
             </span>
 
-            <div className="my-4 flex items-center justify-center rounded-2xl bg-emerald-500 px-8 py-4 text-white shadow-lg">
-              <span className="numeral text-8xl font-black leading-none tracking-tight sm:text-9xl">
+            <div className="my-4 flex items-center justify-center rounded-2xl bg-brand px-8 py-4 text-white shadow-lg">
+              <span className="numeral text-8xl font-black leading-none tracking-tight sm:text-9xl font-display">
                 {formatTurno(nuevoTurnoDestacado.turno, turnNumberMax, nuevoTurnoDestacado.isMesa)}
               </span>
             </div>
@@ -288,8 +324,8 @@ export function PantallaTurnero({
 
           {/* Encabezado del Recuadro */}
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold tracking-[0.2em] text-emerald-400 uppercase flex items-center gap-2">
-              <span className="size-2.5 rounded-full bg-emerald-500 animate-ping" />
+            <h2 className="text-xs font-bold tracking-[0.2em] text-brand uppercase flex items-center gap-2 font-mono">
+              <span className="size-2.5 rounded-full bg-brand animate-ping" />
               Órdenes Listas ({listos.length})
             </h2>
           </div>
@@ -307,11 +343,11 @@ export function PantallaTurnero({
                     key={turno.orderId}
                     className={`flex flex-col items-center justify-center rounded-2xl p-4 sm:p-5 transition-all duration-300 ${
                       idx === 0
-                        ? "bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 text-white shadow-xl shadow-emerald-950/50 ring-2 ring-emerald-400"
+                        ? "bg-brand text-white shadow-xl shadow-brand/30 ring-2 ring-brand"
                         : "bg-neutral-900/95 text-neutral-200 border border-white/10"
                     }`}
                   >
-                    <span className="numeral text-4xl font-black leading-none tracking-tight sm:text-5xl">
+                    <span className="numeral text-4xl font-black leading-none tracking-tight sm:text-5xl font-display">
                       {formatTurno(turno.turno, turnNumberMax, turno.isMesa)}
                     </span>
                     {turno.nombre && (
@@ -324,7 +360,7 @@ export function PantallaTurnero({
               </div>
 
               {listos.length > 4 && (
-                <div className="text-center text-xs font-semibold text-emerald-400/90 pt-1">
+                <div className="text-center text-xs font-semibold text-brand/90 pt-1 font-mono">
                   + {listos.length - 4} {listos.length - 4 === 1 ? "pedido más listo" : "pedidos más listos"}
                 </div>
               )}

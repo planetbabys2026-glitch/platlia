@@ -36,7 +36,6 @@ export function ImagenProducto({
 }) {
   if (imageUrl) {
     // Cloudinary sirve su propia URL final; no hay beneficio en pasarla por next/image acá.
-    // eslint-disable-next-line @next/next/no-img-element
     return <img src={imageUrl} alt="" className={className} loading="lazy" />;
   }
 

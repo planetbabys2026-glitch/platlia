@@ -62,6 +62,9 @@ const schema = z.object({
   // de firma. En producción va siempre en true.
   MP_SIGNATURE_ENFORCE: booleanDeEntorno("true"),
 
+  // ─── Redis (Turnero SSE Pub/Sub) ──────────────────────────────────────────
+  REDIS_URL: opcional(z.string().min(1)),
+
   // ─── Bootstrap del superadministrador ─────────────────────────────────────
   // Se define únicamente durante el primer despliegue y se borra después. Sin
   // ella, /pl-bootstrap responde 404 y es indistinguible de una ruta inexistente.

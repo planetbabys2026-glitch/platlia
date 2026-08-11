@@ -29,8 +29,9 @@ const eslintConfig = [
     // tenantDb(businessId). Los pocos módulos legítimamente cross-tenant (auth,
     // billing, superadmin) desactivan la regla en la línea del import, para que
     // cada excepción quede visible en el diff.
-    files: ["app/**/*.{ts,tsx}", "features/**/*.{ts,tsx}"],
+    files: ["app/**/*.{ts,tsx}", "features/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
     rules: {
+      "@next/next/no-img-element": "off",
       "react-hooks/set-state-in-effect": "off",
       "no-restricted-imports": [
         "error",

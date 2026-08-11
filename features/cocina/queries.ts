@@ -21,6 +21,7 @@ export type ComandaOrden = {
   mesa: string | null;
   turno: number | null;
   type: string;
+  notes: string | null;
   desde: number;
   items: ComandaItem[];
 };
@@ -40,6 +41,7 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
   const items = await tenantDb(businessId).orderItem.findMany({
     where: {
       status: { in: ["PENDIENTE", "EN_PREPARACION", "LISTO"] },
+      sentToKitchenAt: { not: null },
       order: {
         businessDate,
         OR: [
@@ -64,6 +66,7 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
           code: true,
           type: true,
           turnNumber: true,
+          notes: true,
           table: { select: { name: true } },
         },
       },
@@ -92,6 +95,7 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
         mesa: item.order.table?.name ?? null,
         turno: item.order.turnNumber,
         type: item.order.type,
+        notes: item.order.notes,
         desde: itemDesde,
         items: [],
       };

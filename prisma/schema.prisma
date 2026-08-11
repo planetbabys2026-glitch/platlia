@@ -113,6 +113,13 @@ enum OrderType {
   DOMICILIO
 }
 
+enum OrderChannel {
+  POS
+  MESERO
+  MESA_QR
+  DOMICILIO_QR
+}
+
 enum OrderStatus {
   ABIERTA
   CUENTA_PEDIDA
@@ -275,6 +282,32 @@ model BusinessSettings {
   /// Módulos de Inventario y Recetas / Escandallos
   inventoryEnabled Boolean @default(false)
   recipesEnabled   Boolean @default(false)
+
+  /// Configuración del Menú Digital QR
+  qrMenuEnabled        Boolean @default(true)
+  qrMenuBgMode         String  @default("SOLID")
+  qrMenuBgColor        String  @default("#101416")
+  qrMenuBgGradient     String  @default("linear-gradient(135deg, #101416 0%, #1D4E51 100%)")
+  qrMenuBgImageUrl     String?
+  qrMenuLogoUrl        String?
+  qrMenuHeaderTitle    String?
+  qrMenuHeaderSubtitle String?
+
+  /// Módulo Opcional de Facturación Electrónica DIAN (Factus)
+  facturacionElectronicaHabilitada Boolean @default(false)
+  paquetesDocumentosDisponibles    Int     @default(0)
+  documentosEmitidosConsumidos     Int     @default(0)
+
+  factusClientId               String?
+  factusClientSecret           String?
+  factusUsername               String?
+  factusPassword               String?
+  factusNumberingRangeId       Int?
+  municipalityCode             String? @default("05001")
+  identificationDocumentCode   String? @default("31")
+  legalOrganizationCode        String? @default("1")
+  tributeCode                  String? @default("ZZ")
+  responsibilities             String? @default("R-99-PN")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -458,6 +491,9 @@ model Subscription {
   /// Precio vigente para esta empresa. Se guarda acá y no como constante para
   /// poder respetar el precio de los primeros clientes cuando la lista suba.
   priceCop Int                @default(50000)
+
+  /// Número máximo de sucursales permitidas (1 por defecto, 2 self-service con prorrateo, 3+ controlado por superadmin).
+  maxBranches Int               @default(1)
 
   trialEndsAt        DateTime? @db.Timestamptz(3)
   currentPeriodStart DateTime? @db.Timestamptz(3)
@@ -703,8 +739,9 @@ model Order {
   /// `abrirPedido`, que saltea los turnos que siguen en el televisor.
   turnNumber Int?
 
-  type   OrderType   @default(MESA)
-  status OrderStatus @default(ABIERTA)
+  type    OrderType    @default(MESA)
+  channel OrderChannel @default(POS)
+  status  OrderStatus  @default(ABIERTA)
 
   tableId String?
   table   Table?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
@@ -718,7 +755,19 @@ model Order {
   customerName    String?
   customerPhone   String?
   deliveryAddress String?
+  docType         String?
+  docNumber       String?
+  deliveryStatus  String  @default("PENDIENTE")
   notes           String?
+
+  /// Facturación Electrónica DIAN (Factus)
+  facturaElectronicaNumero String?
+  facturaElectronicaCufe   String?
+  facturaElectronicaUrlPdf String?
+  facturaElectronicaUrlQr  String?
+  facturaElectronicaEstado String?
+  facturaElectronicaFecha  DateTime? @db.Timestamptz(3)
+  facturaElectronicaError  String?
 
   /// Totales denormalizados. Se recalculan enteros en cada cambio de ítem, dentro
   /// de la misma transacción: los informes no pueden depender de sumar renglones

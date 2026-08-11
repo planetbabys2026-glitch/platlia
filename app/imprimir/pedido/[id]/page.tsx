@@ -11,6 +11,7 @@ import {
   separador,
 } from "@/lib/printing/ticket";
 import { formatDateTimeInTimeZone } from "@/lib/time";
+import { formatTurno } from "@/lib/turns";
 import { BotonImprimir, ImprimirAlAbrir } from "../../imprimir-al-abrir";
 
 export const dynamic = "force-dynamic";
@@ -69,9 +70,21 @@ export default async function TiquetePage({
   // ── Identificación del pedido ─────────────────────────────────────────────
   const momento = pedido.closedAt ?? pedido.openedAt;
   push(lineaDoble(`Pedido ${pedido.code}`, formatDateTimeInTimeZone(momento, zona), ancho));
+  if (pedido.turnNumber !== null) {
+    const turnoFmt = formatTurno(
+      pedido.turnNumber,
+      settings?.turnNumberMax ?? 99,
+      pedido.type === "MESA",
+    );
+    push(centrar(`*** TURNO ${turnoFmt} ***`, ancho));
+  }
   if (pedido.table) push(`Mesa ${pedido.table.name}`);
-  else if (pedido.turnNumber !== null) push(`Turno ${pedido.turnNumber}`);
   if (pedido.customerName) push(...envolver(`Cliente: ${pedido.customerName}`, ancho));
+  if (pedido.type === "DOMICILIO") {
+    push(centrar("*** PEDIDO A DOMICILIO ***", ancho));
+    if (pedido.customerPhone) push(`Tel: ${pedido.customerPhone}`);
+    if (pedido.deliveryAddress) push(...envolver(`Dir: ${pedido.deliveryAddress}`, ancho));
+  }
   push(`Atendio: ${pedido.openedBy.name}`);
   if (pedido.guestsCount) push(`Personas: ${pedido.guestsCount}`);
   push(separador(ancho));
