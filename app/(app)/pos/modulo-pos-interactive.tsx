@@ -1,9 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Bike,
+  Box,
+  Boxes,
   ChefHat,
   DollarSign,
   Minus,
@@ -26,19 +29,37 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import {
+  auditarStockCarritoRecetas,
+  calcularStockDisponibleProducto,
+  type ProductoStockCalculo,
+} from "@/lib/inventory/stock";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
+
+export type PosProducto = {
+  id: string;
+  name: string;
+  priceCop: number;
+  isAvailable: boolean;
+  imageUrl: string | null;
+  trackStock?: boolean;
+  stockQty?: number;
+  recipeItems?: Array<{
+    quantityRequired: number;
+    inventoryItem: {
+      id: string;
+      name: string;
+      unit: string;
+      stockCurrent: number;
+    };
+  }>;
+};
 
 export type PosCategoria = {
   id: string;
   name: string;
-  products: {
-    id: string;
-    name: string;
-    priceCop: number;
-    isAvailable: boolean;
-    imageUrl: string | null;
-  }[];
+  products: PosProducto[];
 };
 
 export type PosPedidoAbierto = {
@@ -176,7 +197,78 @@ export function ModuloPosInteractive({
   // ── Modales y Drawers ──────────────────────────────────────────────────────
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
   const [modalParqueadosAbierto, setModalParqueadosAbierto] = useState(false);
+  const [modalAlertasStockAbierto, setModalAlertasStockAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState<"EFECTIVO" | "TARJETA_DEBITO" | "TARJETA_CREDITO" | "NEQUI" | "DAVIPLATA" | "TRANSFERENCIA">("EFECTIVO");
+
+  // ── Alertas de Stock Bajo (Insumos de Receta y Productos Terminados) ───────
+  const alertasStockPos = useMemo(() => {
+    const lista: Array<{
+      id: string;
+      nombre: string;
+      detalle: string;
+      tipo: "INSUMO" | "PRODUCTO_TERMINADO" | "RECETA";
+      nivel: "CRITICO" | "BAJO";
+    }> = [];
+
+    const insumosVistos = new Map<string, { name: string; unit: string; stockCurrent: number; stockMin: number }>();
+
+    for (const cat of carta) {
+      for (const prod of cat.products) {
+        // Stock directo (Productos terminados / reventa)
+        if (prod.trackStock && typeof prod.stockQty === "number" && prod.stockQty <= 5) {
+          lista.push({
+            id: `prod-${prod.id}`,
+            nombre: prod.name,
+            detalle: prod.stockQty <= 0 ? "Producto terminado AGOTADO (0 und)" : `Stock bajo: ${prod.stockQty} und`,
+            tipo: "PRODUCTO_TERMINADO",
+            nivel: prod.stockQty <= 0 ? "CRITICO" : "BAJO",
+          });
+        }
+
+        // Stock por Receta
+        if (prod.recipeItems && prod.recipeItems.length > 0) {
+          const disp = calcularStockDisponibleProducto(prod);
+          if (disp !== null && disp <= 5) {
+            lista.push({
+              id: `receta-${prod.id}`,
+              nombre: prod.name,
+              detalle: disp <= 0 ? "Plato sin insumos suficientes (0 disp)" : `Quedan ${disp} porciones preparables`,
+              tipo: "RECETA",
+              nivel: disp <= 0 ? "CRITICO" : "BAJO",
+            });
+          }
+
+          // Recopilar insumos de las recetas
+          for (const r of prod.recipeItems) {
+            const ins = r.inventoryItem;
+            if (ins && !insumosVistos.has(ins.id)) {
+              insumosVistos.set(ins.id, {
+                name: ins.name,
+                unit: ins.unit,
+                stockCurrent: ins.stockCurrent,
+                stockMin: 5,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Insumos de materias primas
+    for (const [id, ins] of insumosVistos) {
+      if (ins.stockCurrent <= ins.stockMin) {
+        lista.push({
+          id: `insumo-${id}`,
+          nombre: ins.name,
+          detalle: ins.stockCurrent <= 0 ? `Insumo AGOTADO (0 ${ins.unit})` : `Quedan ${ins.stockCurrent} ${ins.unit}`,
+          tipo: "INSUMO",
+          nivel: ins.stockCurrent <= 0 ? "CRITICO" : "BAJO",
+        });
+      }
+    }
+
+    return lista;
+  }, [carta]);
   const [montoRecibido, setMontoRecibido] = useState<string>("");
   const [numeroComprobante, setNumeroComprobante] = useState("");
   const [procesandoAccion, setProcesandoAccion] = useState(false);
@@ -196,7 +288,20 @@ export function ModuloPosInteractive({
   const cambioDevuelta = Math.max(0, numRecibido - totalCart);
 
   // ── Manejo de Carrito ──────────────────────────────────────────────────────
-  const agregarAlCarrito = (producto: { id: string; name: string; priceCop: number }) => {
+  const agregarAlCarrito = (producto: PosProducto) => {
+    const disp = calcularStockDisponibleProducto(producto);
+    const itemEnCart = cart.find((i) => i.productId === producto.id);
+    const cantActual = itemEnCart?.quantity ?? 0;
+
+    if (disp !== null && cantActual >= disp) {
+      setErrorGlobal(
+        disp <= 0
+          ? `Stock insuficiente de insumos para preparar "${producto.name}".`
+          : `Stock máximo alcanzado para "${producto.name}" (${disp} porciones preparables con los insumos actuales en inventario).`
+      );
+      return;
+    }
+
     setErrorGlobal(null);
     setCart((prev) => {
       const existe = prev.find((i) => i.productId === producto.id);
@@ -219,6 +324,31 @@ export function ModuloPosInteractive({
   };
 
   const cambiarCantidadCart = (productId: string, delta: number) => {
+    if (delta > 0) {
+      let prodObj: PosProducto | undefined;
+      for (const cat of carta) {
+        const p = cat.products.find((item) => item.id === productId);
+        if (p) {
+          prodObj = p;
+          break;
+        }
+      }
+
+      if (prodObj) {
+        const disp = calcularStockDisponibleProducto(prodObj);
+        const itemEnCart = cart.find((i) => i.productId === productId);
+        const cantActual = itemEnCart?.quantity ?? 0;
+
+        if (disp !== null && cantActual + delta > disp) {
+          setErrorGlobal(
+            `Stock máximo alcanzado para "${prodObj.name}" (${disp} porciones preparables con los insumos actuales).`
+          );
+          return;
+        }
+      }
+    }
+
+    setErrorGlobal(null);
     setCart((prev) =>
       prev
         .map((item) => {
@@ -268,6 +398,18 @@ export function ModuloPosInteractive({
       return;
     }
 
+    if (!customerName.trim()) {
+      setErrorGlobal("El nombre del cliente es obligatorio para facturar e imprimir la venta.");
+      document.getElementById("customerName")?.focus();
+      return;
+    }
+
+    const errorStock = auditarStockCarritoRecetas(cart, carta);
+    if (errorStock) {
+      setErrorGlobal(errorStock);
+      return;
+    }
+
     if (tipoConsumo === "DOMICILIO") {
       if (!customerPhone.trim()) {
         setErrorGlobal("Para un pedido a domicilio, el número celular de contacto es obligatorio.");
@@ -298,7 +440,7 @@ export function ModuloPosInteractive({
     const payload = {
       orderId: activeOrderId || undefined,
       type: orderTypeEnum,
-      customerName: customerName.trim() || undefined,
+      customerName: customerName.trim(),
       customerPhone: customerPhone.trim() || undefined,
       deliveryAddress: deliveryAddress.trim() || undefined,
       notes: notasFormateadas || undefined,
@@ -538,25 +680,51 @@ export function ModuloPosInteractive({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             {/* ── PANEL IZQUIERDO: BUSQUEDA, CATEGORIAS Y PRODUCTOS (7 COLS / 60%) ── */}
             <div className="lg:col-span-7 space-y-4">
-              {/* Buscador Rápido de Productos */}
-              <div className="relative">
-                <Search className="absolute left-3.5 top-3 size-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="🔍 Buscar producto por nombre o ingrediente..."
-                  className="h-10 pl-10 pr-10 text-xs rounded-xl bg-card border-border"
-                />
-                {busqueda && (
-                  <button
-                    type="button"
-                    onClick={() => setBusqueda("")}
-                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
+              {/* Buscador Rápido de Productos + Botón Modesto Alertas Stock */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-3 size-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="🔍 Buscar producto por nombre o ingrediente..."
+                    className="h-10 pl-10 pr-10 text-xs rounded-xl bg-card border-border"
+                  />
+                  {busqueda && (
+                    <button
+                      type="button"
+                      onClick={() => setBusqueda("")}
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Pill Modesto de Alertas de Stock */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalAlertasStockAbierto(true)}
+                  className={cn(
+                    "h-10 text-xs font-bold rounded-xl gap-1.5 shrink-0 transition-all",
+                    alertasStockPos.length > 0
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <AlertTriangle className="size-4 text-amber-500" />
+                  <span className="hidden sm:inline">
+                    {alertasStockPos.length > 0 ? `${alertasStockPos.length} Stock Crítico` : "Stock OK"}
+                  </span>
+                  {alertasStockPos.length > 0 && (
+                    <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 h-4 min-w-4 rounded-full">
+                      {alertasStockPos.length}
+                    </Badge>
+                  )}
+                </Button>
               </div>
 
               {/* Pills de Categorías con Scroll Horizontal */}
@@ -662,6 +830,41 @@ export function ModuloPosInteractive({
                                 <p className="numeral font-bold text-sm text-brand dark:text-[#3E9EA2]">
                                   {formatCop(prod.priceCop)}
                                 </p>
+
+                                {/* Indicador de porciones preparables con insumos de la receta */}
+                                {(() => {
+                                  const disp = calcularStockDisponibleProducto(prod);
+                                  if (disp === null) return null;
+
+                                  const esSinStock = disp <= 0;
+                                  const esBajoStock = disp > 0 && disp <= 5;
+                                  const tieneReceta = Boolean(prod.recipeItems && prod.recipeItems.length > 0);
+
+                                  return (
+                                    <div
+                                      className={cn(
+                                        "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border w-fit mt-1",
+                                        esSinStock
+                                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                          : esBajoStock
+                                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                                          : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                                      )}
+                                      title={
+                                        tieneReceta
+                                          ? `Calculado según los insumos de la receta: ${disp} porciones preparables`
+                                          : `Stock directo: ${disp} unidades disponibles`
+                                      }
+                                    >
+                                      <Box className="size-3 shrink-0" />
+                                      <span className="truncate">
+                                        {esSinStock
+                                          ? "Sin insumos (0 disp.)"
+                                          : `${disp} porción${disp === 1 ? "" : "es"} disp.`}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {/* Botón rápido */}
@@ -765,16 +968,29 @@ export function ModuloPosInteractive({
                   <div className="space-y-2 pt-1 border-t border-border/60">
                     <div className="space-y-1">
                       <Label htmlFor="customerName" className="text-xs font-medium flex items-center justify-between">
-                        <span>Nombre Cliente</span>
-                        <span className="text-[10px] text-muted-foreground">(Opcional)</span>
+                        <span>Nombre Cliente *</span>
+                        <span className="text-[10px] font-semibold text-rose-500">(Obligatorio para facturar)</span>
                       </Label>
                       <Input
                         id="customerName"
                         value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        placeholder="Ej. Carlos / Mesa mostrador"
-                        className="h-9 text-xs rounded-xl"
+                        onChange={(e) => {
+                          setCustomerName(e.target.value);
+                          if (errorGlobal && e.target.value.trim()) setErrorGlobal(null);
+                        }}
+                        placeholder="Ej. Carlos / Cliente Mostrador"
+                        className={cn(
+                          "h-9 text-xs rounded-xl transition-all",
+                          cart.length > 0 && !customerName.trim()
+                            ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5 placeholder:text-rose-400 font-semibold text-foreground"
+                            : "bg-background border-input"
+                        )}
                       />
+                      {cart.length > 0 && !customerName.trim() && (
+                        <p className="text-[10px] text-rose-500 font-medium pt-0.5">
+                          ⚠️ Obligatorio: escribí el nombre para poder facturar e imprimir.
+                        </p>
+                      )}
                     </div>
 
                     {/* Campos obligatorios si es Domicilio */}
@@ -922,7 +1138,19 @@ export function ModuloPosInteractive({
                       <Button
                         type="button"
                         disabled={cart.length === 0 || procesandoAccion}
-                        onClick={() => setModalPagoAbierto(true)}
+                        onClick={() => {
+                          if (!customerName.trim()) {
+                            setErrorGlobal("Ingresá el nombre del cliente antes de pasar a la pantalla de cobro o facturar.");
+                            document.getElementById("customerName")?.focus();
+                            return;
+                          }
+                          const errorStock = auditarStockCarritoRecetas(cart, carta);
+                          if (errorStock) {
+                            setErrorGlobal(errorStock);
+                            return;
+                          }
+                          setModalPagoAbierto(true);
+                        }}
                         className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md gap-2"
                       >
                         <DollarSign className="size-4" />
@@ -982,6 +1210,22 @@ export function ModuloPosInteractive({
                     <p className="numeral text-3xl font-extrabold text-brand dark:text-[#3E9EA2]">
                       {formatCop(totalCart)}
                     </p>
+                  </div>
+
+                  {/* Nombre Cliente en Modal */}
+                  <div className="space-y-1 bg-muted/30 p-2.5 rounded-xl border border-border">
+                    <Label htmlFor="modalCustomerName" className="text-xs font-semibold flex items-center justify-between">
+                      <span>Cliente Factura / Ticket *</span>
+                      <span className="text-[10px] font-bold text-rose-500">(Obligatorio)</span>
+                    </Label>
+                    <Input
+                      id="modalCustomerName"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Ej. Carlos / Cliente Mostrador"
+                      className="h-8 text-xs rounded-lg bg-background"
+                      required
+                    />
                   </div>
 
                   {/* Selector Método de Pago */}
@@ -1168,6 +1412,94 @@ export function ModuloPosInteractive({
                       </div>
                     ))
                   )}
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* ── MODAL COMPACTO DE ALERTAS RAPIDAS DE STOCK ──── */}
+          {modalAlertasStockAbierto && (
+            <div className="fixed inset-0 bg-background/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+              <Card className="w-full max-w-lg bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="size-5 text-amber-500" />
+                    <h3 className="font-bold text-base text-foreground">
+                      Alertas Rápidas de Inventario
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalAlertasStockAbierto(false)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                  {alertasStockPos.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20 font-medium">
+                      🟢 Excelente: Todos los insumos y productos terminados cuentan con suficiente stock disponible.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">
+                        Resumen de insumos y productos con inventario crítico o por agotarse:
+                      </p>
+                      <div className="space-y-1.5">
+                        {alertasStockPos.map((a) => (
+                          <div
+                            key={a.id}
+                            className="p-3 rounded-xl bg-muted/40 border border-border flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-foreground">{a.nombre}</span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1.5 py-0 uppercase font-mono"
+                                >
+                                  {a.tipo === "INSUMO"
+                                    ? "Insumo Receta"
+                                    : a.tipo === "PRODUCTO_TERMINADO"
+                                    ? "Producto Reventa"
+                                    : "Plato Receta"}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">{a.detalle}</p>
+                            </div>
+
+                            <Badge
+                              className={cn(
+                                "text-[10px] font-bold shrink-0",
+                                a.nivel === "CRITICO"
+                                  ? "bg-rose-500 text-white"
+                                  : "bg-amber-500 text-white"
+                              )}
+                            >
+                              {a.nivel}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-border flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setModalAlertasStockAbierto(false);
+                        router.push("/inventario");
+                      }}
+                      className="text-xs font-bold rounded-xl gap-1.5"
+                    >
+                      <Boxes className="size-3.5 text-brand" />
+                      <span>Ir al Módulo de Inventario</span>
+                    </Button>
+                  </div>
                 </div>
               </Card>
             </div>

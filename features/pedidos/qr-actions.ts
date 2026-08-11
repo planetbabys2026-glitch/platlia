@@ -10,6 +10,7 @@ import { tenantDb } from "@/lib/db/tenant";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
+import { verificarYDescontarStockReceta } from "@/lib/inventory/stock";
 
 export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) {
   try {
@@ -151,6 +152,12 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
             status: OrderItemStatus.PENDIENTE,
             sentToKitchenAt: new Date(), // ¡El cliente envía el pedido directo a cocina!
           },
+        });
+
+        await verificarYDescontarStockReceta(tx, business.id, producto.id, itemInput.quantity, {
+          referenceId: order.id,
+          inventoryEnabled: settings.inventoryEnabled,
+          customNotes: `Pedido Menú QR x${itemInput.quantity}`,
         });
       }
 

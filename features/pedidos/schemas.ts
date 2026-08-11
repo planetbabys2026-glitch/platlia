@@ -88,7 +88,11 @@ export const procesarVentaPosCompletaSchema = z
   .object({
     orderId: id.optional(),
     type: z.enum([OrderType.LLEVAR, OrderType.DOMICILIO]).default(OrderType.LLEVAR),
-    customerName: textoOpcional(120),
+    customerName: z
+      .string()
+      .trim()
+      .min(1, "El nombre del cliente es obligatorio para facturar e imprimir.")
+      .max(120, "El nombre del cliente no puede superar 120 caracteres."),
     customerPhone: textoOpcional(40),
     deliveryAddress: textoOpcional(300),
     notes: textoOpcional(300),

@@ -158,6 +158,16 @@ export async function getCarta(businessId: string) {
           priceCop: true,
           isAvailable: true,
           imageUrl: true,
+          trackStock: true,
+          stockQty: true,
+          recipeItems: {
+            select: {
+              quantityRequired: true,
+              inventoryItem: {
+                select: { id: true, name: true, unit: true, stockCurrent: true },
+              },
+            },
+          },
         },
       },
     },

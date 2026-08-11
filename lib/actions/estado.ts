@@ -15,3 +15,18 @@ export type EstadoAccion<T = void> =
 
 /** Estado inicial para `useActionState`: todavía no se envió nada. */
 export const ESTADO_INICIAL = { ok: false, error: "" } as const;
+
+/**
+ * Error cuyo mensaje SÍ se le muestra al usuario tal cual.
+ *
+ * Existe para transmitir mensajes amigables como "stock insuficiente", "esa mesa ya está ocupada".
+ */
+export class ErrorDeUsuario extends Error {
+  readonly campos?: Record<string, string[]>;
+
+  constructor(mensaje: string, campos?: Record<string, string[]>) {
+    super(mensaje);
+    this.name = "ErrorDeUsuario";
+    this.campos = campos;
+  }
+}

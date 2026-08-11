@@ -1,5 +1,6 @@
 import "server-only";
 import { tenantDb } from "@/lib/db/tenant";
+import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 
 /**
  * Informe de una jornada.
@@ -149,4 +150,125 @@ export async function getAnulaciones(businessId: string, businessDate: Date) {
   ]);
 
   return { renglones, pedidosAnulados: pedidos };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Alertas de Inventario & Abastecimiento
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AlertaInventarioItem {
+  id: string;
+  tipo: "INSUMO" | "PRODUCTO_TERMINADO" | "RECETA_PLATOS";
+  nombre: string;
+  categoria?: string;
+  unidad?: string;
+  stockActual: number;
+  stockMinimo: number;
+  porcionesDisponibles?: number | null;
+  mensaje: string;
+  nivel: "CRITICO" | "BAJO";
+}
+
+/**
+ * Recopila todas las alertas de inventario (insumos de materia prima y productos terminados)
+ * que estén agotados o por debajo del stock mínimo.
+ */
+export async function getAlertasInventario(businessId: string): Promise<AlertaInventarioItem[]> {
+  const db = tenantDb(businessId);
+
+  const [insumos, productos] = await Promise.all([
+    db.inventoryItem.findMany({
+      where: { deletedAt: null },
+      orderBy: { stockCurrent: "asc" },
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        stockCurrent: true,
+        stockMin: true,
+      },
+    }),
+    db.product.findMany({
+      where: { active: true, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        category: { select: { name: true } },
+        trackStock: true,
+        stockQty: true,
+        recipeItems: {
+          select: {
+            quantityRequired: true,
+            inventoryItem: {
+              select: { id: true, name: true, unit: true, stockCurrent: true },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const alertas: AlertaInventarioItem[] = [];
+
+  for (const ins of insumos) {
+    const minAlert = ins.stockMin > 0 ? ins.stockMin : 5;
+    if (ins.stockCurrent <= minAlert) {
+      alertas.push({
+        id: `insumo-${ins.id}`,
+        tipo: "INSUMO",
+        nombre: ins.name,
+        unidad: ins.unit,
+        stockActual: ins.stockCurrent,
+        stockMinimo: ins.stockMin,
+        nivel: ins.stockCurrent <= 0 ? "CRITICO" : "BAJO",
+        mensaje:
+          ins.stockCurrent <= 0
+            ? `Insumo AGOTADO en bodega (0 ${ins.unit})`
+            : `Stock bajo de insumo: ${ins.stockCurrent} ${ins.unit} (Mín: ${minAlert})`,
+      });
+    }
+  }
+
+  for (const prod of productos) {
+    if (prod.trackStock) {
+      if (prod.stockQty <= 5) {
+        alertas.push({
+          id: `prod-${prod.id}`,
+          tipo: "PRODUCTO_TERMINADO",
+          nombre: prod.name,
+          categoria: prod.category.name,
+          stockActual: prod.stockQty,
+          stockMinimo: 5,
+          nivel: prod.stockQty <= 0 ? "CRITICO" : "BAJO",
+          mensaje:
+            prod.stockQty <= 0
+              ? `Producto terminado AGOTADO (0 und.)`
+              : `Stock bajo de producto terminado: ${prod.stockQty} und.`,
+        });
+      }
+    }
+
+    if (prod.recipeItems.length > 0) {
+      const disp = calcularStockDisponibleProducto(prod);
+      if (disp !== null && disp <= 5) {
+        alertas.push({
+          id: `receta-${prod.id}`,
+          tipo: "RECETA_PLATOS",
+          nombre: prod.name,
+          categoria: prod.category.name,
+          stockActual: disp,
+          stockMinimo: 5,
+          porcionesDisponibles: disp,
+          nivel: disp <= 0 ? "CRITICO" : "BAJO",
+          mensaje:
+            disp <= 0
+              ? `Plato/Receta sin insumos suficientes (0 porciones preparables)`
+              : `Baja disponibilidad por receta: solo ${disp} porciones preparables`,
+        });
+      }
+    }
+  }
+
+  return alertas;
 }

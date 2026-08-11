@@ -56,3 +56,30 @@ export const guardarRecetaSchema = z.object({
   productId: z.string().min(1, "Falta el producto."),
   itemsJson: z.string().min(2, "Agregá al menos un insumo a la receta."),
 });
+
+export const actualizarStockProductoTerminadoSchema = z.object({
+  productId: z.string().min(1, "Falta el ID del producto."),
+  stockQty: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),
+    z.number().int("El stock debe ser un número entero.").min(0),
+  ),
+});
+
+export const crearProductoTerminadoSchema = z.object({
+  name: z.string().trim().min(2, "Escribí el nombre de la bebida o producto.").max(120),
+  categoryId: z.string().min(1, "Elegí una categoría."),
+  sku: textoOpcional(40),
+  costCop: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),
+    z.number().int("El costo debe ser un número entero positivo.").min(0),
+  ),
+  priceCop: montoCopPositivo,
+  stockQty: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),
+    z.number().int("El stock debe ser un número entero.").min(0),
+  ),
+});
+
+export const editarProductoTerminadoSchema = crearProductoTerminadoSchema.extend({
+  productId: z.string().min(1, "Falta el ID del producto."),
+});

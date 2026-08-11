@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { Role } from "@/generated/prisma/enums";
 import {
+  actualizarStockProductoTerminadoSchema,
   crearFacturaCompraSchema,
   crearInsumoSchema,
+  crearProductoTerminadoSchema,
   crearProveedorSchema,
   editarInsumoSchema,
+  editarProductoTerminadoSchema,
   guardarRecetaSchema,
 } from "@/features/inventario/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
@@ -273,5 +276,145 @@ export const guardarReceta = defineAction({
     }
 
     revalidatePath("/inventario");
+  },
+});
+
+/**
+ * Actualiza directamente el stock disponible de productos terminados / reventa (cervezas, gaseosas, etc.).
+ */
+export const actualizarStockProductoTerminado = defineAction({
+  schema: actualizarStockProductoTerminadoSchema,
+  roles: PUEDEN_MANEJAR_INVENTARIO,
+  async handler({ input, ctx, db }) {
+    await db.product.update({
+      where: { id: input.productId },
+      data: {
+        trackStock: true,
+        stockQty: input.stockQty,
+      },
+    });
+
+    revalidatePath("/inventario");
+    revalidatePath("/pos");
+  },
+});
+
+/**
+ * Alta rápida de bebida o producto terminado de reventa con costo de compra, precio de venta, stock inicial y categoría.
+ */
+export const crearProductoTerminado = defineAction({
+  schema: crearProductoTerminadoSchema,
+  roles: PUEDEN_MANEJAR_INVENTARIO,
+  async handler({ input, ctx, db }) {
+    let taxRateId = (
+      await db.taxRate.findFirst({
+        where: { isDefault: true, active: true },
+        select: { id: true },
+      })
+    )?.id;
+
+    if (!taxRateId) {
+      const anyTax = await db.taxRate.findFirst({
+        where: { active: true },
+        select: { id: true },
+      });
+      taxRateId = anyTax?.id;
+    }
+
+    if (!taxRateId) {
+      const newTax = await db.taxRate.create({
+        data: {
+          businessId: ctx.business.id,
+          name: "Impoconsumo 8%",
+          kind: "IMPOCONSUMO",
+          rateBp: 800,
+          isDefault: true,
+        },
+        select: { id: true },
+      });
+      taxRateId = newTax.id;
+    }
+
+    // 1. Crear Insumo/Item de Inventario correspondiente al Costo de Compra
+    const inventoryItem = await db.inventoryItem.create({
+      data: {
+        businessId: ctx.business.id,
+        name: input.name,
+        unit: "UNIDAD",
+        costCop: input.costCop,
+        stockCurrent: input.stockQty,
+        stockMin: 0,
+      },
+    });
+
+    // 2. Crear Producto Terminado con Precio de Venta
+    const product = await db.product.create({
+      data: {
+        businessId: ctx.business.id,
+        categoryId: input.categoryId,
+        taxRateId,
+        name: input.name,
+        sku: input.sku,
+        priceCop: input.priceCop,
+        trackStock: true,
+        stockQty: input.stockQty,
+      },
+    });
+
+    // 3. Vincular Producto con el Insumo (1 unidad por porción)
+    await db.productRecipeItem.create({
+      data: {
+        businessId: ctx.business.id,
+        productId: product.id,
+        inventoryItemId: inventoryItem.id,
+        quantityRequired: 1,
+      },
+    });
+
+    revalidatePath("/inventario");
+    revalidatePath("/pos");
+    revalidatePath("/administracion/menu");
+  },
+});
+
+/**
+ * Edición de nombre, categoría, costo de compra, precio de venta y stock de una bebida o producto terminado.
+ */
+export const editarProductoTerminado = defineAction({
+  schema: editarProductoTerminadoSchema,
+  roles: PUEDEN_MANEJAR_INVENTARIO,
+  async handler({ input, ctx, db }) {
+    // 1. Actualizar datos del producto (Nombre, Categoría, SKU, Precio Venta, Stock)
+    await db.product.update({
+      where: { id: input.productId },
+      data: {
+        name: input.name,
+        categoryId: input.categoryId,
+        sku: input.sku,
+        priceCop: input.priceCop,
+        stockQty: input.stockQty,
+      },
+    });
+
+    // 2. Actualizar insumo vinculado si existe
+    const recipeItem = await db.productRecipeItem.findFirst({
+      where: { productId: input.productId },
+      select: { inventoryItemId: true },
+    });
+
+    if (recipeItem) {
+      await db.inventoryItem.update({
+        where: { id: recipeItem.inventoryItemId },
+        data: {
+          name: input.name,
+          costCop: input.costCop,
+          stockCurrent: input.stockQty,
+        },
+      });
+    }
+
+    revalidatePath("/inventario");
+    revalidatePath("/pos");
+    revalidatePath("/administracion/menu");
   },
 });

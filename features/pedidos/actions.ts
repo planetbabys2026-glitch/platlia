@@ -23,6 +23,11 @@ import { publishCocinaUpdate, publishTurneroUpdate } from "@/lib/redis";
 import { tieneRol } from "@/lib/auth/reglas";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
+import {
+  ajustarStockCantidadReceta,
+  restaurarStockReceta,
+  verificarYDescontarStockReceta,
+} from "@/lib/inventory/stock";
 
 /** Roles que atienden el salón: todos menos cocina. */
 const ATIENDEN = [Role.MESERO, Role.CAJERO, Role.ADMINISTRADOR] as const;
@@ -213,46 +218,10 @@ export const agregarItem = defineAction({
         },
       });
 
-      if (settings.inventoryEnabled) {
-        const recetas = await tx.productRecipeItem.findMany({
-          where: { productId: producto.id },
-        });
-        for (const r of recetas) {
-          const descuentoTotal = r.quantityRequired * input.quantity;
-          const insumo = await tx.inventoryItem.findUnique({
-            where: { id: r.inventoryItemId },
-          });
-          if (insumo) {
-            const nuevoStock = insumo.stockCurrent - descuentoTotal;
-            await tx.inventoryItem.update({
-              where: { id: insumo.id },
-              data: { stockCurrent: nuevoStock },
-            });
-            await tx.inventoryMovement.create({
-              data: {
-                businessId: ctx.business.id,
-                inventoryItemId: insumo.id,
-                type: "VENTA",
-                quantity: -descuentoTotal,
-                stockAfter: nuevoStock,
-                unitCostCop: insumo.costCop,
-                referenceId: pedido.id,
-                notes: `Venta de ${producto.name} x${input.quantity}`,
-              },
-            });
-          }
-        }
-      }
-
-      // El inventario puede quedar negativo a propósito: un bar no puede negarse a
-      // vender porque el conteo está desactualizado. El número negativo es la
-      // señal de que hay que hacer inventario, no un freno.
-      if (producto.trackStock) {
-        await tx.product.update({
-          where: { id: producto.id },
-          data: { stockQty: { decrement: input.quantity } },
-        });
-      }
+      await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, input.quantity, {
+        referenceId: pedido.id,
+        inventoryEnabled: settings.inventoryEnabled,
+      });
 
       await recalcularTotales(tx, pedido.id);
     });
@@ -282,6 +251,7 @@ export const cambiarCantidad = defineAction({
           taxIncludedSnapshot: true,
           status: true,
           productId: true,
+          businessId: true,
           product: { select: { trackStock: true } },
           order: { select: { status: true } },
         },
@@ -311,12 +281,18 @@ export const cambiarCantidad = defineAction({
         },
       });
 
-      if (item.product.trackStock) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQty: { increment: item.quantity - input.quantity } },
-        });
-      }
+      const settings = await getSettings(item.businessId);
+      await ajustarStockCantidadReceta(
+        tx,
+        item.businessId,
+        item.productId,
+        item.quantity,
+        input.quantity,
+        {
+          referenceId: item.orderId,
+          inventoryEnabled: settings.inventoryEnabled,
+        },
+      );
 
       await recalcularTotales(tx, item.orderId);
       return item.orderId;
@@ -384,6 +360,7 @@ export const quitarItem = defineAction({
           quantity: true,
           status: true,
           productId: true,
+          businessId: true,
           product: { select: { trackStock: true } },
           order: { select: { status: true } },
         },
@@ -403,12 +380,12 @@ export const quitarItem = defineAction({
         data: { status: "ANULADO", canceledAt: new Date(), canceledById: ctx.user.id },
       });
 
-      if (item.product.trackStock) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQty: { increment: item.quantity } },
-        });
-      }
+      const settings = await getSettings(item.businessId);
+      await restaurarStockReceta(tx, item.businessId, item.productId, item.quantity, {
+        referenceId: item.orderId,
+        inventoryEnabled: settings.inventoryEnabled,
+        customNotes: `Quitar renglón de producto x${item.quantity}`,
+      });
 
       await recalcularTotales(tx, item.orderId);
       return item.orderId;
@@ -434,6 +411,7 @@ export const anularItem = defineAction({
           lineTotalCop: true,
           status: true,
           productId: true,
+          businessId: true,
           product: { select: { trackStock: true } },
           order: { select: { status: true, code: true } },
         },
@@ -454,12 +432,12 @@ export const anularItem = defineAction({
         },
       });
 
-      if (item.product.trackStock) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQty: { increment: item.quantity } },
-        });
-      }
+      const settings = await getSettings(item.businessId);
+      await restaurarStockReceta(tx, item.businessId, item.productId, item.quantity, {
+        referenceId: item.orderId,
+        inventoryEnabled: settings.inventoryEnabled,
+        customNotes: `Anulación de renglón ${item.nameSnapshot} x${item.quantity}. Motivo: ${input.motivo}`,
+      });
 
       // Una anulación es de lo que después se discute: queda en la bitácora con
       // quién, qué, cuánto y por qué.
@@ -698,6 +676,20 @@ export const anularPedido = defineAction({
         );
       }
 
+      const itemsParaDevolver = await tx.orderItem.findMany({
+        where: { orderId: pedido.id, status: { not: "ANULADO" } },
+        select: { id: true, productId: true, quantity: true, nameSnapshot: true },
+      });
+
+      const settings = await getSettings(ctx.business.id);
+      for (const item of itemsParaDevolver) {
+        await restaurarStockReceta(tx, ctx.business.id, item.productId, item.quantity, {
+          referenceId: pedido.id,
+          inventoryEnabled: settings.inventoryEnabled,
+          customNotes: `Anulación de pedido #${pedido.code}. Motivo: ${input.motivo}`,
+        });
+      }
+
       await tx.order.update({
         where: { id: pedido.id },
         data: {
@@ -802,6 +794,10 @@ export const procesarVentaPosCompleta = defineAction({
   roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
   async handler({ input, ctx, db }) {
+    if (!input.customerName || !input.customerName.trim()) {
+      throw new ErrorDeUsuario("El nombre del cliente es obligatorio para facturar e imprimir.");
+    }
+
     const settings = await getSettings(ctx.business.id);
     const businessDate = currentBusinessDate(settings);
 
@@ -881,6 +877,63 @@ export const procesarVentaPosCompleta = defineAction({
           });
         }
 
+        // Pre-verificación acumulada de insumos para todo el lote de productos
+        if (settings.inventoryEnabled) {
+          const insumosAcumuladosMap = new Map<
+            string,
+            { name: string; unit: string; requeridoTotal: number; stockCurrent: number }
+          >();
+
+          for (const itemInput of input.items) {
+            const p = await tx.product.findFirst({
+              where: { id: itemInput.productId, deletedAt: null },
+              select: {
+                id: true,
+                name: true,
+                trackStock: true,
+                stockQty: true,
+                recipeItems: {
+                  include: {
+                    inventoryItem: { select: { id: true, name: true, unit: true, stockCurrent: true } },
+                  },
+                },
+              },
+            });
+
+            if (!p) throw new ErrorDeUsuario("Ese producto no existe.");
+
+            if (p.trackStock && p.stockQty < itemInput.quantity) {
+              throw new ErrorDeUsuario(
+                `Stock insuficiente de "${p.name}". Disponibles: ${p.stockQty}, solicitados: ${itemInput.quantity}.`,
+              );
+            }
+
+            for (const r of p.recipeItems) {
+              const ins = r.inventoryItem;
+              const req = r.quantityRequired * itemInput.quantity;
+              const actual = insumosAcumuladosMap.get(ins.id);
+              if (actual) {
+                actual.requeridoTotal += req;
+              } else {
+                insumosAcumuladosMap.set(ins.id, {
+                  name: ins.name,
+                  unit: ins.unit,
+                  requeridoTotal: req,
+                  stockCurrent: ins.stockCurrent,
+                });
+              }
+            }
+          }
+
+          for (const [, ins] of insumosAcumuladosMap) {
+            if (ins.requeridoTotal > ins.stockCurrent) {
+              throw new ErrorDeUsuario(
+                `Stock insuficiente del insumo "${ins.name}" para preparar el pedido. Requerido total: ${ins.requeridoTotal} ${ins.unit}, disponible en inventario: ${ins.stockCurrent} ${ins.unit}.`,
+              );
+            }
+          }
+        }
+
         // 3. Crear Ítems (todos agrupados en el mismo lote de comanda)
         for (const itemInput of input.items) {
           const producto = await tx.product.findFirst({
@@ -927,6 +980,11 @@ export const procesarVentaPosCompleta = defineAction({
               createdById: ctx.user.id,
               sentToKitchenAt: debeEnviarACocina ? ahora : null,
             },
+          });
+
+          await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, itemInput.quantity, {
+            referenceId: pedido.id,
+            inventoryEnabled: settings.inventoryEnabled,
           });
         }
 
