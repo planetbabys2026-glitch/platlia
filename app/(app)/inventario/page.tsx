@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import {
+  getCategories,
+  getFinishedProducts,
   getInventorySummary,
   getProductRecipes,
   getPurchaseInvoices,
@@ -47,11 +49,13 @@ export default async function InventarioPage() {
     );
   }
 
-  const [summary, suppliers, invoices, recipeData] = await Promise.all([
+  const [summary, suppliers, invoices, recipeData, finishedProducts, categories] = await Promise.all([
     getInventorySummary(ctx.business.id),
     getSuppliers(ctx.business.id),
     getPurchaseInvoices(ctx.business.id),
     getProductRecipes(ctx.business.id),
+    getFinishedProducts(ctx.business.id),
+    getCategories(ctx.business.id),
   ]);
 
   return (
@@ -59,7 +63,7 @@ export default async function InventarioPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Inventario</h1>
         <p className="text-muted-foreground text-sm">
-          Control de stock de insumos, facturas de compra de proveedores, costos y recetas por producto.
+          Control de stock de insumos, facturas de compra de proveedores, productos terminados y recetas por producto.
         </p>
       </div>
 
@@ -68,6 +72,8 @@ export default async function InventarioPage() {
         suppliers={suppliers}
         invoices={invoices}
         recipeData={recipeData}
+        finishedProducts={finishedProducts}
+        categories={categories}
         recipesEnabled={settings.recipesEnabled}
       />
     </div>

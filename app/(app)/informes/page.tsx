@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppModule } from "@/generated/prisma/enums";
 import {
+  getAlertasInventario,
   getAnulaciones,
   getPorMetodoDePago,
   getPorTarifa,
@@ -13,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireModule } from "@/lib/auth/dal";
 import { formatCop, formatRateBp, promedioCop, variacionPorcentual } from "@/lib/money";
 import { currentBusinessDate, formatBusinessDate, parseBusinessDate } from "@/lib/time";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Boxes, ShoppingBag } from "lucide-react";
 
 export const metadata: Metadata = { title: "Informes & Ventas · Platlia" };
 export const dynamic = "force-dynamic";
@@ -40,8 +41,6 @@ export default async function InformesPage({
   const { jornada } = await searchParams;
   const settings = await getSettings(ctx.business.id);
 
-  // Una jornada mal escrita en la URL no puede tumbar la página: se cae al día
-  // en curso, que es lo que la persona quería ver.
   let dia: Date;
   try {
     dia = jornada ? parseBusinessDate(jornada) : currentBusinessDate(settings);
@@ -52,13 +51,14 @@ export default async function InformesPage({
   const anterior = new Date(dia.getTime() - DIA_MS);
   const hoy = currentBusinessDate(settings);
 
-  const [resumen, resumenAnterior, porMetodo, porTarifa, top, anulaciones] = await Promise.all([
+  const [resumen, resumenAnterior, porMetodo, porTarifa, top, anulaciones, alertasStock] = await Promise.all([
     getResumenDeJornada(ctx.business.id, dia),
     getResumenDeJornada(ctx.business.id, anterior),
     getPorMetodoDePago(ctx.business.id, dia),
     getPorTarifa(ctx.business.id, dia),
     getProductosMasVendidos(ctx.business.id, dia),
     getAnulaciones(ctx.business.id, dia),
+    getAlertasInventario(ctx.business.id),
   ]);
 
   const variacion = variacionPorcentual(resumen.ventasCop, resumenAnterior.ventasCop);
@@ -268,6 +268,86 @@ export default async function InformesPage({
           </CardContent>
         </Card>
       )}
+
+      {/* ─── Alertas de Inventario & Abastecimiento (Dos Inventarios) ─── */}
+      <Card className="border-border/80 bg-card overflow-hidden">
+        <CardContent className="space-y-4 pt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-border/80 pb-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="size-5 text-amber-500" />
+              <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                Alertas de Inventario & Abastecimiento
+              </h2>
+            </div>
+            <Link
+              href="/inventario"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/40 bg-brand/10 text-xs font-mono text-brand font-bold hover:bg-brand/20 transition-colors"
+            >
+              <Boxes className="size-3.5" /> Ir a Cargar Compras / Ajustar Inventario <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+
+          {alertasStock.length === 0 ? (
+            <div className="p-4 text-center text-xs text-muted-foreground font-mono bg-emerald-500/5 rounded-xl border border-emerald-500/20">
+              🟢 Todos los inventarios (Productos Terminados e Insumos de Receta) cuentan con stock saludable.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Columna Insumos / Materias Primas */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-muted/40 border border-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Boxes className="size-3.5 text-amber-500" />
+                  <span>Insumos / Materias Primas de Receta ({alertasStock.filter(a => a.tipo === "INSUMO").length})</span>
+                </h3>
+
+                {alertasStock.filter(a => a.tipo === "INSUMO").length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">Sin alertas de insumos.</p>
+                ) : (
+                  <ul className="space-y-2 text-xs">
+                    {alertasStock.filter(a => a.tipo === "INSUMO").map((a) => (
+                      <li key={a.id} className="p-2 rounded-lg bg-background border border-border flex items-center justify-between gap-2">
+                        <div>
+                          <strong className="text-foreground block">{a.nombre}</strong>
+                          <span className="text-[11px] text-muted-foreground font-mono">{a.mensaje}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${a.nivel === "CRITICO" ? "bg-rose-500/10 text-rose-600 border border-rose-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"}`}>
+                          {a.nivel}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Columna Productos Terminados y Platos por Receta */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-muted/40 border border-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <ShoppingBag className="size-3.5 text-amber-500" />
+                  <span>Productos Terminados & Platos ({alertasStock.filter(a => a.tipo !== "INSUMO").length})</span>
+                </h3>
+
+                {alertasStock.filter(a => a.tipo !== "INSUMO").length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">Sin alertas en carta.</p>
+                ) : (
+                  <ul className="space-y-2 text-xs">
+                    {alertasStock.filter(a => a.tipo !== "INSUMO").map((a) => (
+                      <li key={a.id} className="p-2 rounded-lg bg-background border border-border flex items-center justify-between gap-2">
+                        <div>
+                          <strong className="text-foreground block">{a.nombre} <span className="text-[10px] text-muted-foreground">({a.categoria})</span></strong>
+                          <span className="text-[11px] text-muted-foreground font-mono">{a.mensaje}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${a.nivel === "CRITICO" ? "bg-rose-500/10 text-rose-600 border border-rose-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"}`}>
+                          {a.nivel}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

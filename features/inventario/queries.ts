@@ -25,6 +25,13 @@ export async function getSuppliers(businessId: string) {
   });
 }
 
+export async function getCategories(businessId: string) {
+  return tenantDb(businessId).category.findMany({
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
 export async function getPurchaseInvoices(businessId: string) {
   return tenantDb(businessId).purchaseInvoice.findMany({
     orderBy: { invoiceDate: "desc" },
@@ -37,6 +44,33 @@ export async function getPurchaseInvoices(businessId: string) {
       },
     },
     take: 100,
+  });
+}
+
+export async function getFinishedProducts(businessId: string) {
+  return tenantDb(businessId).product.findMany({
+    where: { deletedAt: null, active: true },
+    orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      priceCop: true,
+      imageUrl: true,
+      trackStock: true,
+      stockQty: true,
+      isAvailable: true,
+      category: {
+        select: { id: true, name: true },
+      },
+      recipeItems: {
+        select: {
+          id: true,
+          quantityRequired: true,
+          inventoryItem: { select: { id: true, name: true, unit: true, costCop: true, stockCurrent: true } },
+        },
+      },
+    },
   });
 }
 

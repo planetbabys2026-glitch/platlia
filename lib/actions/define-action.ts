@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { AppModule, Role } from "@/generated/prisma/enums";
-import { ESTADO_INICIAL, type EstadoAccion } from "@/lib/actions/estado";
+import { ESTADO_INICIAL, ErrorDeUsuario, type EstadoAccion } from "@/lib/actions/estado";
 import { getContext, licenciaVigente, tieneRol, type Contexto } from "@/lib/auth/dal";
 import { tenantDb, type TenantDb } from "@/lib/db/tenant";
 
@@ -22,25 +22,7 @@ import { tenantDb, type TenantDb } from "@/lib/db/tenant";
 // La forma del estado vive en un módulo sin "server-only" porque también la lee
 // el formulario en el navegador. Se reexporta por comodidad del servidor; los
 // componentes cliente tienen que importarla de @/lib/actions/estado.
-export { ESTADO_INICIAL, type EstadoAccion };
-
-/**
- * Error cuyo mensaje SÍ se le muestra al usuario tal cual.
- *
- * Existe porque el catch de abajo convierte cualquier otra excepción en un
- * mensaje genérico —para no filtrar nombres de tabla ni consultas—, y hace falta
- * una forma explícita de decir "este texto lo escribí yo para que lo lea una
- * persona": "ese correo ya tiene cuenta", "no hay caja abierta".
- */
-export class ErrorDeUsuario extends Error {
-  readonly campos?: Record<string, string[]>;
-
-  constructor(mensaje: string, campos?: Record<string, string[]>) {
-    super(mensaje);
-    this.name = "ErrorDeUsuario";
-    this.campos = campos;
-  }
-}
+export { ESTADO_INICIAL, ErrorDeUsuario, type EstadoAccion };
 
 type Handler<TInput, TOut> = (args: {
   input: TInput;

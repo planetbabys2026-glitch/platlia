@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,25 +15,34 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  actualizarStockProductoTerminado,
   crearFacturaCompra,
   crearInsumo,
+  crearProductoTerminado,
   crearProveedor,
   editarInsumo,
+  editarProductoTerminado,
   guardarReceta,
 } from "@/features/inventario/actions";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
+import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  Boxes,
-  FileText,
-  Truck,
+  AlertTriangle,
   BookOpen,
+  Boxes,
+  Check,
+  Edit,
+  FileText,
+  Filter,
   Plus,
   Search,
-  AlertTriangle,
   Settings2,
+  ShoppingBag,
+  Truck,
   X,
 } from "lucide-react";
 
@@ -87,11 +97,30 @@ type ProductoReceta = {
   }>;
 };
 
+export type ProductoTerminadoItem = {
+  id: string;
+  name: string;
+  sku: string | null;
+  priceCop: number;
+  imageUrl: string | null;
+  trackStock: boolean;
+  stockQty: number;
+  isAvailable: boolean;
+  category: { id: string; name: string };
+  recipeItems: Array<{
+    id: string;
+    quantityRequired: number;
+    inventoryItem: { id: string; name: string; unit: string; costCop: number; stockCurrent: number };
+  }>;
+};
+
 export function VistaInventario({
   summary,
   suppliers,
   invoices,
   recipeData,
+  finishedProducts = [],
+  categories = [],
   recipesEnabled,
 }: {
   summary: {
@@ -103,10 +132,14 @@ export function VistaInventario({
   suppliers: ProveedorItem[];
   invoices: FacturaItem[];
   recipeData: { products: ProductoReceta[]; inventoryItems: Array<{ id: string; name: string; unit: string; costCop: number }> };
+  finishedProducts?: ProductoTerminadoItem[];
+  categories?: Array<{ id: string; name: string }>;
   recipesEnabled: boolean;
 }) {
+  const [tabActiva, setTabActiva] = useState("stock");
   const [busqueda, setBusqueda] = useState("");
   const [openInsumoModal, setOpenInsumoModal] = useState(false);
+  const [openBebidaModal, setOpenBebidaModal] = useState(false);
   const [openProveedorModal, setOpenProveedorModal] = useState(false);
   const [openFacturaModal, setOpenFacturaModal] = useState(false);
 
@@ -164,38 +197,84 @@ export function VistaInventario({
       {/* ─────────────────────────────────────────────────────────────
           PESTAÑAS DEL MÓDULO DE INVENTARIO
           ───────────────────────────────────────────────────────────── */}
-      <Tabs defaultValue="stock" className="w-full">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-border pb-3">
-          <TabsList className="flex flex-wrap h-auto p-1 bg-muted/60">
-            <TabsTrigger value="stock" className="text-xs font-semibold gap-1.5">
+      <Tabs value={tabActiva} onValueChange={setTabActiva} className="w-full">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-border pb-3">
+          <TabsList className="inline-flex w-full sm:w-auto items-center justify-start overflow-x-auto p-1 bg-muted/60 scrollbar-none rounded-xl border border-border/50 shadow-xs flex-nowrap shrink-0">
+            <TabsTrigger value="stock" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
               <Boxes className="size-3.5" />
-              <span>Stock e Insumos ({summary.totalItems})</span>
+              <span>Insumos ({summary.totalItems})</span>
             </TabsTrigger>
-            <TabsTrigger value="facturas" className="text-xs font-semibold gap-1.5">
+            <TabsTrigger value="bebidas" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
+              <ShoppingBag className="size-3.5" />
+              <span>Bebidas & Reventa ({finishedProducts.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="facturas" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
               <FileText className="size-3.5" />
-              <span>Facturas de Compra ({invoices.length})</span>
+              <span>Facturas ({invoices.length})</span>
             </TabsTrigger>
             {recipesEnabled && (
-              <TabsTrigger value="recetas" className="text-xs font-semibold gap-1.5">
+              <TabsTrigger value="recetas" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
                 <BookOpen className="size-3.5" />
-                <span>Recetas / Escandallos</span>
+                <span>Recetas</span>
               </TabsTrigger>
             )}
-            <TabsTrigger value="proveedores" className="text-xs font-semibold gap-1.5">
+            <TabsTrigger value="proveedores" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
               <Truck className="size-3.5" />
               <span>Proveedores ({suppliers.length})</span>
             </TabsTrigger>
           </TabsList>
 
-          {/* Acciones Rápidas */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <ModalNuevoInsumo open={openInsumoModal} onOpenChange={setOpenInsumoModal} />
-            <ModalNuevaFactura
-              open={openFacturaModal}
-              onOpenChange={setOpenFacturaModal}
-              suppliers={suppliers}
-              inventoryItems={summary.items}
-            />
+          {/* Acciones Rápidas Dinámicas según la Pestaña Activa */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {tabActiva === "stock" && (
+              <>
+                <ModalNuevoInsumo open={openInsumoModal} onOpenChange={setOpenInsumoModal} />
+                <ModalNuevaFactura
+                  open={openFacturaModal}
+                  onOpenChange={setOpenFacturaModal}
+                  suppliers={suppliers}
+                  inventoryItems={summary.items}
+                />
+              </>
+            )}
+
+            {tabActiva === "bebidas" && (
+              <>
+                <ModalNuevoProductoTerminado
+                  open={openBebidaModal}
+                  onOpenChange={setOpenBebidaModal}
+                  categories={categories}
+                />
+                <ModalNuevaFactura
+                  open={openFacturaModal}
+                  onOpenChange={setOpenFacturaModal}
+                  suppliers={suppliers}
+                  inventoryItems={summary.items}
+                />
+              </>
+            )}
+
+            {tabActiva === "facturas" && (
+              <ModalNuevaFactura
+                open={openFacturaModal}
+                onOpenChange={setOpenFacturaModal}
+                suppliers={suppliers}
+                inventoryItems={summary.items}
+              />
+            )}
+
+            {tabActiva === "recetas" && (
+              <Button asChild size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+                <Link href="/administracion/menu">
+                  <Settings2 className="size-3.5 mr-1" />
+                  <span>Gestionar Menú y Platos</span>
+                </Link>
+              </Button>
+            )}
+
+            {tabActiva === "proveedores" && (
+              <ModalNuevoProveedor open={openProveedorModal} onOpenChange={setOpenProveedorModal} />
+            )}
           </div>
         </div>
 
@@ -234,6 +313,11 @@ export function VistaInventario({
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── PESTAÑA BEBIDAS Y PRODUCTOS TERMINADOS (STOCK DIRECTO) ── */}
+        <TabsContent value="bebidas" className="space-y-4 pt-4">
+          <SeccionProductosTerminados products={finishedProducts} categories={categories} />
         </TabsContent>
 
         {/* ── PESTAÑA 2: FACTURAS DE COMPRA Y ENTRADAS ── */}
@@ -415,9 +499,9 @@ function ModalNuevoInsumo({ open, onOpenChange }: { open: boolean; onOpenChange:
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs">
+        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
           <Plus className="size-3.5 mr-1" />
-          Cargar Insumo / Stock Inicial
+          <span>Cargar Insumo / Stock Inicial</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
@@ -567,8 +651,8 @@ function ModalNuevoProveedor({ open, onOpenChange }: { open: boolean; onOpenChan
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="text-xs gap-1">
-          <Plus className="size-3.5" />
+        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+          <Plus className="size-3.5 mr-1" />
           <span>Nuevo Proveedor</span>
         </Button>
       </DialogTrigger>
@@ -629,16 +713,33 @@ function ModalNuevaFactura({
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [includesTax, setIncludesTax] = useState(true);
   const [notes, setNotes] = useState("");
+  const [busquedaInsumo, setBusquedaInsumo] = useState("");
 
   // Renglones dinámicos de insumos recibidos en la factura
-  const [renglones, setRenglones] = useState<Array<{ inventoryItemId: string; quantity: number; unitCostCop: number; taxRateBp: number }>>([]);
+  const [renglones, setRenglones] = useState<
+    Array<{ inventoryItemId: string; name: string; unit: string; quantity: number; unitCostCop: number; taxRateBp: number }>
+  >([]);
 
-  const agregarRenglon = () => {
-    if (inventoryItems.length === 0) return;
-    setRenglones([
-      ...renglones,
-      { inventoryItemId: inventoryItems[0].id, quantity: 1, unitCostCop: inventoryItems[0].costCop, taxRateBp: 0 },
-    ]);
+  const agregarOIncrementarInsumo = (item: InsumoItem) => {
+    setRenglones((prev) => {
+      const existe = prev.find((r) => r.inventoryItemId === item.id);
+      if (existe) {
+        return prev.map((r) =>
+          r.inventoryItemId === item.id ? { ...r, quantity: r.quantity + 1 } : r
+        );
+      }
+      return [
+        ...prev,
+        {
+          inventoryItemId: item.id,
+          name: item.name,
+          unit: item.unit,
+          quantity: 1,
+          unitCostCop: item.costCop,
+          taxRateBp: 0,
+        },
+      ];
+    });
   };
 
   const quitarRenglon = (idx: number) => {
@@ -647,22 +748,25 @@ function ModalNuevaFactura({
 
   const actualizarRenglon = (
     idx: number,
-    campo: "inventoryItemId" | "quantity" | "unitCostCop" | "taxRateBp",
-    valor: string | number
+    campo: "quantity" | "unitCostCop" | "taxRateBp",
+    valor: number
   ) => {
     const copia = [...renglones];
     copia[idx] = { ...copia[idx], [campo]: valor };
     setRenglones(copia);
   };
 
+  // Cálculos de totales
+  const subtotalCOP = renglones.reduce((acc, r) => acc + r.quantity * r.unitCostCop, 0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invoiceNumber) {
-      toast.error("Ingresá el número de factura.");
+    if (!invoiceNumber.trim()) {
+      toast.error("Ingresá el número de factura del proveedor.");
       return;
     }
     if (renglones.length === 0) {
-      toast.error("Agregá al menos un insumo a la factura.");
+      toast.error("Hacé clic en los insumos del catálogo de la izquierda para agregarlos al comprobante de compra.");
       return;
     }
 
@@ -687,149 +791,239 @@ function ModalNuevaFactura({
     });
   };
 
+  const insumosFiltrados = inventoryItems.filter(
+    (i) =>
+      !busquedaInsumo ||
+      i.name.toLowerCase().includes(busquedaInsumo.toLowerCase()) ||
+      (i.sku && i.sku.toLowerCase().includes(busquedaInsumo.toLowerCase()))
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs">
+        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
           <Plus className="size-3.5 mr-1" />
-          Cargar Factura de Compra
+          <span>Cargar Factura de Compra</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Cargar Factura de Compra (Entrada de Insumos)</DialogTitle>
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 rounded-2xl">
+        <DialogHeader className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+          <DialogTitle className="text-base font-bold flex items-center gap-2">
+            <FileText className="size-5 text-brand" />
+            <span>Carga Express de Factura de Compra (POS de Compras)</span>
+          </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">Proveedor</label>
-              <select
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-                className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
-              >
-                <option value="">-- Sin proveedor / Varios --</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.taxId ? `(${s.taxId})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">Número de Factura *</label>
-              <Input
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                placeholder="FACT-12345"
-                required
-                className="text-xs"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">Fecha de Factura *</label>
-              <Input
-                type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                required
-                className="text-xs"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-6">
-              <input
-                type="checkbox"
-                id="includesTax"
-                checked={includesTax}
-                onChange={(e) => setIncludesTax(e.target.checked)}
-                className="accent-primary size-4"
-              />
-              <label htmlFor="includesTax" className="text-xs font-medium cursor-pointer">
-                Los costos ingresados ya incluyen IVA / Impuesto
-              </label>
-            </div>
-          </div>
-
-          {/* Renglones de Insumos */}
-          <div className="space-y-2 border-t border-border pt-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-foreground">Insumos Recibidos en la Factura</label>
-              <Button type="button" size="sm" variant="outline" onClick={agregarRenglon} className="h-7 text-xs gap-1">
-                <Plus className="size-3" />
-                <span>Agregar Insumo</span>
-              </Button>
-            </div>
-
-            {renglones.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic py-2">
-                Hacé clic en &quot;Agregar Insumo&quot; para registrar los insumos de esta factura.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {renglones.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border">
-                    <select
-                      value={r.inventoryItemId}
-                      onChange={(e) => actualizarRenglon(idx, "inventoryItemId", e.target.value)}
-                      className="flex-1 h-8 rounded border border-input px-2 text-xs bg-background"
-                    >
-                      {inventoryItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} ({item.unit})
-                        </option>
-                      ))}
-                    </select>
-
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="Cant."
-                      value={r.quantity}
-                      onChange={(e) => actualizarRenglon(idx, "quantity", Number(e.target.value))}
-                      className="w-20 h-8 text-xs"
-                    />
-
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="Costo COP"
-                      value={r.unitCostCop}
-                      onChange={(e) => actualizarRenglon(idx, "unitCostCop", Number(e.target.value))}
-                      className="w-28 h-8 text-xs"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => quitarRenglon(idx)}
-                      className="p-1 text-muted-foreground hover:text-rose-600"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  </div>
-                ))}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+          {/* Cuerpo dividido en 2 columnas (Izquierda: Catálogo | Derecha: Comprobante) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-border">
+            
+            {/* ── PANEL IZQUIERDO: CATALOGO RAPIDO DE INSUMOS (5 COLS / 40%) ── */}
+            <div className="lg:col-span-5 p-4 space-y-3 bg-muted/10 flex flex-col overflow-hidden">
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                  1. Elegir Insumos a Ingresar
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
+                  <Input
+                    value={busquedaInsumo}
+                    onChange={(e) => setBusquedaInsumo(e.target.value)}
+                    placeholder="🔍 Buscar insumo..."
+                    className="h-8 pl-8 text-xs bg-background rounded-lg"
+                  />
+                </div>
               </div>
-            )}
-          </div>
 
-          <div className="space-y-1 pt-2">
-            <label className="text-xs font-semibold">Notas / Observaciones de la Factura</label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notas opcionales sobre la compra o entrega..."
-              className="text-xs"
-            />
-          </div>
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                {insumosFiltrados.length === 0 ? (
+                  <p className="text-xs text-muted-foreground p-4 text-center">No se encontraron insumos.</p>
+                ) : (
+                  insumosFiltrados.map((item) => {
+                    const renglon = renglones.find((r) => r.inventoryItemId === item.id);
+                    const cantStaged = renglon?.quantity ?? 0;
 
-          <Button type="submit" disabled={isPending} className="w-full bg-brand text-brand-foreground text-xs mt-4">
-            {isPending ? "Guardando..." : "Guardar Factura e Incrementar Stock"}
-          </Button>
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => agregarOIncrementarInsumo(item)}
+                        className={cn(
+                          "p-2.5 rounded-xl border bg-card hover:border-brand/60 transition-all cursor-pointer flex items-center justify-between select-none",
+                          cantStaged > 0 ? "border-brand bg-brand/5 shadow-xs" : "border-border"
+                        )}
+                      >
+                        <div className="space-y-0.5">
+                          <span className="font-semibold text-xs text-foreground block line-clamp-1">
+                            {item.name}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono block">
+                            Unidad: {item.unit} | Costo ref: {formatCop(item.costCop)}
+                          </span>
+                        </div>
+
+                        {cantStaged > 0 ? (
+                          <Badge className="bg-brand text-brand-foreground text-xs font-bold px-2 py-0.5 rounded-full">
+                            +{cantStaged}
+                          </Badge>
+                        ) : (
+                          <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px] font-bold gap-1 px-2">
+                            <Plus className="size-3" /> Agregar
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* ── PANEL DERECHO: DETALLE DE LA FACTURA (7 COLS / 60%) ── */}
+            <div className="lg:col-span-7 p-4 space-y-4 flex flex-col overflow-hidden bg-background">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                2. Encabezado y Renglones de la Compra
+              </label>
+
+              {/* Campos Principales */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-muted/30 border border-border">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Proveedor</label>
+                  <select
+                    value={supplierId}
+                    onChange={(e) => setSupplierId(e.target.value)}
+                    className="w-full h-8 rounded-lg border border-input px-2 text-xs bg-background font-medium"
+                  >
+                    <option value="">-- Varios / Sin Proveedor --</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.taxId ? `(${s.taxId})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Número de Factura *</label>
+                  <Input
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    placeholder="FAC-9876"
+                    required
+                    className="h-8 text-xs rounded-lg bg-background"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Fecha Factura *</label>
+                  <Input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    required
+                    className="h-8 text-xs rounded-lg bg-background"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-4">
+                  <input
+                    type="checkbox"
+                    id="includesTax"
+                    checked={includesTax}
+                    onChange={(e) => setIncludesTax(e.target.checked)}
+                    className="accent-primary size-4"
+                  />
+                  <label htmlFor="includesTax" className="text-xs font-medium cursor-pointer">
+                    Costos incluyen IVA / Impuestos
+                  </label>
+                </div>
+              </div>
+
+              {/* Tabla de Renglones Seleccionados */}
+              <div className="flex-1 overflow-y-auto space-y-2 border border-border rounded-xl p-2 bg-card">
+                {renglones.length === 0 ? (
+                  <div className="p-8 text-center space-y-1 text-muted-foreground">
+                    <p className="text-xs font-semibold">No se han agregado insumos</p>
+                    <p className="text-[11px]">Hacé clic en los insumos del panel izquierdo para ir armando el comprobante de compra.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {renglones.map((r, idx) => (
+                      <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border border-border text-xs">
+                        <div className="flex-1 min-w-0">
+                          <strong className="text-foreground block truncate">{r.name}</strong>
+                          <span className="text-[10px] text-muted-foreground font-mono">Unidad: {r.unit}</span>
+                        </div>
+
+                        <div className="w-20">
+                          <label className="text-[9px] text-muted-foreground block font-semibold">Cantidad</label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={r.quantity}
+                            onChange={(e) => actualizarRenglon(idx, "quantity", Math.max(1, Number(e.target.value)))}
+                            className="h-7 text-xs px-1.5 font-bold"
+                          />
+                        </div>
+
+                        <div className="w-28">
+                          <label className="text-[9px] text-muted-foreground block font-semibold">Costo COP</label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={r.unitCostCop}
+                            onChange={(e) => actualizarRenglon(idx, "unitCostCop", Math.max(0, Number(e.target.value)))}
+                            className="h-7 text-xs px-1.5 font-bold"
+                          />
+                        </div>
+
+                        <div className="w-24 text-right pr-1">
+                          <label className="text-[9px] text-muted-foreground block font-semibold">Subtotal</label>
+                          <span className="numeral font-bold text-xs text-foreground">
+                            {formatCop(r.quantity * r.unitCostCop)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => quitarRenglon(idx)}
+                          className="text-muted-foreground hover:text-destructive p-1"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pie de Totales y Envío */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-brand/5 border border-brand/20">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Total Factura Compra
+                  </span>
+                  <span className="numeral text-xl font-extrabold text-brand dark:text-[#3E9EA2]">
+                    {formatCop(subtotalCOP)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Notas opcionales de la compra..."
+                    className="h-9 text-xs rounded-xl flex-1"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={isPending || renglones.length === 0}
+                    className="h-9 bg-brand text-brand-foreground font-bold text-xs rounded-xl px-4"
+                  >
+                    {isPending ? "Guardando..." : "🚀 Guardar e Incrementar Stock"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -934,6 +1128,8 @@ function TarjetaRecetaProducto({
     });
   };
 
+  const porcionesDisponibles = calcularStockDisponibleProducto(producto);
+
   return (
     <Card className="p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -1015,9 +1211,25 @@ function TarjetaRecetaProducto({
       </div>
 
       <div className="text-xs space-y-1 pt-2 border-t border-border/60">
-        <div className="flex justify-between text-muted-foreground font-medium pb-1">
+        <div className="flex items-center justify-between text-muted-foreground font-medium pb-1 flex-wrap gap-2">
           <span>Insumos por porción:</span>
-          <span>Costo Alimentos: <strong className="text-emerald-600 dark:text-emerald-400">{formatCop(costoAlimentosCOP)}</strong></span>
+          <div className="flex items-center gap-2">
+            {porcionesDisponibles !== null && (
+              <span
+                className={cn(
+                  "px-2 py-0.5 rounded-md font-bold text-[11px] border flex items-center gap-1",
+                  porcionesDisponibles === 0
+                    ? "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400"
+                    : porcionesDisponibles <= 5
+                    ? "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
+                    : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400"
+                )}
+              >
+                📦 {porcionesDisponibles} porción{porcionesDisponibles === 1 ? "" : "es"} preparable{porcionesDisponibles === 1 ? "" : "s"}
+              </span>
+            )}
+            <span>Costo Alimentos: <strong className="text-emerald-600 dark:text-emerald-400">{formatCop(costoAlimentosCOP)}</strong></span>
+          </div>
         </div>
 
         {producto.recipeItems.length === 0 ? (
@@ -1033,5 +1245,450 @@ function TarjetaRecetaProducto({
         )}
       </div>
     </Card>
+  );
+}
+
+function SeccionProductosTerminados({
+  products,
+  categories,
+}: {
+  products: ProductoTerminadoItem[];
+  categories: Array<{ id: string; name: string }>;
+}) {
+  const [busqueda, setBusqueda] = useState("");
+  const [categoriaSel, setCategoriaSel] = useState<string | null>(null);
+
+  const categoriasMap = new Map<string, { id: string; name: string; count: number }>();
+  for (const p of products) {
+    const cat = p.category;
+    const actual = categoriasMap.get(cat.id);
+    if (actual) {
+      actual.count++;
+    } else {
+      categoriasMap.set(cat.id, { id: cat.id, name: cat.name, count: 1 });
+    }
+  }
+
+  const categoriasList = Array.from(categoriasMap.values());
+
+  const productosFiltrados = products.filter((p) => {
+    const coincideCat = categoriaSel === null || p.category.id === categoriaSel;
+    const coincideBusqueda =
+      !busqueda ||
+      p.name.toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(busqueda.toLowerCase()));
+    return coincideCat && coincideBusqueda;
+  });
+
+  return (
+    <div className="space-y-4 pt-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setCategoriaSel(null)}
+            className={cn(
+              "px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border flex items-center gap-1.5",
+              categoriaSel === null
+                ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                : "bg-card text-muted-foreground hover:text-foreground border-border"
+            )}
+          >
+            <Filter className="size-3.5" />
+            <span>Todas ({products.length})</span>
+          </button>
+          {categoriasList.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoriaSel(categoriaSel === c.id ? null : c.id)}
+              className={cn(
+                "px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border flex items-center gap-1.5",
+                categoriaSel === c.id
+                  ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                  : "bg-card text-muted-foreground hover:text-foreground border-border"
+              )}
+            >
+              <ShoppingBag className="size-3.5" />
+              <span>{c.name} ({c.count})</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
+          <Input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="🔍 Buscar bebida o producto..."
+            className="h-9 pl-8 text-xs rounded-xl"
+          />
+        </div>
+      </div>
+
+      {productosFiltrados.length === 0 ? (
+        <Card className="p-8 text-center border-dashed space-y-2">
+          <ShoppingBag className="size-8 mx-auto text-muted-foreground opacity-50" />
+          <p className="text-sm font-semibold text-foreground">No hay bebidas ni productos terminados en esta vista</p>
+          <p className="text-xs text-muted-foreground">
+            Probá seleccionando otra categoría o cambiando el texto de búsqueda.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {productosFiltrados.map((prod) => (
+            <CardProductoTerminado key={prod.id} producto={prod} categories={categories} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardProductoTerminado({
+  producto,
+  categories,
+}: {
+  producto: ProductoTerminadoItem;
+  categories: Array<{ id: string; name: string }>;
+}) {
+  const [openModalStock, setOpenModalStock] = useState(false);
+  const [openModalEdit, setOpenModalEdit] = useState(false);
+  const [stockInput, setStockInput] = useState(String(producto.stockQty));
+  const [isPending, startTransition] = useTransition();
+
+  const esSinStock = producto.stockQty <= 0;
+  const esBajoStock = producto.stockQty > 0 && producto.stockQty <= 5;
+  const costoCompra = producto.recipeItems[0]?.inventoryItem.costCop ?? 0;
+  const gananciaCop = producto.priceCop - costoCompra;
+
+  const handleSubmitStock = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    startTransition(async () => {
+      const res = await actualizarStockProductoTerminado(
+        ESTADO_INICIAL,
+        new FormData(e.currentTarget)
+      );
+      if (res.ok) {
+        toast.success(`Stock de ${producto.name} actualizado a ${stockInput} unidades.`);
+        setOpenModalStock(false);
+      } else {
+        toast.error(res.error || "Ocurrió un error al actualizar el stock.");
+      }
+    });
+  };
+
+  return (
+    <Card className="p-4 space-y-3 flex flex-col justify-between hover:border-brand/50 transition-all">
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <Badge variant="outline" className="text-[10px] uppercase font-mono">
+            {producto.category.name}
+          </Badge>
+          <span
+            className={cn(
+              "px-2 py-0.5 rounded text-[10px] font-bold font-mono border",
+              esSinStock
+                ? "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400"
+                : esBajoStock
+                ? "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
+                : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400"
+            )}
+          >
+            {esSinStock ? "AGOTADO" : esBajoStock ? "STOCK BAJO" : "EN STOCK"}
+          </span>
+        </div>
+
+        <div>
+          <h4 className="font-bold text-sm text-foreground line-clamp-1">{producto.name}</h4>
+
+          <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+            <div>
+              <span className="text-[10px] text-muted-foreground block font-mono">Costo Compra</span>
+              <span className="numeral font-bold text-xs text-muted-foreground">{formatCop(costoCompra)}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground block font-mono">Precio Venta</span>
+              <span className="numeral font-bold text-xs text-brand dark:text-[#3E9EA2]">{formatCop(producto.priceCop)}</span>
+            </div>
+          </div>
+          {costoCompra > 0 && (
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-semibold pt-0.5">
+              Margen: +{formatCop(gananciaCop)} / und.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
+        <div>
+          <span className="text-[10px] text-muted-foreground block uppercase font-mono">Stock</span>
+          <span className="numeral font-extrabold text-base text-foreground">
+            {producto.stockQty} <span className="text-xs font-normal text-muted-foreground">und.</span>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setOpenModalEdit(true)}
+            className="size-8 p-0 text-muted-foreground hover:text-foreground border-border"
+            title="Editar producto o corregir nombre"
+          >
+            <Edit className="size-3.5" />
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => setOpenModalStock(true)}
+            className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-8 gap-1 px-2.5"
+          >
+            <Plus className="size-3.5 mr-0.5" />
+            <span>Stock</span>
+          </Button>
+        </div>
+
+        {/* Modal Editar Producto / Corregir Nombre */}
+        <ModalEditarProductoTerminado
+          producto={producto}
+          open={openModalEdit}
+          onOpenChange={setOpenModalEdit}
+          categories={categories}
+        />
+
+        {/* Modal Ajustar Stock */}
+        <Dialog open={openModalStock} onOpenChange={setOpenModalStock}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                <Boxes className="size-4 text-brand" />
+                <span>Ingresar / Ajustar Stock Directo</span>
+              </DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleSubmitStock} className="space-y-4 pt-2">
+              <input type="hidden" name="productId" value={producto.id} />
+              
+              <div className="space-y-1 p-3 rounded-xl bg-muted/40 border border-border">
+                <label className="text-xs font-semibold text-muted-foreground block">Producto de Reventa</label>
+                <p className="text-sm font-bold text-foreground">{producto.name}</p>
+                <p className="text-xs font-mono text-brand">Categoría: {producto.category.name} | Precio: {formatCop(producto.priceCop)}</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold">Stock Físico Actual (Unidades) *</label>
+                <Input
+                  name="stockQty"
+                  type="number"
+                  min="0"
+                  value={stockInput}
+                  onChange={(e) => setStockInput(e.target.value)}
+                  placeholder="Ej. 24"
+                  required
+                  className="text-sm font-bold"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Ingresá el número total de unidades reales disponibles en bodega/refrigerador.
+                </p>
+              </div>
+
+              <Button type="submit" disabled={isPending} className="w-full bg-brand text-brand-foreground text-xs font-bold h-9">
+                {isPending ? "Guardando..." : "🚀 Actualizar Stock en Inventario"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Card>
+  );
+}
+
+function ModalNuevoProductoTerminado({
+  open,
+  onOpenChange,
+  categories,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  categories: Array<{ id: string; name: string }>;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    startTransition(async () => {
+      const res = await crearProductoTerminado(ESTADO_INICIAL, formData);
+      if (res.ok) {
+        toast.success("Bebida / producto registrado correctamente en el inventario.");
+        onOpenChange(false);
+      } else {
+        toast.error(res.error || "Ocurrió un error al registrar el producto.");
+      }
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+          <Plus className="size-3.5 mr-1" />
+          <span>Nueva Bebida / Prod. Terminado</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base font-bold flex items-center gap-2">
+            <ShoppingBag className="size-4 text-brand" />
+            <span>Agregar Bebida o Producto Terminado</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Nombre de la Bebida / Producto *</label>
+            <Input name="name" placeholder="Ej. Coca-Cola 350ml, Cerveza Club Colombia, Agua Mineral" required className="text-xs font-semibold" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Categoría *</label>
+              <select name="categoryId" required className="w-full h-9 rounded-md border border-input px-2 text-xs bg-background font-medium">
+                <option value="">-- Elegir Categoría --</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">SKU / Código</label>
+              <Input name="sku" placeholder="BEB-001" className="text-xs" />
+            </div>
+          </div>
+
+          {/* Costo de Compra + Precio de Venta COP */}
+          <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-muted/30 border border-border">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground">🛒 Costo Compra COP *</label>
+              <Input name="costCop" type="number" min="0" defaultValue="2500" required className="text-xs font-bold" />
+              <span className="text-[10px] text-muted-foreground block">¿En cuánto se compró?</span>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-brand">💰 Precio Venta COP *</label>
+              <Input name="priceCop" type="number" min="0" defaultValue="4500" required className="text-xs font-bold" />
+              <span className="text-[10px] text-muted-foreground block">¿En cuánto se vende?</span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Stock Inicial Disponible (Unidades) *</label>
+            <Input name="stockQty" type="number" min="0" defaultValue="12" required className="text-xs font-bold" />
+            <p className="text-[11px] text-muted-foreground">
+              Unidades reales iniciales disponibles en refrigerador/bodega.
+            </p>
+          </div>
+
+          <Button type="submit" disabled={isPending} className="w-full bg-brand text-brand-foreground text-xs font-bold h-9">
+            {isPending ? "Guardando..." : "🚀 Registrar Producto en Inventario"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModalEditarProductoTerminado({
+  producto,
+  open,
+  onOpenChange,
+  categories,
+}: {
+  producto: ProductoTerminadoItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  categories: Array<{ id: string; name: string }>;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  const costoActual = producto.recipeItems[0]?.inventoryItem.costCop ?? 0;
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    formData.append("productId", producto.id);
+
+    startTransition(async () => {
+      const res = await editarProductoTerminado(ESTADO_INICIAL, formData);
+      if (res.ok) {
+        toast.success(`Producto ${producto.name} actualizado correctamente.`);
+        onOpenChange(false);
+      } else {
+        toast.error(res.error || "Ocurrió un error al actualizar el producto.");
+      }
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base font-bold flex items-center gap-2">
+            <Edit className="size-4 text-brand" />
+            <span>Editar Bebida / Producto (Corregir Datos)</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Nombre de la Bebida / Producto *</label>
+            <Input name="name" defaultValue={producto.name} required className="text-xs font-semibold" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Categoría *</label>
+              <select name="categoryId" defaultValue={producto.category.id} required className="w-full h-9 rounded-md border border-input px-2 text-xs bg-background font-medium">
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">SKU / Código</label>
+              <Input name="sku" defaultValue={producto.sku ?? ""} className="text-xs" />
+            </div>
+          </div>
+
+          {/* Costo de Compra + Precio de Venta COP */}
+          <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-muted/30 border border-border">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground">🛒 Costo Compra COP *</label>
+              <Input name="costCop" type="number" min="0" defaultValue={costoActual} required className="text-xs font-bold" />
+              <span className="text-[10px] text-muted-foreground block">Costo unitario de proveedor</span>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-brand">💰 Precio Venta COP *</label>
+              <Input name="priceCop" type="number" min="0" defaultValue={producto.priceCop} required className="text-xs font-bold" />
+              <span className="text-[10px] text-muted-foreground block">Precio al cliente final</span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Stock Físico Disponible (Unidades) *</label>
+            <Input name="stockQty" type="number" min="0" defaultValue={producto.stockQty} required className="text-xs font-bold" />
+          </div>
+
+          <Button type="submit" disabled={isPending} className="w-full bg-brand text-brand-foreground text-xs font-bold h-9">
+            {isPending ? "Guardando..." : "Guardar Cambios del Producto"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
