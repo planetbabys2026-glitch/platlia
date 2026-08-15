@@ -30,14 +30,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import {
+  SelectorModificadores,
+  tieneModificadores,
+  type ProductoConModificadores,
+} from "@/features/carta/components/selector-modificadores";
+import {
   auditarStockCarritoRecetas,
   calcularStockDisponibleProducto,
   type ProductoStockCalculo,
 } from "@/lib/inventory/stock";
+import { claveDeLinea } from "@/lib/modificadores";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-export type PosProducto = {
+export type PosProducto = ProductoConModificadores & {
   id: string;
   name: string;
   priceCop: number;
@@ -88,11 +94,53 @@ export type PosPedidoDetalle = {
     productId: string;
     nameSnapshot: string;
     unitPriceCop: number;
+    basePriceCopSnapshot: number;
     quantity: number;
     status?: string;
     notes: string | null;
+    modifiers: Array<{
+      id: string;
+      optionId: string | null;
+      groupNameSnapshot: string;
+      optionNameSnapshot: string;
+      priceDeltaCopSnapshot: number;
+    }>;
   }[];
 };
+
+/**
+ * Rearma el carrito de un pedido parqueado que se vuelve a abrir.
+ *
+ * Los modificadores se reconstruyen de las instantáneas del renglón, no del
+ * catálogo actual: si mientras el pedido estaba parqueado alguien le cambió el
+ * precio a "Carne", el pedido reabierto tiene que seguir mostrando lo que se le
+ * dijo al cliente. Sin esto, reabrir un pedido perdía la proteína en silencio y
+ * lo volvía a guardar mal.
+ */
+function cartDesdePedido(pedido: PosPedidoDetalle): CartItem[] {
+  return pedido.items.map((i) => {
+    const opciones = i.modifiers.map((m) => ({
+      id: m.optionId ?? m.id,
+      groupName: m.groupNameSnapshot,
+      name: m.optionNameSnapshot,
+      priceDeltaCop: m.priceDeltaCopSnapshot,
+    }));
+
+    return {
+      lineKey: claveDeLinea(
+        i.productId,
+        i.modifiers.map((m) => m.optionId).filter((id): id is string => id !== null),
+      ),
+      productId: i.productId,
+      name: i.nameSnapshot,
+      priceCop: i.basePriceCopSnapshot,
+      recargoCop: i.unitPriceCop - i.basePriceCopSnapshot,
+      quantity: i.quantity,
+      notes: i.notes ?? "",
+      opciones,
+    };
+  });
+}
 
 type ModuloPosInteractiveProps = {
   carta: PosCategoria[];
@@ -108,12 +156,27 @@ type ModuloPosInteractiveProps = {
 };
 
 type CartItem = {
+  /**
+   * La identidad del renglón. Dos "Menú del día" con proteína distinta son dos
+   * renglones, así que el carrito NO se puede indexar por `productId` como
+   * antes: tocar carne y después pollo tiene que dar dos líneas, no una de a dos.
+   */
+  lineKey: string;
   productId: string;
   name: string;
+  /** Precio de lista, sin recargos. */
   priceCop: number;
+  /** Lo que suman los modificadores elegidos, por unidad. */
+  recargoCop: number;
   quantity: number;
   notes: string;
+  opciones: Array<{ id: string; groupName: string; name: string; priceDeltaCop: number }>;
 };
+
+/** Lo que cuesta una unidad de este renglón, ya con sus modificadores. */
+function precioUnitario(item: CartItem): number {
+  return item.priceCop + item.recargoCop;
+}
 
 export function ModuloPosInteractive({
   carta,
@@ -137,16 +200,9 @@ export function ModuloPosInteractive({
   const [turnNumber, setTurnNumber] = useState<number | null>(pedidoInicial?.turnNumber ?? null);
 
   // ── Estado de Carrito de Venta ─────────────────────────────────────────────
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    if (!pedidoInicial) return [];
-    return pedidoInicial.items.map((i) => ({
-      productId: i.productId,
-      name: i.nameSnapshot,
-      priceCop: i.unitPriceCop,
-      quantity: i.quantity,
-      notes: i.notes ?? "",
-    }));
-  });
+  const [cart, setCart] = useState<CartItem[]>(() =>
+    pedidoInicial ? cartDesdePedido(pedidoInicial) : [],
+  );
   const [tipoConsumo, setTipoConsumo] = useState<"LLEVAR" | "DOMICILIO" | "EN_SITIO">(
     pedidoInicial?.type === "DOMICILIO"
       ? "DOMICILIO"
@@ -168,15 +224,10 @@ export function ModuloPosInteractive({
       setOrderCode(pedidoInicial.code);
       setTurnNumber(pedidoInicial.turnNumber);
       setCart(
-        pedidoInicial.items
-          .filter((i) => i.status !== "ANULADO")
-          .map((i) => ({
-            productId: i.productId,
-            name: i.nameSnapshot,
-            priceCop: i.unitPriceCop,
-            quantity: i.quantity,
-            notes: i.notes ?? "",
-          }))
+        cartDesdePedido({
+          ...pedidoInicial,
+          items: pedidoInicial.items.filter((i) => i.status !== "ANULADO"),
+        })
       );
       setTipoConsumo(
         pedidoInicial.type === "DOMICILIO"
@@ -195,6 +246,8 @@ export function ModuloPosInteractive({
   }, [pedidoInicial]);
 
   // ── Modales y Drawers ──────────────────────────────────────────────────────
+  /** El producto cuyo modal de opciones está abierto, o null si no hay ninguno. */
+  const [productoAElegir, setProductoAElegir] = useState<PosProducto | null>(null);
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
   const [modalParqueadosAbierto, setModalParqueadosAbierto] = useState(false);
   const [modalAlertasStockAbierto, setModalAlertasStockAbierto] = useState(false);
@@ -280,7 +333,7 @@ export function ModuloPosInteractive({
   } | null>(null);
 
   // ── Cálculos del Carrito ───────────────────────────────────────────────────
-  const subtotalCart = cart.reduce((acc, item) => acc + item.priceCop * item.quantity, 0);
+  const subtotalCart = cart.reduce((acc, item) => acc + precioUnitario(item) * item.quantity, 0);
   const totalCart = subtotalCart;
 
   // Cálculo devuelta / cambio para pago en efectivo
@@ -288,12 +341,52 @@ export function ModuloPosInteractive({
   const cambioDevuelta = Math.max(0, numRecibido - totalCart);
 
   // ── Manejo de Carrito ──────────────────────────────────────────────────────
-  const agregarAlCarrito = (producto: PosProducto) => {
-    const disp = calcularStockDisponibleProducto(producto);
-    const itemEnCart = cart.find((i) => i.productId === producto.id);
-    const cantActual = itemEnCart?.quantity ?? 0;
 
-    if (disp !== null && cantActual >= disp) {
+  /** Cuántas unidades de este producto ya hay en el carrito, sumando combinaciones. */
+  const enCarritoDelProducto = (productId: string) =>
+    cart.reduce((acc, i) => (i.productId === productId ? acc + i.quantity : acc), 0);
+
+  /**
+   * El carrito en la forma que audita el stock.
+   *
+   * El carrito guarda de cada opción lo que necesita para cobrar (nombre y
+   * recargo); los insumos que consume están en la carta. Acá se vuelven a juntar
+   * para poder sumar la demanda de todo el pedido antes de mandarlo.
+   */
+  const carritoParaAuditar = () => {
+    const opcionesPorId = new Map(
+      carta.flatMap((c) =>
+        c.products.flatMap((p) =>
+          (p.modifierGroups ?? []).flatMap((a) => a.group.options.map((o) => [o.id, o] as const)),
+        ),
+      ),
+    );
+
+    return cart.map((i) => ({
+      productId: i.productId,
+      name: i.name,
+      quantity: i.quantity,
+      opciones: i.opciones.map((o) => opcionesPorId.get(o.id)).filter((o) => o !== undefined),
+    }));
+  };
+
+  /**
+   * Mete una combinación concreta al carrito.
+   *
+   * Se agrupa por `lineKey`, no por producto: el mismo plato con proteínas
+   * distintas son renglones separados porque cocina los prepara distinto y el
+   * cliente los pidió distinto.
+   */
+  const agregarCombinacion = (
+    producto: PosProducto,
+    opciones: CartItem["opciones"],
+    quantity: number,
+    notes: string,
+  ) => {
+    const disp = calcularStockDisponibleProducto(producto);
+    const cantActual = enCarritoDelProducto(producto.id);
+
+    if (disp !== null && cantActual + quantity > disp) {
       setErrorGlobal(
         disp <= 0
           ? `Stock insuficiente de insumos para preparar "${producto.name}".`
@@ -302,32 +395,50 @@ export function ModuloPosInteractive({
       return;
     }
 
+    const recargoCop = opciones.reduce((acc, o) => acc + o.priceDeltaCop, 0);
+    const lineKey = claveDeLinea(
+      producto.id,
+      opciones.map((o) => o.id),
+    );
+
     setErrorGlobal(null);
     setCart((prev) => {
-      const existe = prev.find((i) => i.productId === producto.id);
+      const existe = prev.find((i) => i.lineKey === lineKey);
       if (existe) {
         return prev.map((i) =>
-          i.productId === producto.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.lineKey === lineKey
+            ? { ...i, quantity: i.quantity + quantity, notes: notes || i.notes }
+            : i
         );
       }
       return [
         ...prev,
         {
+          lineKey,
           productId: producto.id,
           name: producto.name,
           priceCop: producto.priceCop,
-          quantity: 1,
-          notes: "",
+          recargoCop,
+          quantity,
+          notes,
+          opciones,
         },
       ];
     });
   };
 
-  const cambiarCantidadCart = (productId: string, delta: number) => {
-    if (delta > 0) {
+  /** Un toque en la tarjeta: para los productos sin nada que elegir. */
+  const agregarAlCarrito = (producto: PosProducto) => {
+    agregarCombinacion(producto, [], 1, "");
+  };
+
+  const cambiarCantidadCart = (lineKey: string, delta: number) => {
+    const item = cart.find((i) => i.lineKey === lineKey);
+
+    if (delta > 0 && item) {
       let prodObj: PosProducto | undefined;
       for (const cat of carta) {
-        const p = cat.products.find((item) => item.id === productId);
+        const p = cat.products.find((x) => x.id === item.productId);
         if (p) {
           prodObj = p;
           break;
@@ -336,8 +447,7 @@ export function ModuloPosInteractive({
 
       if (prodObj) {
         const disp = calcularStockDisponibleProducto(prodObj);
-        const itemEnCart = cart.find((i) => i.productId === productId);
-        const cantActual = itemEnCart?.quantity ?? 0;
+        const cantActual = enCarritoDelProducto(item.productId);
 
         if (disp !== null && cantActual + delta > disp) {
           setErrorGlobal(
@@ -351,25 +461,23 @@ export function ModuloPosInteractive({
     setErrorGlobal(null);
     setCart((prev) =>
       prev
-        .map((item) => {
-          if (item.productId === productId) {
-            const nueva = item.quantity + delta;
-            return nueva > 0 ? { ...item, quantity: nueva } : null;
+        .map((it) => {
+          if (it.lineKey === lineKey) {
+            const nueva = it.quantity + delta;
+            return nueva > 0 ? { ...it, quantity: nueva } : null;
           }
-          return item;
+          return it;
         })
         .filter(Boolean) as CartItem[]
     );
   };
 
-  const actualizarNotaItem = (productId: string, notes: string) => {
-    setCart((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, notes } : item))
-    );
+  const actualizarNotaItem = (lineKey: string, notes: string) => {
+    setCart((prev) => prev.map((item) => (item.lineKey === lineKey ? { ...item, notes } : item)));
   };
 
-  const quitarDelCarrito = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
+  const quitarDelCarrito = (lineKey: string) => {
+    setCart((prev) => prev.filter((item) => item.lineKey !== lineKey));
   };
 
   const vaciarCarrito = () => {
@@ -404,7 +512,7 @@ export function ModuloPosInteractive({
       return;
     }
 
-    const errorStock = auditarStockCarritoRecetas(cart, carta);
+    const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta);
     if (errorStock) {
       setErrorGlobal(errorStock);
       return;
@@ -448,6 +556,7 @@ export function ModuloPosInteractive({
         productId: i.productId,
         quantity: i.quantity,
         notes: i.notes.trim() || undefined,
+        modifierOptionIds: i.opciones.map((o) => o.id),
       })),
       accion,
       ...(accion === "PAGAR_DIRECTO"
@@ -781,13 +890,20 @@ export function ModuloPosInteractive({
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {cat.products.map((prod) => {
-                          const itemEnCart = cart.find((i) => i.productId === prod.id);
-                          const cant = itemEnCart?.quantity ?? 0;
+                          const cant = enCarritoDelProducto(prod.id);
+                          const conModificadores = tieneModificadores(prod);
 
                           return (
                             <div
                               key={prod.id}
-                              onClick={() => prod.isAvailable && agregarAlCarrito(prod)}
+                              onClick={() => {
+                                if (!prod.isAvailable) return;
+                                // Con modificadores hay algo que decidir: se abre
+                                // el modal. Sin ellos entra de un toque, que es
+                                // como se vende la mayoría de la carta.
+                                if (conModificadores) setProductoAElegir(prod);
+                                else agregarAlCarrito(prod);
+                              }}
                               className={cn(
                                 "group relative p-3 rounded-2xl border bg-card transition-all cursor-pointer flex flex-col justify-between space-y-2 select-none",
                                 prod.isAvailable
@@ -1056,7 +1172,7 @@ export function ModuloPosInteractive({
                     ) : (
                       cart.map((item) => (
                         <div
-                          key={item.productId}
+                          key={item.lineKey}
                           className="p-2.5 rounded-xl bg-muted/40 border border-border space-y-1.5"
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -1064,12 +1180,23 @@ export function ModuloPosInteractive({
                               <span className="font-bold text-xs text-foreground block truncate">
                                 {item.name}
                               </span>
+                              {item.opciones.length > 0 && (
+                                <span className="text-[10px] font-medium text-muted-foreground block leading-tight">
+                                  {item.opciones
+                                    .map((o) =>
+                                      o.priceDeltaCop > 0
+                                        ? `${o.name} (+${formatCop(o.priceDeltaCop)})`
+                                        : o.name
+                                    )
+                                    .join(" · ")}
+                                </span>
+                              )}
                               <span className="numeral text-[11px] font-semibold text-muted-foreground block">
-                                {formatCop(item.priceCop)} c/u
+                                {formatCop(precioUnitario(item))} c/u
                               </span>
                             </div>
                             <span className="numeral font-bold text-xs text-brand dark:text-[#3E9EA2] shrink-0">
-                              {formatCop(item.priceCop * item.quantity)}
+                              {formatCop(precioUnitario(item) * item.quantity)}
                             </span>
                           </div>
 
@@ -1078,7 +1205,7 @@ export function ModuloPosInteractive({
                             <div className="flex items-center gap-1">
                               <button
                                 type="button"
-                                onClick={() => cambiarCantidadCart(item.productId, -1)}
+                                onClick={() => cambiarCantidadCart(item.lineKey, -1)}
                                 className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground"
                               >
                                 <Minus className="size-3" />
@@ -1088,7 +1215,7 @@ export function ModuloPosInteractive({
                               </span>
                               <button
                                 type="button"
-                                onClick={() => cambiarCantidadCart(item.productId, 1)}
+                                onClick={() => cambiarCantidadCart(item.lineKey, 1)}
                                 className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground"
                               >
                                 <Plus className="size-3" />
@@ -1098,13 +1225,13 @@ export function ModuloPosInteractive({
                             <div className="flex items-center gap-1.5">
                               <Input
                                 value={item.notes}
-                                onChange={(e) => actualizarNotaItem(item.productId, e.target.value)}
+                                onChange={(e) => actualizarNotaItem(item.lineKey, e.target.value)}
                                 placeholder="Nota ítem..."
                                 className="h-6 text-[10px] w-28 rounded-lg px-1.5"
                               />
                               <button
                                 type="button"
-                                onClick={() => quitarDelCarrito(item.productId)}
+                                onClick={() => quitarDelCarrito(item.lineKey)}
                                 className="text-muted-foreground hover:text-destructive p-1"
                               >
                                 <X className="size-3.5" />
@@ -1144,7 +1271,7 @@ export function ModuloPosInteractive({
                             document.getElementById("customerName")?.focus();
                             return;
                           }
-                          const errorStock = auditarStockCarritoRecetas(cart, carta);
+                          const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta);
                           if (errorStock) {
                             setErrorGlobal(errorStock);
                             return;
@@ -1506,6 +1633,32 @@ export function ModuloPosInteractive({
           )}
         </div>
       )}
+
+      <SelectorModificadores
+        producto={productoAElegir}
+        abierto={productoAElegir !== null}
+        onCerrar={() => setProductoAElegir(null)}
+        onConfirmar={({ opcionIds, quantity, notes }) => {
+          if (!productoAElegir) return;
+
+          const todas = (productoAElegir.modifierGroups ?? []).flatMap((a) =>
+            a.group.options.map((o) => ({ ...o, groupName: a.group.name })),
+          );
+          const opciones = opcionIds
+            .map((id) => todas.find((o) => o.id === id))
+            .filter((o) => o !== undefined)
+            .map((o) => ({
+              id: o.id,
+              groupName: o.groupName,
+              name: o.name,
+              priceDeltaCop: o.priceDeltaCop,
+            }));
+
+          agregarCombinacion(productoAElegir, opciones, quantity, notes);
+          setProductoAElegir(null);
+        }}
+        yaEnCarrito={productoAElegir ? enCarritoDelProducto(productoAElegir.id) : 0}
+      />
     </div>
   );
 }

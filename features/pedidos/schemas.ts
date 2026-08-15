@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { OrderType, PaymentMethod } from "@/generated/prisma/enums";
-import { cantidad, id, montoCopPositivo, textoOpcional } from "@/lib/validaciones";
+import { cantidad, id, listaDeIds, montoCopPositivo, textoOpcional } from "@/lib/validaciones";
 
 export const abrirPedidoSchema = z
   .object({
@@ -33,6 +33,12 @@ export const agregarItemSchema = z.object({
   productId: id,
   quantity: cantidad.default(1),
   notes: textoOpcional(200),
+  /**
+   * Las opciones elegidas en el modal. Llegan como campos repetidos del
+   * formulario, por eso `listaDeIds` y no `z.array(id)`: con una sola opción
+   * elegida el FormData entrega un string suelto.
+   */
+  modifierOptionIds: listaDeIds.default([]),
 });
 
 export const cambiarCantidadSchema = z.object({
@@ -102,6 +108,7 @@ export const procesarVentaPosCompletaSchema = z
           productId: id,
           quantity: cantidad,
           notes: textoOpcional(200),
+          modifierOptionIds: listaDeIds.default([]),
         }),
       )
       .min(1, "Agregá al menos un producto al pedido."),

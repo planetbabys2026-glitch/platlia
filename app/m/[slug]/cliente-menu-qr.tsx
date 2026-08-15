@@ -18,11 +18,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { crearPedidoClienteQR, consultarEstadoPedidoQR } from "@/features/pedidos/qr-actions";
+import {
+  SelectorModificadores,
+  tieneModificadores,
+  type ProductoConModificadores,
+} from "@/features/carta/components/selector-modificadores";
+import { claveDeLinea } from "@/lib/modificadores";
 import { formatCop } from "@/lib/money";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 
-type Producto = {
+type Producto = ProductoConModificadores & {
   id: string;
   name: string;
   description: string | null;
@@ -38,10 +44,21 @@ type Categoria = {
 };
 
 type CartItem = {
+  /**
+   * La identidad del renglón: el mismo plato con proteínas distintas son dos
+   * renglones. El carrito se indexa por esto y no por el id del producto.
+   */
+  lineKey: string;
   producto: Producto;
   quantity: number;
   notes: string;
+  opciones: Array<{ id: string; name: string; priceDeltaCop: number }>;
 };
+
+/** Lo que cuesta una unidad del renglón, ya con sus modificadores. */
+function precioUnitarioQR(item: CartItem): number {
+  return item.producto.priceCop + item.opciones.reduce((acc, o) => acc + o.priceDeltaCop, 0);
+}
 
 type ClienteMenuQrProps = {
   business: {
@@ -107,6 +124,8 @@ export function ClienteMenuQr({
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>("todas");
   const [busqueda, setBusqueda] = useState("");
   const [carrito, setCarrito] = useState<Record<string, CartItem>>({});
+  /** El producto cuyo modal de opciones está abierto. */
+  const [productoAElegir, setProductoAElegir] = useState<Producto | null>(null);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
@@ -214,33 +233,49 @@ export function ClienteMenuQr({
   }, [productos, categoriaSeleccionada, busqueda]);
 
   // Manejo de Carrito
-  const agregarItem = (producto: Producto) => {
+  const agregarCombinacion = (
+    producto: Producto,
+    opciones: CartItem["opciones"],
+    quantity: number,
+    notes: string,
+  ) => {
+    const lineKey = claveDeLinea(
+      producto.id,
+      opciones.map((o) => o.id),
+    );
+
     setCarrito((prev) => {
-      const actual = prev[producto.id];
-      const nuevaCantidad = (actual?.quantity ?? 0) + 1;
+      const actual = prev[lineKey];
       return {
         ...prev,
-        [producto.id]: {
+        [lineKey]: {
+          lineKey,
           producto,
-          quantity: nuevaCantidad,
-          notes: actual?.notes ?? "",
+          quantity: (actual?.quantity ?? 0) + quantity,
+          notes: notes || actual?.notes || "",
+          opciones,
         },
       };
     });
   };
 
-  const quitarItem = (productoId: string) => {
+  /** Un toque: para los productos que no tienen nada que elegir. */
+  const agregarItem = (producto: Producto) => {
+    agregarCombinacion(producto, [], 1, "");
+  };
+
+  const quitarItem = (lineKey: string) => {
     setCarrito((prev) => {
-      const actual = prev[productoId];
+      const actual = prev[lineKey];
       if (!actual) return prev;
       if (actual.quantity <= 1) {
         const copia = { ...prev };
-        delete copia[productoId];
+        delete copia[lineKey];
         return copia;
       }
       return {
         ...prev,
-        [productoId]: {
+        [lineKey]: {
           ...actual,
           quantity: actual.quantity - 1,
         },
@@ -248,13 +283,13 @@ export function ClienteMenuQr({
     });
   };
 
-  const cambiarNota = (productoId: string, notes: string) => {
+  const cambiarNota = (lineKey: string, notes: string) => {
     setCarrito((prev) => {
-      const actual = prev[productoId];
+      const actual = prev[lineKey];
       if (!actual) return prev;
       return {
         ...prev,
-        [productoId]: { ...actual, notes },
+        [lineKey]: { ...actual, notes },
       };
     });
   };
@@ -267,7 +302,7 @@ export function ClienteMenuQr({
   );
 
   const totalCop = useMemo(
-    () => cartList.reduce((acc, i) => acc + i.producto.priceCop * i.quantity, 0),
+    () => cartList.reduce((acc, i) => acc + precioUnitarioQR(i) * i.quantity, 0),
     [cartList],
   );
 
@@ -302,6 +337,7 @@ export function ClienteMenuQr({
         docNumber: docNumber.trim() || undefined,
         items: cartList.map((i) => ({
           productId: i.producto.id,
+          modifierOptionIds: i.opciones.map((o) => o.id),
           quantity: i.quantity,
           notes: i.notes.trim() || undefined,
         })),
@@ -642,8 +678,13 @@ export function ClienteMenuQr({
                 </div>
               ) : (
                 productosFiltrados.map((producto) => {
-                  const itemEnCarrito = carrito[producto.id];
-                  const cantidad = itemEnCarrito?.quantity ?? 0;
+                  // Sumado sobre todas las combinaciones: la insignia dice
+                  // cuántos de ese plato hay pedidos, no de una variante.
+                  const cantidad = cartList.reduce(
+                    (acc, i) => (i.producto.id === producto.id ? acc + i.quantity : acc),
+                    0,
+                  );
+                  const conModificadores = tieneModificadores(producto);
                   const foto = producto.imageUrl || placeholderUrl;
 
                   return (
@@ -701,11 +742,23 @@ export function ClienteMenuQr({
                               <Badge variant="outline" className="border-red-500/40 text-red-400 text-[10px] font-bold">
                                 Agotado
                               </Badge>
+                            ) : conModificadores ? (
+                              // Con opciones a elegir no sirven los +/-: cada
+                              // unidad puede llevar una proteína distinta, así
+                              // que cada una pasa por el modal.
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setProductoAElegir(producto)}
+                                className="bg-brand hover:bg-brand/90 text-white font-extrabold h-8.5 px-3.5 text-xs rounded-xl shadow-md gap-1 transition-all active:scale-95"
+                              >
+                                <Plus className="size-3.5" /> Elegir
+                              </Button>
                             ) : cantidad > 0 ? (
                               <div className="flex items-center gap-1.5 bg-brand/30 border border-brand/50 rounded-xl p-1 shadow-sm">
                                 <button
                                   type="button"
-                                  onClick={() => quitarItem(producto.id)}
+                                  onClick={() => quitarItem(claveDeLinea(producto.id, []))}
                                   className="size-7 rounded-lg bg-black/50 hover:bg-black/80 flex items-center justify-center font-black text-white text-sm transition-all active:scale-90"
                                 >
                                   −
@@ -844,21 +897,32 @@ export function ClienteMenuQr({
                   <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
                     {cartList.map((item) => (
                       <div
-                        key={item.producto.id}
+                        key={item.lineKey}
                         className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 text-xs"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-0.5">
                             <span className="font-bold text-white text-sm block">{item.producto.name}</span>
+                            {item.opciones.length > 0 && (
+                              <span className="block text-[11px] text-slate-300 leading-tight">
+                                {item.opciones
+                                  .map((o) =>
+                                    o.priceDeltaCop > 0
+                                      ? `${o.name} (+${formatCop(o.priceDeltaCop)})`
+                                      : o.name,
+                                  )
+                                  .join(" · ")}
+                              </span>
+                            )}
                             <span className="numeral text-brand-accent font-semibold">
-                              {formatCop(item.producto.priceCop * item.quantity)}
+                              {formatCop(precioUnitarioQR(item) * item.quantity)}
                             </span>
                           </div>
 
                           <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-lg p-1">
                             <button
                               type="button"
-                              onClick={() => quitarItem(item.producto.id)}
+                              onClick={() => quitarItem(item.lineKey)}
                               className="size-6 rounded bg-white/10 text-white font-bold text-xs"
                             >
                               −
@@ -866,7 +930,9 @@ export function ClienteMenuQr({
                             <span className="numeral font-bold text-xs w-4 text-center text-white">{item.quantity}</span>
                             <button
                               type="button"
-                              onClick={() => agregarItem(item.producto)}
+                              onClick={() =>
+                                agregarCombinacion(item.producto, item.opciones, 1, item.notes)
+                              }
                               className="size-6 rounded bg-brand text-white font-bold text-xs"
                             >
                               +
@@ -876,7 +942,7 @@ export function ClienteMenuQr({
 
                         <Input
                           value={item.notes}
-                          onChange={(e) => cambiarNota(item.producto.id, e.target.value)}
+                          onChange={(e) => cambiarNota(item.lineKey, e.target.value)}
                           placeholder="Notas (sin salsa, bien cocido...)"
                           className="h-7 bg-white/5 border-white/10 text-[11px] text-white placeholder:text-slate-500"
                         />
@@ -906,6 +972,24 @@ export function ClienteMenuQr({
           </>
         )}
       </div>
+
+      <SelectorModificadores
+        producto={productoAElegir}
+        abierto={productoAElegir !== null}
+        onCerrar={() => setProductoAElegir(null)}
+        onConfirmar={({ opcionIds, quantity, notes }) => {
+          if (!productoAElegir) return;
+
+          const todas = (productoAElegir.modifierGroups ?? []).flatMap((a) => a.group.options);
+          const opciones = opcionIds
+            .map((id) => todas.find((o) => o.id === id))
+            .filter((o) => o !== undefined)
+            .map((o) => ({ id: o.id, name: o.name, priceDeltaCop: o.priceDeltaCop }));
+
+          agregarCombinacion(productoAElegir, opciones, quantity, notes);
+          setProductoAElegir(null);
+        }}
+      />
     </div>
   );
 }

@@ -12,6 +12,12 @@ export type ComandaItem = {
   notes: string | null;
   status: string;
   preparationMinutes: number | null;
+  /**
+   * Cómo se pidió: "Carne", "Bien asado". Van acá y no dentro de `notes` porque
+   * la cocina tiene que poder leerlos de un vistazo y sin ambigüedad —una nota
+   * es texto que alguien escribió, esto es lo que se eligió de la carta.
+   */
+  modificadores: string[];
 };
 
 export type ComandaOrden = {
@@ -59,6 +65,10 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
       status: true,
       createdAt: true,
       sentToKitchenAt: true,
+      modifiers: {
+        orderBy: { sortOrder: "asc" },
+        select: { optionNameSnapshot: true },
+      },
       product: { select: { kitchenStation: true, preparationMinutes: true } },
       order: {
         select: {
@@ -113,6 +123,7 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
       notes: item.notes,
       status: item.status,
       preparationMinutes: item.product.preparationMinutes,
+      modificadores: item.modifiers.map((m) => m.optionNameSnapshot),
     });
   }
 

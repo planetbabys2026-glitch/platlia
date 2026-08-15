@@ -89,11 +89,37 @@ type ProductoReceta = {
   id: string;
   name: string;
   priceCop: number;
+  hasRecipe: boolean;
+  recipeNeedsModifiers: boolean;
   category: { name: string };
   recipeItems: Array<{
     id: string;
     quantityRequired: number;
     inventoryItem: { id: string; name: string; unit: string; costCop: number; stockCurrent: number };
+  }>;
+  modifierGroups: Array<{
+    required: boolean;
+    group: {
+      id: string;
+      name: string;
+      minSelect: number;
+      maxSelect: number;
+      options: Array<{
+        id: string;
+        name: string;
+        priceDeltaCop: number;
+        supplies: Array<{
+          quantityRequired: number;
+          inventoryItem: {
+            id: string;
+            name: string;
+            unit: string;
+            costCop: number;
+            stockCurrent: number;
+          };
+        }>;
+      }>;
+    };
   }>;
 };
 
@@ -1242,6 +1268,57 @@ function TarjetaRecetaProducto({
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Lo que aportan los modificadores. En solo lectura: se editan donde se
+            definen, para no tener dos lugares que escriban lo mismo. */}
+        {producto.modifierGroups.length > 0 && (
+          <div className="pt-2 mt-2 border-t border-border/60 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-muted-foreground font-medium">Según lo que se elija:</span>
+              <Link
+                href="/administracion/carta/modificadores"
+                className="text-brand text-[11px] font-semibold hover:underline"
+              >
+                Editar modificadores ↗
+              </Link>
+            </div>
+
+            {producto.modifierGroups.map((asignado) => (
+              <div key={asignado.group.id} className="space-y-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {asignado.group.name}
+                  {!asignado.required && " (opcional)"}
+                </span>
+                <ul className="list-disc list-inside space-y-0.5 text-muted-foreground pl-1">
+                  {asignado.group.options.map((opcion) => (
+                    <li key={opcion.id}>
+                      <strong className="text-foreground">{opcion.name}</strong>
+                      {opcion.supplies.length === 0 ? (
+                        <span className="italic"> — sin insumos</span>
+                      ) : (
+                        <>
+                          :{" "}
+                          {opcion.supplies
+                            .map(
+                              (s) =>
+                                `${s.quantityRequired} ${s.inventoryItem.unit} de ${s.inventoryItem.name}`,
+                            )
+                            .join(", ")}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+            {producto.recipeNeedsModifiers && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                No descuenta nada hasta que se eligen los modificadores al tomar el pedido.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </Card>

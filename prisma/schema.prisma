@@ -213,6 +213,12 @@ model Business {
   productRecipeItems   ProductRecipeItem[]
   inventoryMovements   InventoryMovement[]
 
+  modifierGroups         ModifierGroup[]
+  modifierOptions        ModifierOption[]
+  modifierOptionSupplies ModifierOptionSupply[]
+  productModifierGroups  ProductModifierGroup[]
+  orderItemModifiers     OrderItemModifier[]
+
   @@index([status])
 }
 
@@ -298,16 +304,16 @@ model BusinessSettings {
   paquetesDocumentosDisponibles    Int     @default(0)
   documentosEmitidosConsumidos     Int     @default(0)
 
-  factusClientId               String?
-  factusClientSecret           String?
-  factusUsername               String?
-  factusPassword               String?
-  factusNumberingRangeId       Int?
-  municipalityCode             String? @default("05001")
-  identificationDocumentCode   String? @default("31")
-  legalOrganizationCode        String? @default("1")
-  tributeCode                  String? @default("ZZ")
-  responsibilities             String? @default("R-99-PN")
+  factusClientId             String?
+  factusClientSecret         String?
+  factusUsername             String?
+  factusPassword             String?
+  factusNumberingRangeId     Int?
+  municipalityCode           String? @default("05001")
+  identificationDocumentCode String? @default("31")
+  legalOrganizationCode      String? @default("1")
+  tributeCode                String? @default("ZZ")
+  responsibilities           String? @default("R-99-PN")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -493,7 +499,7 @@ model Subscription {
   priceCop Int                @default(50000)
 
   /// Número máximo de sucursales permitidas (1 por defecto, 2 self-service con prorrateo, 3+ controlado por superadmin).
-  maxBranches Int               @default(1)
+  maxBranches Int @default(1)
 
   trialEndsAt        DateTime? @db.Timestamptz(3)
   currentPeriodStart DateTime? @db.Timestamptz(3)
@@ -619,6 +625,17 @@ model Product {
   trackStock Boolean @default(false)
   stockQty   Int     @default(0)
 
+  /// Lleva escandallo: descuenta insumos al venderse y aparece en
+  /// Inventario → Recetas. Sin esto marcado no tiene receta y no descuenta nada,
+  /// por más que le queden `recipeItems` de antes. Es una declaración del dueño,
+  /// no una consecuencia de que la tabla tenga filas.
+  hasRecipe Boolean @default(false)
+
+  /// La receta depende de lo que se elija al vender: no se descuenta nada hasta
+  /// que se eligen los modificadores. Solo tiene sentido con `hasRecipe` y con
+  /// al menos un grupo obligatorio asignado.
+  recipeNeedsModifiers Boolean @default(false)
+
   /// Estación de la pantalla de cocina: "Cocina", "Barra", "Parrilla".
   kitchenStation     String?
   preparationMinutes Int?
@@ -627,8 +644,9 @@ model Product {
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
 
-  orderItems  OrderItem[]
-  recipeItems ProductRecipeItem[]
+  orderItems     OrderItem[]
+  recipeItems    ProductRecipeItem[]
+  modifierGroups ProductModifierGroup[]
 
   @@unique([businessId, sku])
   @@index([businessId, categoryId, sortOrder])
@@ -822,13 +840,19 @@ model OrderItem {
   /// Instantánea: si el producto vendido era una presentación, ya no existe como
   /// tal —cada presentación es su propio Product— así que esto es lo único que
   /// queda de "qué era" en un tiquete viejo.
-  nameSnapshot        String
-  unitPriceCop        Int
-  taxRateBpSnapshot   Int
-  taxRateNameSnapshot String
+  nameSnapshot         String
+  /// Ya incluye los recargos de los modificadores elegidos: todo el cálculo de
+  /// impuesto y de totales sigue leyendo un solo precio, como antes de que
+  /// existieran los modificadores.
+  unitPriceCop         Int
+  /// El precio de lista del producto, sin recargos. Es lo único que permite
+  /// desglosar "plato $18.000 + carne $2.000" en un tiquete reimpreso.
+  basePriceCopSnapshot Int
+  taxRateBpSnapshot    Int
+  taxRateNameSnapshot  String
   /// También se congela: si mañana el negocio cambia a precios sin impuesto
   /// incluido, este renglón tiene que seguir desagregándose como se cobró.
-  taxIncludedSnapshot Boolean
+  taxIncludedSnapshot  Boolean
 
   quantity    Int @default(1)
   discountCop Int @default(0)
@@ -854,6 +878,8 @@ model OrderItem {
   readyAt         DateTime? @db.Timestamptz(3)
   deliveredAt     DateTime? @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  modifiers OrderItemModifier[]
 
   @@index([businessId, orderId])
   @@index([businessId, status, createdAt])
@@ -1004,18 +1030,19 @@ model InventoryItem {
 
   name         String
   sku          String?
-  unit         String   @default("UNIDAD")
-  stockCurrent Int      @default(0)
-  stockMin     Int      @default(0)
-  costCop      Int      @default(0)
+  unit         String  @default("UNIDAD")
+  stockCurrent Int     @default(0)
+  stockMin     Int     @default(0)
+  costCop      Int     @default(0)
 
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
 
-  recipeItems  ProductRecipeItem[]
-  invoiceItems PurchaseInvoiceItem[]
-  movements    InventoryMovement[]
+  recipeItems      ProductRecipeItem[]
+  invoiceItems     PurchaseInvoiceItem[]
+  movements        InventoryMovement[]
+  modifierSupplies ModifierOptionSupply[]
 
   @@index([businessId, deletedAt])
 }
@@ -1128,4 +1155,145 @@ model InventoryMovement {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([businessId, inventoryItemId, createdAt])
+}
+
+/// Grupo de modificadores reutilizable: "Proteína", "Término de la carne",
+/// "Adiciones".
+///
+/// Es biblioteca de la empresa, no del producto: la misma "Proteína" la usan el
+/// menú del día y la bandeja paisa, y cambiar el gramaje del pollo se hace en un
+/// solo lugar. Qué productos lo usan lo dice `ProductModifierGroup`.
+model ModifierGroup {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name     String
+  /// Ayuda que se muestra bajo el título en el modal de venta.
+  helpText String?
+
+  /// `minSelect` 0 = se puede no elegir nada. `maxSelect` 1 = una sola opción
+  /// (el modal pinta botones excluyentes); mayor a 1 = varias. Estos dos números
+  /// son lo único que decide la forma del modal: no hay un campo "tipo".
+  minSelect Int @default(1)
+  maxSelect Int @default(1)
+
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  options  ModifierOption[]
+  products ProductModifierGroup[]
+
+  @@unique([businessId, name])
+  @@index([businessId, active, sortOrder])
+}
+
+/// Una opción concreta del grupo: "Pollo", "Término medio", "Extra queso".
+model ModifierOption {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// Recargo sobre el precio del renglón, en pesos enteros. 0 = sin costo, que
+  /// es el caso normal de "término de la carne".
+  priceDeltaCop Int @default(0)
+
+  /// Viene marcada al abrir el modal. Ahorra un toque en el caso frecuente.
+  isDefault Boolean @default(false)
+
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  supplies      ModifierOptionSupply[]
+  orderItemMods OrderItemModifier[]
+
+  @@unique([groupId, name])
+  @@index([businessId, groupId, sortOrder])
+}
+
+/// Los insumos que consume una opción: "Pollo" → 150 g de pechuga.
+///
+/// Mismo contrato que `ProductRecipeItem`: cantidad `Int` en la unidad del
+/// insumo, sin decimales y sin conversión de unidades.
+model ModifierOptionSupply {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  optionId String
+  option   ModifierOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  quantityRequired Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([optionId, inventoryItemId])
+  @@index([businessId, optionId])
+}
+
+/// Qué grupos usa cada producto.
+///
+/// `required` es override por producto: el mismo grupo "Adiciones" puede ser
+/// obligatorio en un combo y opcional en un plato suelto, sin duplicar el grupo.
+model ProductModifierGroup {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  required  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  @@unique([productId, groupId])
+  @@index([businessId, productId, sortOrder])
+}
+
+/// Qué modificadores llevaba un renglón vendido.
+///
+/// Congelado como el resto del renglón: el nombre del grupo, el de la opción y
+/// el recargo se copian acá. Un tiquete reimpreso en seis meses sale idéntico
+/// aunque la opción se haya renombrado, se le haya cambiado el precio o se haya
+/// borrado del catálogo —por eso `optionId` es opcional y `SetNull`: sirve para
+/// trazar de vuelta, no para leer los datos.
+model OrderItemModifier {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  optionId String?
+  option   ModifierOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  groupNameSnapshot     String
+  optionNameSnapshot    String
+  priceDeltaCopSnapshot Int    @default(0)
+  sortOrder             Int    @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, orderItemId])
 }

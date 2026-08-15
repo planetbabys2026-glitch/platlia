@@ -18,8 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop, formatRateBp } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 export type Tarifa = { id: string; name: string; rateBp: number; isDefault: boolean };
+
+export type GrupoDisponible = {
+  id: string;
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  _count: { options: number };
+};
 
 export type ProductoAdmin = {
   id: string;
@@ -34,7 +43,60 @@ export type ProductoAdmin = {
   preparationMinutes: number | null;
   taxRateId: string;
   taxRate: { name: string; rateBp: number };
+  hasRecipe: boolean;
+  recipeNeedsModifiers: boolean;
+  modifierGroups: Array<{ groupId: string; required: boolean }>;
 };
+
+/**
+ * Una casilla con su explicación al lado.
+ *
+ * No hay `components/ui/checkbox.tsx` en el proyecto y no vale la pena traer uno
+ * para dos campos: un `<input type="checkbox">` nativo ya es accesible, y lo que
+ * hace falta acá es el texto que explica qué prende.
+ */
+function Casilla({
+  name,
+  label,
+  ayuda,
+  checked,
+  onChange,
+  disabled,
+  error,
+}: {
+  name: string;
+  label: string;
+  ayuda: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  error?: string;
+}) {
+  const idCampo = `${name}-${label.replace(/\s+/g, "-")}`;
+
+  return (
+    <div className={cn("space-y-1", disabled && "opacity-50")}>
+      <div className="flex items-start gap-2">
+        <input
+          id={idCampo}
+          name={name}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className="accent-brand focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded focus-visible:ring-3 focus-visible:outline-none"
+        />
+        <div className="space-y-0.5">
+          <Label htmlFor={idCampo} className="text-xs font-medium">
+            {label}
+          </Label>
+          <p className="text-muted-foreground text-xs leading-snug">{ayuda}</p>
+        </div>
+      </div>
+      {error && <p className="text-destructive pl-6 text-xs">{error}</p>}
+    </div>
+  );
+}
 
 function Enviar({
   children,
@@ -185,11 +247,144 @@ export function ArchivarCategoria({ id, name }: { id: string; name: string }) {
   );
 }
 
+/**
+ * Receta y modificadores del producto.
+ *
+ * Las dos casillas son declaraciones del dueño, no consecuencias: un producto
+ * descuenta insumos porque alguien dijo que lleva receta, no porque la tabla de
+ * escandallo tenga filas. Es lo que permite que Inventario → Recetas muestre
+ * solo los productos que de verdad se preparan.
+ */
+function CamposReceta({
+  grupos,
+  producto,
+  campos,
+  version,
+}: {
+  grupos: GrupoDisponible[];
+  producto?: ProductoAdmin;
+  campos?: Record<string, string[]>;
+  version: number;
+}) {
+  const [conReceta, setConReceta] = useState(producto?.hasRecipe ?? false);
+  const [segunModificadores, setSegunModificadores] = useState(
+    producto?.recipeNeedsModifiers ?? false,
+  );
+  const [asignados, setAsignados] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries((producto?.modifierGroups ?? []).map((a) => [a.groupId, a.required])),
+  );
+
+  // El alta remonta el bloque al guardar (misma `version` que SubirImagen), así
+  // que el segundo producto no hereda las casillas del primero.
+  useEffect(() => {
+    setConReceta(producto?.hasRecipe ?? false);
+    setSegunModificadores(producto?.recipeNeedsModifiers ?? false);
+    setAsignados(
+      Object.fromEntries((producto?.modifierGroups ?? []).map((a) => [a.groupId, a.required])),
+    );
+  }, [version, producto]);
+
+  const algunoAsignado = Object.keys(asignados).length > 0;
+
+  // Desmarcar "lleva receta" o quitar todos los grupos deja la segunda casilla
+  // sin sentido; apagarla sola evita mandar una combinación que el servidor
+  // rechazaría con un error que nadie pidió.
+  useEffect(() => {
+    if (!conReceta || !algunoAsignado) setSegunModificadores(false);
+  }, [conReceta, algunoAsignado]);
+
+  return (
+    <div className="border-border/70 space-y-3 rounded-lg border border-dashed p-3">
+      <Casilla
+        name="hasRecipe"
+        label="Este producto se prepara con receta"
+        ayuda="Descuenta los insumos del inventario al venderse y aparece en Inventario → Recetas."
+        checked={conReceta}
+        onChange={setConReceta}
+      />
+
+      <div className="space-y-2">
+        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+          Modificadores
+        </p>
+
+        {grupos.length === 0 ? (
+          <p className="text-muted-foreground text-xs italic">
+            Todavía no hay grupos. Se crean en Carta → Modificadores.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {grupos.map((grupo) => {
+              const marcado = grupo.id in asignados;
+              return (
+                <li key={grupo.id} className="flex items-center gap-2">
+                  <input
+                    id={`grupo-${grupo.id}`}
+                    type="checkbox"
+                    name="modifierGroupIds"
+                    value={grupo.id}
+                    checked={marcado}
+                    onChange={(e) =>
+                      setAsignados((prev) => {
+                        const copia = { ...prev };
+                        if (e.target.checked) copia[grupo.id] = true;
+                        else delete copia[grupo.id];
+                        return copia;
+                      })
+                    }
+                    className="accent-brand size-4 shrink-0 rounded"
+                  />
+                  <Label htmlFor={`grupo-${grupo.id}`} className="flex-1 text-xs font-medium">
+                    {grupo.name}
+                    <span className="text-muted-foreground ml-1 font-normal">
+                      ({grupo._count.options}{" "}
+                      {grupo._count.options === 1 ? "opción" : "opciones"})
+                    </span>
+                  </Label>
+
+                  {marcado && (
+                    <select
+                      value={asignados[grupo.id] ? "si" : "no"}
+                      onChange={(e) =>
+                        setAsignados((prev) => ({ ...prev, [grupo.id]: e.target.value === "si" }))
+                      }
+                      className="border-input bg-card h-7 shrink-0 rounded-md border px-1.5 text-xs"
+                      aria-label={`${grupo.name}: obligatorio u opcional`}
+                    >
+                      <option value="si">Obligatorio</option>
+                      <option value="no">Opcional</option>
+                    </select>
+                  )}
+
+                  {marcado && asignados[grupo.id] && (
+                    <input type="hidden" name="requiredModifierGroupIds" value={grupo.id} />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <Casilla
+        name="recipeNeedsModifiers"
+        label="La receta depende de los modificadores"
+        ayuda="No se descuenta nada hasta que se eligen. Para un menú del día donde el pollo y la carne son insumos distintos."
+        checked={segunModificadores}
+        onChange={setSegunModificadores}
+        disabled={!conReceta || !algunoAsignado}
+        error={campos?.recipeNeedsModifiers?.[0]}
+      />
+    </div>
+  );
+}
+
 /** Los campos que comparten "agregar producto" y "editar producto". */
 function CamposProducto({
   idBase,
   tarifas,
   estaciones,
+  grupos,
   producto,
   campos,
   version,
@@ -198,6 +393,7 @@ function CamposProducto({
   tarifas: Tarifa[];
   /** Estaciones que ya usa este negocio, para no fragmentar "Cocina"/"cocina". */
   estaciones: string[];
+  grupos: GrupoDisponible[];
   producto?: ProductoAdmin;
   campos?: Record<string, string[]>;
   version: number;
@@ -280,6 +476,8 @@ function CamposProducto({
           </p>
         </div>
       </div>
+
+      <CamposReceta grupos={grupos} producto={producto} campos={campos} version={version} />
     </>
   );
 }
@@ -288,10 +486,12 @@ export function NuevoProducto({
   categoryId,
   tarifas,
   estaciones,
+  grupos,
 }: {
   categoryId: string;
   tarifas: Tarifa[];
   estaciones: string[];
+  grupos: GrupoDisponible[];
 }) {
   const [estado, accion] = useActionState(guardarProducto, ESTADO_INICIAL);
   const campos = !estado.ok ? estado.campos : undefined;
@@ -313,6 +513,7 @@ export function NuevoProducto({
         idBase={categoryId}
         tarifas={tarifas}
         estaciones={estaciones}
+        grupos={grupos}
         campos={campos}
         version={version}
       />
@@ -364,11 +565,13 @@ export function FilaProducto({
   categoryId,
   tarifas,
   estaciones,
+  grupos,
 }: {
   producto: ProductoAdmin;
   categoryId: string;
   tarifas: Tarifa[];
   estaciones: string[];
+  grupos: GrupoDisponible[];
 }) {
   const [editando, setEditando] = useState(false);
   const [estado, accion] = useActionState(guardarProducto, ESTADO_INICIAL);
@@ -394,6 +597,7 @@ export function FilaProducto({
             idBase={producto.id}
             tarifas={tarifas}
             estaciones={estaciones}
+            grupos={grupos}
             producto={producto}
             campos={campos}
             version={version}

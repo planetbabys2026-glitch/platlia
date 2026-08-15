@@ -7,6 +7,11 @@ import {
   verificarYDescontarStockReceta,
 } from "@/lib/inventory/stock";
 
+/** Un insumo de prueba con lo mínimo que las funciones necesitan leer. */
+function insumo(id: string, stockCurrent: number, costCop = 0) {
+  return { id, name: id, unit: "UNIDAD", stockCurrent, costCop };
+}
+
 describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
   it("descuenta stock e inserta Kardex VENTA cuando hay stock suficiente de insumos", async () => {
     const mockTx = {
@@ -16,6 +21,8 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           name: "Hamburguesa Especial",
           trackStock: false,
           stockQty: 0,
+          hasRecipe: true,
+          recipeNeedsModifiers: false,
           recipeItems: [
             {
               quantityRequired: 2,
@@ -47,7 +54,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
     // Stock requerido: 2 * 3 = 6. Stock nuevo: 10 - 6 = 4.
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
       where: { id: "insumo-1" },
-      data: { stockCurrent: 4 },
+      data: { stockCurrent: { decrement: 6 } },
     });
 
     expect(mockTx.inventoryMovement.create).toHaveBeenCalledWith({
@@ -72,6 +79,8 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           name: "Hamburguesa Especial",
           trackStock: false,
           stockQty: 0,
+          hasRecipe: true,
+          recipeNeedsModifiers: false,
           recipeItems: [
             {
               quantityRequired: 2,
@@ -110,6 +119,8 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           id: "prod-1",
           name: "Hamburguesa Especial",
           trackStock: false,
+          hasRecipe: true,
+          recipeNeedsModifiers: false,
           recipeItems: [
             {
               quantityRequired: 2,
@@ -141,7 +152,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
     // Se devuelven 2 * 2 = 4 unidades. Stock nuevo: 4 + 4 = 8.
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
       where: { id: "insumo-1" },
-      data: { stockCurrent: 8 },
+      data: { stockCurrent: { increment: 4 } },
     });
 
     expect(mockTx.inventoryMovement.create).toHaveBeenCalledWith({
@@ -165,6 +176,8 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           id: "prod-1",
           name: "Hamburguesa Especial",
           trackStock: false,
+          hasRecipe: true,
+          recipeNeedsModifiers: false,
           recipeItems: [
             {
               quantityRequired: 1,
@@ -191,7 +204,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
 
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
       where: { id: "insumo-1" },
-      data: { stockCurrent: 7 },
+      data: { stockCurrent: { decrement: 3 } },
     });
 
     // Reducción de cantidad: de 5 a 3 (-2 porciones devueltas)
@@ -199,6 +212,8 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
       id: "prod-1",
       name: "Hamburguesa Especial",
       trackStock: false,
+      hasRecipe: true,
+      recipeNeedsModifiers: false,
       recipeItems: [
         {
           quantityRequired: 1,
@@ -220,17 +235,18 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
 
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
       where: { id: "insumo-1" },
-      data: { stockCurrent: 9 },
+      data: { stockCurrent: { increment: 2 } },
     });
   });
 
   it("calcula correctamente las porciones preparables según los insumos de la receta", () => {
     // 10 panes (requiere 2 c/u -> 5), 8 carnes (requiere 1 c/u -> 8), 12 quesos (requiere 3 c/u -> 4) -> Mínimo = 4 porciones
     const res = calcularStockDisponibleProducto({
+      hasRecipe: true,
       recipeItems: [
-        { quantityRequired: 2, inventoryItem: { stockCurrent: 10 } },
-        { quantityRequired: 1, inventoryItem: { stockCurrent: 8 } },
-        { quantityRequired: 3, inventoryItem: { stockCurrent: 12 } },
+        { quantityRequired: 2, inventoryItem: insumo("pan", 10) },
+        { quantityRequired: 1, inventoryItem: insumo("carne", 8) },
+        { quantityRequired: 3, inventoryItem: insumo("queso", 12) },
       ],
     });
     expect(res).toBe(4);
@@ -238,9 +254,10 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
 
   it("retorna 0 si falta algún insumo de la receta", () => {
     const res = calcularStockDisponibleProducto({
+      hasRecipe: true,
       recipeItems: [
-        { quantityRequired: 1, inventoryItem: { stockCurrent: 5 } },
-        { quantityRequired: 1, inventoryItem: { stockCurrent: 0 } },
+        { quantityRequired: 1, inventoryItem: insumo("pan", 5) },
+        { quantityRequired: 1, inventoryItem: insumo("carne", 0) },
       ],
     });
     expect(res).toBe(0);
@@ -261,6 +278,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           {
             id: "p1",
             name: "Hamburguesa Sencilla",
+            hasRecipe: true,
             recipeItems: [
               { quantityRequired: 1, inventoryItem: { id: "pan", name: "Pan Hamburguesa", unit: "UNIDAD", stockCurrent: 3 } },
             ],
@@ -268,6 +286,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           {
             id: "p2",
             name: "Hamburguesa Doble",
+            hasRecipe: true,
             recipeItems: [
               { quantityRequired: 2, inventoryItem: { id: "pan", name: "Pan Hamburguesa", unit: "UNIDAD", stockCurrent: 3 } },
             ],

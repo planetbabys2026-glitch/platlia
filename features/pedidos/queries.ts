@@ -39,9 +39,20 @@ export async function getPedido(businessId: string, orderId: string) {
           lineTotalCop: true,
           lineTaxCop: true,
           taxRateBpSnapshot: true,
+          basePriceCopSnapshot: true,
           status: true,
           notes: true,
           canceledReason: true,
+          modifiers: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              optionId: true,
+              groupNameSnapshot: true,
+              optionNameSnapshot: true,
+              priceDeltaCopSnapshot: true,
+            },
+          },
         },
       },
       payments: {
@@ -123,7 +134,17 @@ export async function getPedidoParaTiquete(businessId: string, orderId: string) 
           lineTotalCop: true,
           taxRateBpSnapshot: true,
           taxRateNameSnapshot: true,
+          basePriceCopSnapshot: true,
           notes: true,
+          modifiers: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              groupNameSnapshot: true,
+              optionNameSnapshot: true,
+              priceDeltaCopSnapshot: true,
+            },
+          },
         },
       },
       payments: {
@@ -160,11 +181,50 @@ export async function getCarta(businessId: string) {
           imageUrl: true,
           trackStock: true,
           stockQty: true,
+          hasRecipe: true,
+          recipeNeedsModifiers: true,
           recipeItems: {
             select: {
               quantityRequired: true,
               inventoryItem: {
                 select: { id: true, name: true, unit: true, stockCurrent: true },
+              },
+            },
+          },
+          // Los grupos viajan con la carta y no se piden al tocar el producto:
+          // el modal tiene que abrir instantáneo con el dedo todavía en la
+          // pantalla, y una ida al servidor en el medio se siente rota.
+          modifierGroups: {
+            where: { group: { deletedAt: null, active: true } },
+            orderBy: { sortOrder: "asc" },
+            select: {
+              required: true,
+              group: {
+                select: {
+                  id: true,
+                  name: true,
+                  helpText: true,
+                  minSelect: true,
+                  maxSelect: true,
+                  options: {
+                    where: { deletedAt: null, active: true },
+                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                    select: {
+                      id: true,
+                      name: true,
+                      priceDeltaCop: true,
+                      isDefault: true,
+                      supplies: {
+                        select: {
+                          quantityRequired: true,
+                          inventoryItem: {
+                            select: { id: true, name: true, unit: true, stockCurrent: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },

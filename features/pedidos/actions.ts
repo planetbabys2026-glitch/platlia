@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { AppModule, OrderChannel, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { recalcularTotales } from "@/features/pedidos/totales";
+import { modificadoresDeRenglon, resolverModificadores } from "@/features/pedidos/modificadores";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
 import {
   abrirPedidoSchema,
@@ -25,6 +26,7 @@ import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import {
   ajustarStockCantidadReceta,
+  auditarStockCarritoRecetas,
   restaurarStockReceta,
   verificarYDescontarStockReceta,
 } from "@/lib/inventory/stock";
@@ -186,7 +188,18 @@ export const agregarItem = defineAction({
       }
 
       const nombre = producto.name;
-      const precio = producto.priceCop;
+
+      const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
+        tx,
+        producto.id,
+        producto.name,
+        input.modifierOptionIds,
+      );
+
+      // El recargo se pliega dentro del precio unitario: de ahí para abajo todo
+      // el cálculo de impuesto y de totales sigue viendo un solo número, igual
+      // que antes de que existieran los modificadores.
+      const precio = producto.priceCop + recargoCop;
 
       // Acá se congela todo: nombre, precio y tarifa. Un tiquete reimpreso en seis
       // meses tiene que salir idéntico aunque el producto haya cambiado de precio
@@ -205,6 +218,7 @@ export const agregarItem = defineAction({
           productId: producto.id,
           nameSnapshot: nombre,
           unitPriceCop: precio,
+          basePriceCopSnapshot: producto.priceCop,
           taxRateBpSnapshot: producto.taxRate.rateBp,
           taxRateNameSnapshot: producto.taxRate.name,
           taxIncludedSnapshot: settings.pricesIncludeTax,
@@ -215,12 +229,18 @@ export const agregarItem = defineAction({
           notes: input.notes ?? null,
           createdById: ctx.user.id,
           sentToKitchenAt: null,
+          // Escritura anidada: `tenantDb` no inyecta el businessId acá adentro,
+          // por eso va explícito en cada fila.
+          modifiers: {
+            create: snapshots.map((s) => ({ businessId: ctx.business.id, ...s })),
+          },
         },
       });
 
       await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, input.quantity, {
         referenceId: pedido.id,
         inventoryEnabled: settings.inventoryEnabled,
+        modifierOptionIds: opcionIds,
       });
 
       await recalcularTotales(tx, pedido.id);
@@ -291,6 +311,10 @@ export const cambiarCantidad = defineAction({
         {
           referenceId: item.orderId,
           inventoryEnabled: settings.inventoryEnabled,
+          // Los mismos modificadores con los que se descontó. Sin esto, subir de
+          // 1 a 2 un plato con carne descuenta el arroz de la receta base y no la
+          // carne, y el inventario se va desviando renglón a renglón.
+          modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
         },
       );
 
@@ -385,6 +409,7 @@ export const quitarItem = defineAction({
         referenceId: item.orderId,
         inventoryEnabled: settings.inventoryEnabled,
         customNotes: `Quitar renglón de producto x${item.quantity}`,
+        modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
       });
 
       await recalcularTotales(tx, item.orderId);
@@ -437,6 +462,7 @@ export const anularItem = defineAction({
         referenceId: item.orderId,
         inventoryEnabled: settings.inventoryEnabled,
         customNotes: `Anulación de renglón ${item.nameSnapshot} x${item.quantity}. Motivo: ${input.motivo}`,
+        modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
       });
 
       // Una anulación es de lo que después se discute: queda en la bitácora con
@@ -678,7 +704,13 @@ export const anularPedido = defineAction({
 
       const itemsParaDevolver = await tx.orderItem.findMany({
         where: { orderId: pedido.id, status: { not: "ANULADO" } },
-        select: { id: true, productId: true, quantity: true, nameSnapshot: true },
+        select: {
+          id: true,
+          productId: true,
+          quantity: true,
+          nameSnapshot: true,
+          modifiers: { select: { optionId: true } },
+        },
       });
 
       const settings = await getSettings(ctx.business.id);
@@ -687,6 +719,9 @@ export const anularPedido = defineAction({
           referenceId: pedido.id,
           inventoryEnabled: settings.inventoryEnabled,
           customNotes: `Anulación de pedido #${pedido.code}. Motivo: ${input.motivo}`,
+          modifierOptionIds: item.modifiers
+            .map((m) => m.optionId)
+            .filter((id): id is string => id !== null),
         });
       }
 
@@ -846,6 +881,31 @@ export const procesarVentaPosCompleta = defineAction({
             select: { id: true, code: true, turnNumber: true },
           });
 
+          // Este camino borra y recrea todos los renglones en vez de calcular un
+          // diff. Los renglones que se borran ya habían descontado su stock al
+          // parquear el pedido, así que hay que devolverlo antes: los que sigan
+          // en el carrito se vuelven a descontar más abajo. Sin esto, parquear y
+          // reabrir un pedido descuenta los insumos dos veces.
+          const itemsPrevios = await tx.orderItem.findMany({
+            where: { orderId: pedido.id, status: { not: "ANULADO" } },
+            select: {
+              productId: true,
+              quantity: true,
+              modifiers: { select: { optionId: true } },
+            },
+          });
+
+          for (const previo of itemsPrevios) {
+            await restaurarStockReceta(tx, ctx.business.id, previo.productId, previo.quantity, {
+              referenceId: pedido.id,
+              inventoryEnabled: settings.inventoryEnabled,
+              customNotes: `Reapertura de pedido #${pedido.code}: se rearma el consumo`,
+              modifierOptionIds: previo.modifiers
+                .map((m) => m.optionId)
+                .filter((id): id is string => id !== null),
+            });
+          }
+
           await tx.orderItem.deleteMany({
             where: { orderId: pedido.id, status: { not: "ANULADO" } },
           });
@@ -877,61 +937,65 @@ export const procesarVentaPosCompleta = defineAction({
           });
         }
 
-        // Pre-verificación acumulada de insumos para todo el lote de productos
-        if (settings.inventoryEnabled) {
-          const insumosAcumuladosMap = new Map<
-            string,
-            { name: string; unit: string; requeridoTotal: number; stockCurrent: number }
-          >();
-
-          for (const itemInput of input.items) {
-            const p = await tx.product.findFirst({
-              where: { id: itemInput.productId, deletedAt: null },
-              select: {
-                id: true,
-                name: true,
-                trackStock: true,
-                stockQty: true,
-                recipeItems: {
-                  include: {
-                    inventoryItem: { select: { id: true, name: true, unit: true, stockCurrent: true } },
+        // Pre-verificación acumulada para todo el lote, antes de escribir nada:
+        // tres platos que comparten la misma salsa se revisan juntos, porque
+        // renglón por renglón cada uno pasa y el pedido entero igual no se puede
+        // preparar. Usa la misma función pura que audita el carrito en el
+        // navegador —antes esto era una copia a mano que había que mantener dos
+        // veces— alimentada con las opciones que se eligieron en cada renglón.
+        {
+          const productos = await tx.product.findMany({
+            where: { id: { in: input.items.map((i) => i.productId) }, deletedAt: null },
+            select: {
+              id: true,
+              name: true,
+              trackStock: true,
+              stockQty: true,
+              hasRecipe: true,
+              recipeItems: {
+                include: {
+                  inventoryItem: {
+                    select: { id: true, name: true, unit: true, stockCurrent: true },
                   },
                 },
               },
-            });
+            },
+          });
 
-            if (!p) throw new ErrorDeUsuario("Ese producto no existe.");
-
-            if (p.trackStock && p.stockQty < itemInput.quantity) {
-              throw new ErrorDeUsuario(
-                `Stock insuficiente de "${p.name}". Disponibles: ${p.stockQty}, solicitados: ${itemInput.quantity}.`,
-              );
-            }
-
-            for (const r of p.recipeItems) {
-              const ins = r.inventoryItem;
-              const req = r.quantityRequired * itemInput.quantity;
-              const actual = insumosAcumuladosMap.get(ins.id);
-              if (actual) {
-                actual.requeridoTotal += req;
-              } else {
-                insumosAcumuladosMap.set(ins.id, {
-                  name: ins.name,
-                  unit: ins.unit,
-                  requeridoTotal: req,
-                  stockCurrent: ins.stockCurrent,
+          const idsDeOpciones = [...new Set(input.items.flatMap((i) => i.modifierOptionIds))];
+          const opciones =
+            idsDeOpciones.length === 0
+              ? []
+              : await tx.modifierOption.findMany({
+                  where: { id: { in: idsDeOpciones } },
+                  select: {
+                    id: true,
+                    name: true,
+                    supplies: {
+                      select: {
+                        quantityRequired: true,
+                        inventoryItem: {
+                          select: { id: true, name: true, unit: true, stockCurrent: true },
+                        },
+                      },
+                    },
+                  },
                 });
-              }
-            }
-          }
+          const opcionPorId = new Map(opciones.map((o) => [o.id, o]));
 
-          for (const [, ins] of insumosAcumuladosMap) {
-            if (ins.requeridoTotal > ins.stockCurrent) {
-              throw new ErrorDeUsuario(
-                `Stock insuficiente del insumo "${ins.name}" para preparar el pedido. Requerido total: ${ins.requeridoTotal} ${ins.unit}, disponible en inventario: ${ins.stockCurrent} ${ins.unit}.`,
-              );
-            }
-          }
+          const problema = auditarStockCarritoRecetas(
+            input.items.map((i) => ({
+              productId: i.productId,
+              name: "",
+              quantity: i.quantity,
+              opciones: i.modifierOptionIds
+                .map((id) => opcionPorId.get(id))
+                .filter((o) => o !== undefined),
+            })),
+            [{ products: productos }],
+            settings.inventoryEnabled,
+          );
+          if (problema) throw new ErrorDeUsuario(problema);
         }
 
         // 3. Crear Ítems (todos agrupados en el mismo lote de comanda)
@@ -955,8 +1019,17 @@ export const procesarVentaPosCompleta = defineAction({
             throw new ErrorDeUsuario(`"${producto.name}" está marcado como agotado.`);
           }
 
+          const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
+            tx,
+            producto.id,
+            producto.name,
+            itemInput.modifierOptionIds,
+          );
+
+          const precio = producto.priceCop + recargoCop;
+
           const linea = computeTaxLine({
-            unitPriceCop: producto.priceCop,
+            unitPriceCop: precio,
             quantity: itemInput.quantity,
             taxRateBp: producto.taxRate.rateBp,
             taxIncluded: settings.pricesIncludeTax,
@@ -968,7 +1041,8 @@ export const procesarVentaPosCompleta = defineAction({
               orderId: pedido.id,
               productId: producto.id,
               nameSnapshot: producto.name,
-              unitPriceCop: producto.priceCop,
+              unitPriceCop: precio,
+              basePriceCopSnapshot: producto.priceCop,
               taxRateBpSnapshot: producto.taxRate.rateBp,
               taxRateNameSnapshot: producto.taxRate.name,
               taxIncludedSnapshot: settings.pricesIncludeTax,
@@ -979,12 +1053,16 @@ export const procesarVentaPosCompleta = defineAction({
               notes: itemInput.notes ?? null,
               createdById: ctx.user.id,
               sentToKitchenAt: debeEnviarACocina ? ahora : null,
+              modifiers: {
+                create: snapshots.map((s) => ({ businessId: ctx.business.id, ...s })),
+              },
             },
           });
 
           await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, itemInput.quantity, {
             referenceId: pedido.id,
             inventoryEnabled: settings.inventoryEnabled,
+            modifierOptionIds: opcionIds,
           });
         }
 

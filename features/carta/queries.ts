@@ -31,6 +31,12 @@ export async function getCartaAdmin(businessId: string) {
           preparationMinutes: true,
           taxRateId: true,
           taxRate: { select: { name: true, rateBp: true } },
+          hasRecipe: true,
+          recipeNeedsModifiers: true,
+          modifierGroups: {
+            orderBy: { sortOrder: "asc" },
+            select: { groupId: true, required: true },
+          },
         },
       },
     },

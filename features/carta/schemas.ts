@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { id, montoCopPositivo, textoOpcional } from "@/lib/validaciones";
+import { id, listaDeIds, montoCopPositivo, textoOpcional } from "@/lib/validaciones";
+
+/** Una casilla de formulario: llega "on" cuando está marcada y nada cuando no. */
+const casilla = z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean());
 
 /**
  * Carta: categorías y productos.
@@ -52,7 +55,24 @@ export const productoSchema = z.object({
     (v) => (v === "" || v === undefined ? 0 : Number(v)),
     z.number().int().min(0).max(999).default(0),
   ),
-});
+
+  /** Lleva escandallo: descuenta insumos y sale en Inventario → Recetas. */
+  hasRecipe: casilla.default(false),
+  /** La receta depende de lo que se elija al vender. */
+  recipeNeedsModifiers: casilla.default(false),
+  /** Los grupos de la biblioteca que se le asignan. */
+  modifierGroupIds: listaDeIds.default([]),
+  /** De esos, cuáles son obligatorios. Subconjunto de `modifierGroupIds`. */
+  requiredModifierGroupIds: listaDeIds.default([]),
+})
+  .refine((v) => !v.recipeNeedsModifiers || v.hasRecipe, {
+    error: "Para que la receta dependa de los modificadores, el producto tiene que llevar receta.",
+    path: ["recipeNeedsModifiers"],
+  })
+  .refine((v) => !v.recipeNeedsModifiers || v.modifierGroupIds.length > 0, {
+    error: "Asignale al menos un grupo de modificadores antes de marcar esta casilla.",
+    path: ["recipeNeedsModifiers"],
+  });
 
 export const subirImagenSchema = z.object({
   file: z

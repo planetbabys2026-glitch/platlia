@@ -89,6 +89,49 @@ export default async function MenuQrPublicPage({
         imageUrl: true,
         isAvailable: true,
         categoryId: true,
+        hasRecipe: true,
+        recipeItems: {
+          select: {
+            quantityRequired: true,
+            inventoryItem: {
+              select: { id: true, name: true, unit: true, stockCurrent: true },
+            },
+          },
+        },
+        modifierGroups: {
+          where: { group: { deletedAt: null, active: true } },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            required: true,
+            group: {
+              select: {
+                id: true,
+                name: true,
+                helpText: true,
+                minSelect: true,
+                maxSelect: true,
+                options: {
+                  where: { deletedAt: null, active: true },
+                  orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                  select: {
+                    id: true,
+                    name: true,
+                    priceDeltaCop: true,
+                    isDefault: true,
+                    supplies: {
+                      select: {
+                        quantityRequired: true,
+                        inventoryItem: {
+                          select: { id: true, name: true, unit: true, stockCurrent: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     }),
     rootDb.placeholderImage.findFirst({

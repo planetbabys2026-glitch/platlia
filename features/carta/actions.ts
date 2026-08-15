@@ -152,16 +152,70 @@ export const guardarProducto = defineAction({
       kitchenStation: input.kitchenStation ?? null,
       preparationMinutes: input.preparationMinutes ?? null,
       sortOrder: input.sortOrder,
+      hasRecipe: input.hasRecipe,
+      recipeNeedsModifiers: input.recipeNeedsModifiers,
     };
 
-    const producto = input.id
-      ? await db.product.update({ where: { id: input.id }, data: datos, select: { id: true } })
-      : await db.product.create({
-          data: { businessId: ctx.business.id, ...datos },
+    // Los grupos asignados se sincronizan junto con el producto: si el update
+    // pasara y la asignación fallara, quedaría un producto marcado como "la
+    // receta depende de los modificadores" sin un solo modificador, es decir,
+    // imposible de vender.
+    const producto = await db.$transaction(async (tx) => {
+      const guardado = input.id
+        ? await tx.product.update({ where: { id: input.id }, data: datos, select: { id: true } })
+        : await tx.product.create({
+            data: { businessId: ctx.business.id, ...datos },
+            select: { id: true },
+          });
+
+      const elegidos = [...new Set(input.modifierGroupIds)];
+
+      if (elegidos.length > 0) {
+        const existen = await tx.modifierGroup.findMany({
+          where: { id: { in: elegidos }, deletedAt: null },
           select: { id: true },
         });
+        if (existen.length !== elegidos.length) {
+          throw new ErrorDeUsuario("Alguno de los grupos de modificadores ya no existe.");
+        }
+      }
+
+      await tx.productModifierGroup.deleteMany({
+        where: { productId: guardado.id, ...(elegidos.length > 0 ? { groupId: { notIn: elegidos } } : {}) },
+      });
+
+      const yaAsignados = await tx.productModifierGroup.findMany({
+        where: { productId: guardado.id },
+        select: { groupId: true },
+      });
+      const yaAsignadosSet = new Set(yaAsignados.map((a) => a.groupId));
+
+      for (const [indice, groupId] of elegidos.entries()) {
+        const required = input.requiredModifierGroupIds.includes(groupId);
+        if (yaAsignadosSet.has(groupId)) {
+          await tx.productModifierGroup.updateMany({
+            where: { productId: guardado.id, groupId },
+            data: { required, sortOrder: indice },
+          });
+        } else {
+          await tx.productModifierGroup.create({
+            data: {
+              businessId: ctx.business.id,
+              productId: guardado.id,
+              groupId,
+              required,
+              sortOrder: indice,
+            },
+          });
+        }
+      }
+
+      return guardado;
+    });
 
     revalidatePath("/administracion/carta");
+    revalidatePath("/inventario");
+    revalidatePath("/pos");
     return producto;
   },
 });

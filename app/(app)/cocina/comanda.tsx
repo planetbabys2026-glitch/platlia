@@ -64,6 +64,18 @@ function RenglonComanda({ item }: { item: ComandaItem }) {
           <p className="text-base font-semibold leading-snug">
             <span className="text-brand font-bold mr-1">{item.quantity}x</span> {item.nameSnapshot}
           </p>
+          {item.modificadores.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-0.5">
+              {item.modificadores.map((mod, i) => (
+                <span
+                  key={`${item.id}-${i}`}
+                  className="border-brand/40 bg-brand/10 text-brand rounded-md border px-1.5 py-0.5 text-xs font-bold dark:text-[#FF7A4D]"
+                >
+                  {mod}
+                </span>
+              ))}
+            </div>
+          )}
           {item.notes && (
             <div className="mt-1 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
               <span className="shrink-0">📝</span>

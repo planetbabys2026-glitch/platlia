@@ -167,6 +167,20 @@ export default async function PedidoPage({
                           {formatCop(item.lineTotalCop)}
                         </span>
                       </div>
+                      {item.modifiers.length > 0 && (
+                        <ul className="text-muted-foreground space-y-0.5 pl-3 text-xs">
+                          {item.modifiers.map((mod) => (
+                            <li key={mod.id} className="flex justify-between gap-2">
+                              <span>+ {mod.optionNameSnapshot}</span>
+                              {mod.priceDeltaCopSnapshot > 0 && (
+                                <span className="numeral whitespace-nowrap">
+                                  {formatCop(mod.priceDeltaCopSnapshot)}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       <div className="flex items-center justify-between gap-2">
                         <ControlCantidad
                           itemId={item.id}

@@ -74,20 +74,71 @@ export async function getFinishedProducts(businessId: string) {
   });
 }
 
+/**
+ * Los productos que llevan escandallo.
+ *
+ * Filtra por `hasRecipe`: antes listaba todos los productos activos, así que la
+ * pestaña se llenaba de cervezas y gaseosas que nunca van a tener receta y había
+ * que buscar los platos entre ellas. Marcar la casilla en la carta es lo que
+ * mete un producto acá.
+ */
 export async function getProductRecipes(businessId: string) {
   const [products, inventoryItems] = await Promise.all([
     tenantDb(businessId).product.findMany({
-      where: { deletedAt: null, active: true },
+      where: { deletedAt: null, active: true, hasRecipe: true },
       orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
         priceCop: true,
+        hasRecipe: true,
+        recipeNeedsModifiers: true,
         category: { select: { name: true } },
         recipeItems: {
           include: {
             inventoryItem: {
               select: { id: true, name: true, unit: true, costCop: true, stockCurrent: true },
+            },
+          },
+        },
+        // Los insumos que aportan los modificadores, para que el costo del plato
+        // se entienda completo. Se muestran en solo lectura: se editan donde se
+        // definen, en Carta → Modificadores.
+        modifierGroups: {
+          where: { group: { deletedAt: null, active: true } },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            required: true,
+            group: {
+              select: {
+                id: true,
+                name: true,
+                minSelect: true,
+                maxSelect: true,
+                options: {
+                  where: { deletedAt: null, active: true },
+                  orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                  select: {
+                    id: true,
+                    name: true,
+                    priceDeltaCop: true,
+                    supplies: {
+                      select: {
+                        quantityRequired: true,
+                        inventoryItem: {
+                          select: {
+                            id: true,
+                            name: true,
+                            unit: true,
+                            costCop: true,
+                            stockCurrent: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },

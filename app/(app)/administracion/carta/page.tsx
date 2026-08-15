@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Role } from "@/generated/prisma/enums";
 import { getCartaAdmin, getTarifas } from "@/features/carta/queries";
+import { getGruposParaAsignar } from "@/features/modificadores/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/dal";
 import { cn } from "@/lib/utils";
@@ -28,9 +29,10 @@ export default async function CartaPage({
   const ctx = await requireRole(Role.ADMINISTRADOR);
   const { categoria: categoriaIdParam } = await searchParams;
 
-  const [categorias, tarifas] = await Promise.all([
+  const [categorias, tarifas, grupos] = await Promise.all([
     getCartaAdmin(ctx.business.id),
     getTarifas(ctx.business.id),
+    getGruposParaAsignar(ctx.business.id),
   ]);
 
   if (categorias.length === 0) {
@@ -118,6 +120,7 @@ export default async function CartaPage({
                       categoryId={activa.id}
                       tarifas={tarifas}
                       estaciones={estaciones}
+                      grupos={grupos}
                     />
                   ))}
                 </ul>
@@ -129,7 +132,12 @@ export default async function CartaPage({
             </CardContent>
           </Card>
 
-          <NuevoProducto categoryId={activa.id} tarifas={tarifas} estaciones={estaciones} />
+          <NuevoProducto
+            categoryId={activa.id}
+            tarifas={tarifas}
+            estaciones={estaciones}
+            grupos={grupos}
+          />
         </section>
       </div>
     </div>
@@ -144,6 +152,12 @@ function Encabezado() {
         Lo que se archiva sale de la carta pero sigue en los pedidos viejos: un tiquete
         reimpreso no cambia.
       </p>
+      <Link
+        href="/administracion/carta/modificadores"
+        className="text-brand inline-block pt-1 text-sm font-medium hover:underline"
+      >
+        Modificadores (proteína, término, adiciones) ↗
+      </Link>
     </div>
   );
 }

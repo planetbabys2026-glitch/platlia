@@ -47,3 +47,17 @@ export function textoOpcional(max: number) {
 
 /** Un identificador que vino de un formulario. */
 export const id = z.string().min(1, "Falta el identificador.").max(64);
+
+/**
+ * Una lista de identificadores que llegó como campos repetidos del formulario.
+ *
+ * `desdeFormData` (lib/actions/define-action.ts) devuelve un string cuando la
+ * clave aparece una sola vez y un array recién a partir de dos. Sin este
+ * preprocess, elegir un modificador manda un string y elegir dos manda un array:
+ * el schema falla en el primer caso y pasa en el segundo, que es exactamente el
+ * tipo de bug que solo aparece en producción con el pedido más simple.
+ */
+export const listaDeIds = z.preprocess(
+  (v) => (v === undefined || v === "" ? [] : Array.isArray(v) ? v : [v]),
+  z.array(id).max(50, "Demasiadas opciones elegidas."),
+);

@@ -1,5 +1,12 @@
 import type { TenantDb } from "@/lib/db/tenant";
 import { ErrorDeUsuario } from "@/lib/actions/estado";
+import {
+  componerRecetaEfectiva,
+  insumoQueFrena,
+  porcionesSegunReceta,
+  type OpcionConInsumos,
+  type RenglonDeReceta,
+} from "@/lib/inventory/receta";
 
 type TxClient = Omit<TenantDb, "$transaction" | "$connect" | "$disconnect" | "$extends">;
 
@@ -7,45 +14,71 @@ interface StockOptions {
   referenceId?: string | null;
   customNotes?: string;
   inventoryEnabled?: boolean;
+  /**
+   * Las opciones elegidas para este renglón. Sin esto, un menú del día con carne
+   * descontaría el arroz de la receta base y no la carne.
+   */
+  modifierOptionIds?: string[];
 }
 
 export interface ProductoStockCalculo {
   trackStock?: boolean;
   stockQty?: number;
-  recipeItems?: Array<{
-    quantityRequired: number;
-    inventoryItem: {
-      stockCurrent: number;
-    };
+  hasRecipe?: boolean;
+  recipeNeedsModifiers?: boolean;
+  recipeItems?: RenglonDeReceta[];
+  /**
+   * Los grupos asignados, para poder estimar el techo de un producto cuya receta
+   * todavía no está decidida.
+   */
+  modifierGroups?: Array<{
+    required: boolean;
+    group: { options: OpcionConInsumos[] };
   }>;
 }
 
 /**
- * Calcula la cantidad máxima de porciones o unidades preparables de un producto
- * con base en el stock actual de insumos de su receta y/o stock directo.
+ * Cuántas porciones o unidades de un producto se pueden preparar hoy.
  *
- * Retorna `null` si el producto no rastrea receta ni stock directo.
+ * Retorna `null` si el producto no rastrea ni receta ni stock directo: ese
+ * producto no se cuenta, y pintar "0 disponibles" sería mentir.
+ *
+ * Para un producto cuya receta depende de los modificadores, esto es un techo
+ * **optimista**: cruza la receta base con la mejor opción disponible de cada
+ * grupo obligatorio, porque el cliente todavía puede elegir la proteína que sí
+ * hay. Decir "0 disponibles" porque se acabó el pollo escondería un plato que se
+ * vende perfecto con carne. La cuenta exacta se hace dentro del modal, donde ya
+ * se sabe qué se eligió, y la definitiva la hace el servidor al descontar.
  */
 export function calcularStockDisponibleProducto(prod: ProductoStockCalculo): number | null {
-  let porcionesReceta: number | null = null;
-  let porcionesProducto: number | null = null;
+  const recetaBase = componerRecetaEfectiva(prod, []);
 
-  if (prod.recipeItems && prod.recipeItems.length > 0) {
-    let minPorciones = Infinity;
-    for (const r of prod.recipeItems) {
-      if (r.quantityRequired > 0 && r.inventoryItem) {
-        const porciones = Math.floor(r.inventoryItem.stockCurrent / r.quantityRequired);
-        if (porciones < minPorciones) {
-          minPorciones = porciones;
-        }
+  let porcionesReceta = porcionesSegunReceta(recetaBase);
+
+  // Cada grupo obligatorio con insumos recorta el techo: hay que poder servir
+  // al menos una de sus opciones.
+  for (const asignado of prod.modifierGroups ?? []) {
+    if (!asignado.required) continue;
+
+    let mejorDelGrupo: number | null = null;
+    for (const opcion of asignado.group.options) {
+      if (!opcion.supplies || opcion.supplies.length === 0) {
+        // Una opción sin insumos ("término medio") nunca limita nada.
+        mejorDelGrupo = null;
+        break;
       }
+      const porciones = porcionesSegunReceta(componerRecetaEfectiva(prod, [opcion]));
+      if (porciones === null) continue;
+      if (mejorDelGrupo === null || porciones > mejorDelGrupo) mejorDelGrupo = porciones;
     }
-    porcionesReceta = minPorciones === Infinity ? null : Math.max(0, minPorciones);
+
+    if (mejorDelGrupo !== null) {
+      porcionesReceta = porcionesReceta === null ? mejorDelGrupo : Math.min(porcionesReceta, mejorDelGrupo);
+    }
   }
 
-  if (prod.trackStock && typeof prod.stockQty === "number") {
-    porcionesProducto = Math.max(0, prod.stockQty);
-  }
+  const porcionesProducto =
+    prod.trackStock && typeof prod.stockQty === "number" ? Math.max(0, prod.stockQty) : null;
 
   if (porcionesReceta !== null && porcionesProducto !== null) {
     return Math.min(porcionesReceta, porcionesProducto);
@@ -56,10 +89,33 @@ export function calcularStockDisponibleProducto(prod: ProductoStockCalculo): num
   return null;
 }
 
+/**
+ * Cuántas porciones alcanzan para una combinación concreta ya elegida.
+ *
+ * Es lo que el modal usa para deshabilitar "Pollo" cuando se acabó la pechuga,
+ * dejando "Carne" tocable.
+ */
+export function calcularStockDisponibleCombinacion(
+  prod: ProductoStockCalculo,
+  opcionesElegidas: OpcionConInsumos[],
+): number | null {
+  const porcionesReceta = porcionesSegunReceta(componerRecetaEfectiva(prod, opcionesElegidas));
+  const porcionesProducto =
+    prod.trackStock && typeof prod.stockQty === "number" ? Math.max(0, prod.stockQty) : null;
+
+  if (porcionesReceta !== null && porcionesProducto !== null) {
+    return Math.min(porcionesReceta, porcionesProducto);
+  }
+  if (porcionesReceta !== null) return porcionesReceta;
+  return porcionesProducto;
+}
+
 export interface CartItemParaStock {
   productId: string;
   name: string;
   quantity: number;
+  /** Las opciones elegidas en ese renglón del carrito. */
+  opciones?: OpcionConInsumos[];
 }
 
 export interface CategoriaConProductos {
@@ -72,8 +128,13 @@ export interface CategoriaConProductos {
 }
 
 /**
- * Audita si la demanda acumulada de insumos de todo el carrito excede el stock actual en inventario.
- * Retorna `null` si hay stock suficiente para preparar todo el pedido, o un mensaje de error si falta stock.
+ * Audita si la demanda acumulada de todo el carrito excede el stock actual.
+ *
+ * Acumula por insumo antes de comparar: tres platos que comparten la misma salsa
+ * se revisan juntos. Verificar renglón por renglón dejaría pasar un pedido que
+ * en total no se puede preparar, que es justo el pedido grande donde más duele.
+ *
+ * Devuelve el mensaje de error o `null` si alcanza para todo.
  */
 export function auditarStockCarritoRecetas(
   cart: CartItemParaStock[],
@@ -82,58 +143,47 @@ export function auditarStockCarritoRecetas(
 ): string | null {
   if (cart.length === 0) return null;
 
-  const insumosDemandadosMap = new Map<
+  const productosMap = new Map<string, ProductoStockCalculo & { id: string; name: string }>();
+  for (const cat of carta) {
+    for (const prod of cat.products) productosMap.set(prod.id, prod);
+  }
+
+  const demandaPorInsumo = new Map<
     string,
     { name: string; unit: string; requeridoTotal: number; stockCurrent: number }
   >();
-
-  const productosMap = new Map<
-    string,
-    ProductoStockCalculo & { id: string; name: string }
-  >();
-
-  for (const cat of carta) {
-    for (const prod of cat.products) {
-      productosMap.set(prod.id, prod);
-    }
-  }
 
   for (const item of cart) {
     const prod = productosMap.get(item.productId);
     if (!prod) continue;
 
-    // 1. Chequear stock directo si aplica
     if (prod.trackStock && typeof prod.stockQty === "number") {
       if (item.quantity > prod.stockQty) {
         return `Stock insuficiente del producto "${prod.name}". Solicitados: ${item.quantity}, disponibles: ${prod.stockQty}.`;
       }
     }
 
-    // 2. Acumular demanda de insumos de recetas
-    if (inventoryEnabled && prod.recipeItems && prod.recipeItems.length > 0) {
-      for (const r of prod.recipeItems) {
-        const ins = r.inventoryItem as { id?: string; name?: string; unit?: string; stockCurrent?: number } | undefined;
-        if (!ins || !ins.id) continue;
+    if (!inventoryEnabled) continue;
 
-        const demanda = r.quantityRequired * item.quantity;
-        const actual = insumosDemandadosMap.get(ins.id);
+    for (const renglon of componerRecetaEfectiva(prod, item.opciones ?? [])) {
+      const insumo = renglon.inventoryItem;
+      const demanda = renglon.quantityRequired * item.quantity;
+      const actual = demandaPorInsumo.get(insumo.id);
 
-        if (actual) {
-          actual.requeridoTotal += demanda;
-        } else {
-          insumosDemandadosMap.set(ins.id, {
-            name: ins.name ?? "Insumo",
-            unit: ins.unit ?? "UNIDAD",
-            requeridoTotal: demanda,
-            stockCurrent: ins.stockCurrent ?? 0,
-          });
-        }
+      if (actual) {
+        actual.requeridoTotal += demanda;
+      } else {
+        demandaPorInsumo.set(insumo.id, {
+          name: insumo.name,
+          unit: insumo.unit,
+          requeridoTotal: demanda,
+          stockCurrent: insumo.stockCurrent,
+        });
       }
     }
   }
 
-  // 3. Verificar si la demanda total de algún insumo excede el stock disponible
-  for (const [, insumo] of insumosDemandadosMap) {
+  for (const [, insumo] of demandaPorInsumo) {
     if (insumo.requeridoTotal > insumo.stockCurrent) {
       return `Stock insuficiente del insumo "${insumo.name}" para preparar los productos del pedido. Requerido total: ${insumo.requeridoTotal} ${insumo.unit}, disponible en inventario: ${insumo.stockCurrent} ${insumo.unit}.`;
     }
@@ -142,10 +192,76 @@ export function auditarStockCarritoRecetas(
   return null;
 }
 
+/** Lo que hay que leer de un producto para poder descontarle stock. */
+const SELECT_PARA_DESCUENTO = {
+  id: true,
+  name: true,
+  trackStock: true,
+  stockQty: true,
+  hasRecipe: true,
+  recipeNeedsModifiers: true,
+  recipeItems: {
+    include: {
+      inventoryItem: {
+        select: { id: true, name: true, unit: true, stockCurrent: true, costCop: true },
+      },
+    },
+  },
+} as const;
+
 /**
- * Verifica la disponibilidad de insumos de receta y/o stock directo del producto.
- * Si el stock de algún insumo o producto es insuficiente, lanza un ErrorDeUsuario descriptivo.
- * Si todo está correcto, descuenta el stock y registra los movimientos Kardex de VENTA.
+ * Carga el producto y arma la receta que corresponde a las opciones elegidas.
+ *
+ * Las opciones se leen de la base, nunca del cliente: lo único que llega de
+ * afuera son los ids. Si el precio o el insumo de "Carne" cambió hace un minuto,
+ * lo que vale es lo que dice la tabla.
+ */
+async function resolverReceta(
+  tx: TxClient,
+  productId: string,
+  modifierOptionIds: string[],
+  exigirProducto: boolean,
+) {
+  const producto = await tx.product.findFirst({
+    where: { id: productId, ...(exigirProducto ? { deletedAt: null } : {}) },
+    select: SELECT_PARA_DESCUENTO,
+  });
+
+  if (!producto) {
+    if (exigirProducto) throw new ErrorDeUsuario("El producto especificado no existe.");
+    return null;
+  }
+
+  const opciones: OpcionConInsumos[] =
+    modifierOptionIds.length === 0
+      ? []
+      : (
+          await tx.modifierOption.findMany({
+            where: { id: { in: modifierOptionIds } },
+            select: {
+              id: true,
+              name: true,
+              supplies: {
+                select: {
+                  quantityRequired: true,
+                  inventoryItem: {
+                    select: { id: true, name: true, unit: true, stockCurrent: true, costCop: true },
+                  },
+                },
+              },
+            },
+          })
+        ).map((o) => ({ id: o.id, name: o.name, supplies: o.supplies }));
+
+  return { producto, receta: componerRecetaEfectiva(producto, opciones) };
+}
+
+/**
+ * Verifica disponibilidad y descuenta: insumos de la receta efectiva y/o stock
+ * directo del producto. Registra el Kardex de VENTA.
+ *
+ * Si algo no alcanza lanza `ErrorDeUsuario` nombrando el insumo que frena, sin
+ * haber escrito nada: la transacción de quien llama se encarga del resto.
  */
 export async function verificarYDescontarStockReceta(
   tx: TxClient,
@@ -156,50 +272,36 @@ export async function verificarYDescontarStockReceta(
 ) {
   if (quantity <= 0) return;
 
-  const { referenceId, customNotes, inventoryEnabled = true } = options ?? {};
+  const { referenceId, customNotes, inventoryEnabled = true, modifierOptionIds = [] } = options ?? {};
 
-  const producto = await tx.product.findFirst({
-    where: { id: productId, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      trackStock: true,
-      stockQty: true,
-      recipeItems: {
-        include: {
-          inventoryItem: {
-            select: { id: true, name: true, unit: true, stockCurrent: true, costCop: true },
-          },
-        },
-      },
-    },
-  });
+  const resuelto = await resolverReceta(tx, productId, modifierOptionIds, true);
+  if (!resuelto) return;
+  const { producto, receta } = resuelto;
 
-  if (!producto) {
-    throw new ErrorDeUsuario("El producto especificado no existe.");
+  // Un producto cuya receta depende de lo que se elija no se puede vender sin
+  // que se haya elegido: descontaría de menos y dejaría el inventario mintiendo.
+  // La interfaz ya lo impide con el modal; esto cubre el POST directo.
+  if (producto.recipeNeedsModifiers && modifierOptionIds.length === 0) {
+    throw new ErrorDeUsuario(
+      `Elegí los modificadores de "${producto.name}" antes de agregarlo al pedido.`,
+    );
   }
 
-  // 1. Verificar stock directo del producto si trackStock está activo
   if (producto.trackStock && producto.stockQty < quantity) {
     throw new ErrorDeUsuario(
       `Stock insuficiente de "${producto.name}". Disponibles: ${producto.stockQty}, solicitados: ${quantity}.`,
     );
   }
 
-  // 2. Verificar disponibilidad de insumos de la receta si la gestión de inventario está activa
-  if (inventoryEnabled && producto.recipeItems.length > 0) {
-    for (const r of producto.recipeItems) {
-      const insumo = r.inventoryItem;
-      const requeridoTotal = r.quantityRequired * quantity;
-      if (insumo.stockCurrent < requeridoTotal) {
-        throw new ErrorDeUsuario(
-          `Stock insuficiente del insumo "${insumo.name}" para preparar "${producto.name}". Requerido: ${requeridoTotal} ${insumo.unit}, disponible en inventario: ${insumo.stockCurrent} ${insumo.unit}.`,
-        );
-      }
+  if (inventoryEnabled) {
+    const frena = insumoQueFrena(receta, quantity);
+    if (frena) {
+      throw new ErrorDeUsuario(
+        `Stock insuficiente del insumo "${frena.insumo.name}" para preparar "${producto.name}". Requerido: ${frena.requerido} ${frena.insumo.unit}, disponible en inventario: ${frena.insumo.stockCurrent} ${frena.insumo.unit}.`,
+      );
     }
   }
 
-  // 3. Descontar stock directo del producto
   if (producto.trackStock) {
     await tx.product.update({
       where: { id: producto.id },
@@ -207,16 +309,15 @@ export async function verificarYDescontarStockReceta(
     });
   }
 
-  // 4. Descontar insumos de la receta y registrar movimiento Kardex de VENTA
-  if (inventoryEnabled && producto.recipeItems.length > 0) {
-    for (const r of producto.recipeItems) {
-      const insumo = r.inventoryItem;
-      const descuentoTotal = r.quantityRequired * quantity;
+  if (inventoryEnabled) {
+    for (const renglon of receta) {
+      const insumo = renglon.inventoryItem;
+      const descuentoTotal = renglon.quantityRequired * quantity;
       const nuevoStock = insumo.stockCurrent - descuentoTotal;
 
       await tx.inventoryItem.update({
         where: { id: insumo.id },
-        data: { stockCurrent: nuevoStock },
+        data: { stockCurrent: { decrement: descuentoTotal } },
       });
 
       await tx.inventoryMovement.create({
@@ -226,7 +327,7 @@ export async function verificarYDescontarStockReceta(
           type: "VENTA",
           quantity: -descuentoTotal,
           stockAfter: nuevoStock,
-          unitCostCop: insumo.costCop,
+          unitCostCop: insumo.costCop ?? 0,
           referenceId: referenceId ?? null,
           notes: customNotes ?? `Venta de ${producto.name} x${quantity}`,
         },
@@ -236,7 +337,10 @@ export async function verificarYDescontarStockReceta(
 }
 
 /**
- * Restaura / devuelve el stock de insumos de receta y/o producto directo cuando un ítem o pedido es anulado o eliminado.
+ * Devuelve el stock cuando un renglón o un pedido se anula o se elimina.
+ *
+ * Recibe las mismas opciones que se descontaron: reintegrar solo la receta base
+ * de un plato que llevaba carne dejaría la res perdida para siempre.
  */
 export async function restaurarStockReceta(
   tx: TxClient,
@@ -247,27 +351,12 @@ export async function restaurarStockReceta(
 ) {
   if (quantity <= 0) return;
 
-  const { referenceId, customNotes, inventoryEnabled = true } = options ?? {};
+  const { referenceId, customNotes, inventoryEnabled = true, modifierOptionIds = [] } = options ?? {};
 
-  const producto = await tx.product.findFirst({
-    where: { id: productId },
-    select: {
-      id: true,
-      name: true,
-      trackStock: true,
-      recipeItems: {
-        include: {
-          inventoryItem: {
-            select: { id: true, name: true, unit: true, stockCurrent: true, costCop: true },
-          },
-        },
-      },
-    },
-  });
+  const resuelto = await resolverReceta(tx, productId, modifierOptionIds, false);
+  if (!resuelto) return;
+  const { producto, receta } = resuelto;
 
-  if (!producto) return;
-
-  // 1. Restaurar stock directo si aplica
   if (producto.trackStock) {
     await tx.product.update({
       where: { id: producto.id },
@@ -275,16 +364,15 @@ export async function restaurarStockReceta(
     });
   }
 
-  // 2. Restaurar insumos de la receta y registrar Kardex de DEVOLUCION
-  if (inventoryEnabled && producto.recipeItems.length > 0) {
-    for (const r of producto.recipeItems) {
-      const insumo = r.inventoryItem;
-      const reintegroTotal = r.quantityRequired * quantity;
+  if (inventoryEnabled) {
+    for (const renglon of receta) {
+      const insumo = renglon.inventoryItem;
+      const reintegroTotal = renglon.quantityRequired * quantity;
       const nuevoStock = insumo.stockCurrent + reintegroTotal;
 
       await tx.inventoryItem.update({
         where: { id: insumo.id },
-        data: { stockCurrent: nuevoStock },
+        data: { stockCurrent: { increment: reintegroTotal } },
       });
 
       await tx.inventoryMovement.create({
@@ -294,7 +382,7 @@ export async function restaurarStockReceta(
           type: "DEVOLUCION",
           quantity: reintegroTotal,
           stockAfter: nuevoStock,
-          unitCostCop: insumo.costCop,
+          unitCostCop: insumo.costCop ?? 0,
           referenceId: referenceId ?? null,
           notes: customNotes ?? `Devolución por anulación de ${producto.name} x${quantity}`,
         },
@@ -304,9 +392,8 @@ export async function restaurarStockReceta(
 }
 
 /**
- * Ajusta el stock de un renglón cuando cambia su cantidad.
- * Si la nueva cantidad es mayor, valida disponibilidad y descuenta la diferencia.
- * Si la nueva cantidad es menor, reintegra la diferencia sobrante.
+ * Ajusta el stock cuando cambia la cantidad de un renglón: descuenta la
+ * diferencia o reintegra el sobrante, según el signo.
  */
 export async function ajustarStockCantidadReceta(
   tx: TxClient,

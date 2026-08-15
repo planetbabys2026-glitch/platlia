@@ -36,6 +36,11 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "PurchaseInvoiceItem",
   "ProductRecipeItem",
   "InventoryMovement",
+  "ModifierGroup",
+  "ModifierOption",
+  "ModifierOptionSupply",
+  "ProductModifierGroup",
+  "OrderItemModifier",
 ]);
 
 /**

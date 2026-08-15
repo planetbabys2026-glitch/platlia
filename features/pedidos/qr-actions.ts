@@ -10,6 +10,7 @@ import { tenantDb } from "@/lib/db/tenant";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
+import { resolverModificadores } from "@/features/pedidos/modificadores";
 import { verificarYDescontarStockReceta } from "@/lib/inventory/stock";
 
 export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) {
@@ -122,8 +123,17 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
 
         if (!producto) continue;
 
+        const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
+          tx,
+          producto.id,
+          producto.name,
+          itemInput.modifierOptionIds ?? [],
+        );
+
+        const precio = producto.priceCop + recargoCop;
+
         const linea = computeTaxLine({
-          unitPriceCop: producto.priceCop,
+          unitPriceCop: precio,
           quantity: itemInput.quantity,
           taxRateBp: producto.taxRate.rateBp,
           taxIncluded: settings.pricesIncludeTax,
@@ -139,7 +149,8 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
             orderId: order.id,
             productId: producto.id,
             nameSnapshot: producto.name,
-            unitPriceCop: producto.priceCop,
+            unitPriceCop: precio,
+            basePriceCopSnapshot: producto.priceCop,
             taxRateBpSnapshot: producto.taxRate.rateBp,
             taxRateNameSnapshot: producto.taxRate.name,
             taxIncludedSnapshot: settings.pricesIncludeTax,
@@ -151,6 +162,9 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
             createdById: primerMiembro.userId,
             status: OrderItemStatus.PENDIENTE,
             sentToKitchenAt: new Date(), // ¡El cliente envía el pedido directo a cocina!
+            modifiers: {
+              create: snapshots.map((s) => ({ businessId: business.id, ...s })),
+            },
           },
         });
 
@@ -158,6 +172,7 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           referenceId: order.id,
           inventoryEnabled: settings.inventoryEnabled,
           customNotes: `Pedido Menú QR x${itemInput.quantity}`,
+          modifierOptionIds: opcionIds,
         });
       }
 

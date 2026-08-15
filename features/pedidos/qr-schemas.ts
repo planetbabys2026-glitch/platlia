@@ -4,6 +4,8 @@ const qrClienteItemSchema = z.object({
   productId: z.string(),
   quantity: z.number().int().min(1),
   notes: z.string().trim().optional(),
+  /** Las opciones que el cliente eligió en el modal del menú. */
+  modifierOptionIds: z.array(z.string()).max(50).default([]),
 });
 
 export const crearPedidoClienteQRSchema = z.object({

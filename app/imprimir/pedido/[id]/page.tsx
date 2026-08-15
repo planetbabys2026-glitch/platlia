@@ -92,6 +92,18 @@ export default async function TiquetePage({
   // ── Renglones ─────────────────────────────────────────────────────────────
   for (const item of pedido.items) {
     push(...lineaDeProducto(item.quantity, item.nameSnapshot, formatCop(item.lineTotalCop), ancho));
+
+    // Los modificadores van indentados bajo el renglón, con su recargo cuando lo
+    // tienen. El total del renglón no cambia: el recargo ya está dentro de
+    // `unitPriceCop`, así que esto es el desglose de un número que ya está bien.
+    for (const mod of item.modifiers) {
+      const etiqueta =
+        mod.priceDeltaCopSnapshot > 0
+          ? `+ ${mod.optionNameSnapshot} (${formatCop(mod.priceDeltaCopSnapshot)})`
+          : `+ ${mod.optionNameSnapshot}`;
+      push(...envolver(etiqueta, ancho - 2).map((l) => `  ${l}`));
+    }
+
     if (item.quantity > 1) {
       push(`  ${formatCop(item.unitPriceCop)} c/u`);
     }
