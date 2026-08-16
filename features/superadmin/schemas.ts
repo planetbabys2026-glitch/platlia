@@ -75,7 +75,35 @@ export const actualizarLimiteSucursalesSchema = sobreEmpresa.extend({
 export const gestionFacturacionElectronicaSchema = sobreEmpresa.extend({
   habilitar: z.preprocess((v) => v === "true" || v === true, z.boolean()),
   sumarDocumentos: z.preprocess((v) => Number(v), z.number().int().min(0).max(100000)),
+  /**
+   * El rango de numeración que la DIAN le autorizó a ESE NIT. Lo asigna soporte y
+   * no el dueño: es un id que nadie se sabe de memoria y un dígito equivocado es
+   * una factura rechazada que aparece recién al emitir.
+   */
+  numberingRangeId: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? null : Number(v)),
+    z.number().int().positive().nullable(),
+  ),
+  /** El de notas crédito, que en Factus es otra resolución distinta. */
+  numberingRangeIdNc: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? null : Number(v)),
+    z.number().int().positive().nullable(),
+  ),
+  municipalityCode: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null),
+    z.string().regex(/^\d{5}$/, "El código DANE son cinco dígitos.").nullable(),
+  ),
   motivo,
+});
+
+/** Una compra de documentos electrónicos a Factus, a nombre de la plataforma. */
+export const registrarCompraDocumentosSchema = z.object({
+  cantidad: z.preprocess((v) => Number(v), z.number().int().min(1).max(1_000_000)),
+  costoCop: z.preprocess((v) => Number(v) || 0, z.number().int().min(0).max(1_000_000_000)),
+  nota: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null),
+    z.string().max(300).nullable(),
+  ),
 });
 
 // ─── Precios de la plataforma ────────────────────────────────────────────────

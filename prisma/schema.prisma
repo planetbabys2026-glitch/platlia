@@ -306,15 +306,20 @@ model BusinessSettings {
   qrMenuAccent         String  @default("#FF4E1F")
 
   /// Módulo Opcional de Facturación Electrónica DIAN (Factus)
+  ///
+  /// Las credenciales de Factus NO viven acá: la cuenta es una sola, de la
+  /// plataforma, y está en el entorno (`FACTUS_*` en lib/env.ts). Factus nos vende
+  /// una bolsa de documentos y el superadministrador la reparte; lo que queda por
+  /// negocio es solo lo que la DIAN le autorizó a SU NIT.
   facturacionElectronicaHabilitada Boolean @default(false)
   paquetesDocumentosDisponibles    Int     @default(0)
   documentosEmitidosConsumidos     Int     @default(0)
 
-  factusClientId             String?
-  factusClientSecret         String?
-  factusUsername             String?
-  factusPassword             String?
   factusNumberingRangeId     Int?
+  /// La nota crédito se emite con SU PROPIO rango, no con el de la factura: en la
+  /// cuenta de Factus son resoluciones distintas ("Factura de Venta" vs "Nota
+  /// Crédito"). Sin esto la nota crédito sale con el consecutivo equivocado.
+  factusNumberingRangeIdNc   Int?
   municipalityCode           String? @default("05001")
   identificationDocumentCode String? @default("31")
   legalOrganizationCode      String? @default("1")
@@ -630,6 +635,30 @@ model ListaDePrecios {
   @@index([activa, desde, hasta])
 }
 
+/// Cada compra de documentos electrónicos que Platlia le hace a Factus.
+///
+/// Es de la plataforma, no de un negocio —como `ListaDePrecios`— y la escribe
+/// solo la consola. Existe porque el reparto se estaba haciendo a ciegas: el
+/// superadministrador ya sumaba documentos a cada empresa
+/// (`paquetesDocumentosDisponibles`) sin que hubiera en ningún lado cuántos
+/// habíamos comprado, así que no había forma de saber cuántos quedaban sin
+/// asignar hasta que la bolsa se agotaba en medio del servicio de alguien.
+///
+/// Se guardan las compras una por una en vez de un contador: así queda el
+/// historial de qué se compró, cuándo y a cuánto.
+model CompraDocumentosDian {
+  id       String @id @default(cuid())
+  cantidad Int
+  /// Lo que nos costó el paquete. Es dato de plataforma, no se le cobra a nadie.
+  costoCop Int    @default(0)
+  nota     String?
+
+  compradoEn DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([compradoEn])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Catálogo
 // ─────────────────────────────────────────────────────────────────────────────
@@ -849,6 +878,11 @@ model Order {
   notes           String?
 
   /// Facturación Electrónica DIAN (Factus)
+  ///
+  /// `facturaElectronicaCufe` es la guarda anti-doble-emisión: mientras esté en
+  /// null la venta se puede facturar (o reintentar), y una vez que tiene CUFE no
+  /// se vuelve a emitir nunca. `facturaElectronicaEstado` es "EMITIDA" | "ERROR" |
+  /// null y sirve para pintar el estado, no para decidir.
   facturaElectronicaNumero String?
   facturaElectronicaCufe   String?
   facturaElectronicaUrlPdf String?
@@ -856,6 +890,14 @@ model Order {
   facturaElectronicaEstado String?
   facturaElectronicaFecha  DateTime? @db.Timestamptz(3)
   facturaElectronicaError  String?
+
+  /// Nota crédito: una factura emitida no se borra, se corrige. Anular una venta
+  /// ya facturada sin emitir la nota dejaría la factura viva ante la DIAN.
+  notaCreditoNumero String?
+  notaCreditoCufe   String?
+  notaCreditoUrlPdf String?
+  notaCreditoFecha  DateTime? @db.Timestamptz(3)
+  notaCreditoError  String?
 
   /// Totales denormalizados. Se recalculan enteros en cada cambio de ítem, dentro
   /// de la misma transacción: los informes no pueden depender de sumar renglones
@@ -920,6 +962,11 @@ model OrderItem {
   basePriceCopSnapshot Int
   taxRateBpSnapshot    Int
   taxRateNameSnapshot  String
+  /// También congelado, y por el mismo motivo que los otros tres: la DIAN separa
+  /// IVA (código 01) de impuesto al consumo (04), y el `kind` solo vivía en
+  /// `TaxRate`, alcanzable únicamente por el producto ACTUAL. Facturar leyendo de
+  /// ahí sería declarar una venta vieja con la tarifa de hoy.
+  taxKindSnapshot      TaxKind @default(IMPOCONSUMO)
   /// También se congela: si mañana el negocio cambia a precios sin impuesto
   /// incluido, este renglón tiene que seguir desagregándose como se cobró.
   taxIncludedSnapshot  Boolean

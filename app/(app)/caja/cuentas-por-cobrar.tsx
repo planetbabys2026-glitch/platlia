@@ -7,6 +7,7 @@ import {
   DatosFiscales,
   valorFiscalInicial,
 } from "@/features/pedidos/components/datos-fiscales";
+import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
+import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 
@@ -61,19 +63,36 @@ type Cuenta = {
 function FormularioCobro({
   cuenta,
   puedeFacturar,
+  propina,
 }: {
   cuenta: Cuenta;
   puedeFacturar: boolean;
+  propina: { habilitada: boolean; rateBp: number };
 }) {
   const [metodo, setMetodo] = useState<string>(PaymentMethod.EFECTIVO);
   const [fiscal, setFiscal] = useState(() => valorFiscalInicial(cuenta));
+  // Arranca con lo que ya tuviera el pedido, que normalmente es 0.
+  const [propinaCop, setPropinaCop] = useState(cuenta.tipCop);
   const [estado, accion, isPending] = useActionState(registrarPago, ESTADO_INICIAL);
-  const faltanteCop = Math.max(0, cuenta.totalCop - cuenta.paidCop);
+
+  // La sugerencia va sobre el consumo COMPLETO con impuesto —el número que el
+  // cliente ve—, descontando la propina que el pedido ya tuviera para no
+  // calcular un porcentaje sobre otra propina.
+  const consumoCop = cuenta.totalCop - cuenta.tipCop;
+  const sugeridaCop = computeSuggestedTip(consumoCop, propina.rateBp);
+
+  // El total del pedido ya incluye la propina que tuviera guardada, así que lo
+  // que cambia el faltante es la DIFERENCIA contra la elegida ahora.
+  const faltanteCop = Math.max(
+    0,
+    cuenta.totalCop - cuenta.paidCop + (propinaCop - cuenta.tipCop),
+  );
 
   return (
     <form action={accion} className="space-y-4 pt-3 border-t border-border/80">
       <input type="hidden" name="orderId" value={cuenta.id} />
       <input type="hidden" name="method" value={metodo} />
+      <input type="hidden" name="tipCop" value={propinaCop} />
       <PantallaCargando forcePending={isPending} />
 
       {/* Botón de impresión de pre-cuenta para entregar a la mesera antes de cobrar */}
@@ -120,7 +139,12 @@ function FormularioCobro({
           <Label htmlFor={`monto-${cuenta.id}`} className="text-xs font-medium">
             Valor a cobrar
           </Label>
+          {/* `key` y no `defaultValue` a secas: al cambiar la propina cambia el
+              faltante, y un campo no controlado no se entera. Remontarlo lo deja
+              con el valor nuevo y sigue permitiendo escribir un monto distinto
+              para un pago parcial. */}
           <Input
+            key={faltanteCop}
             id={`monto-${cuenta.id}`}
             name="amountCop"
             inputMode="numeric"
@@ -144,6 +168,15 @@ function FormularioCobro({
           </div>
         )}
       </div>
+
+      <SelectorDePropina
+        habilitado={propina.habilitada}
+        sugeridaCop={sugeridaCop}
+        rateBp={propina.rateBp}
+        valorCop={propinaCop}
+        onCambiar={setPropinaCop}
+        id={cuenta.id}
+      />
 
       <DatosFiscales
         puedeFacturar={puedeFacturar}
@@ -207,9 +240,11 @@ function agruparPorMesa(cuentas: Cuenta[]) {
 export function CuentasPorCobrar({
   cuentas,
   puedeFacturar,
+  propina,
 }: {
   cuentas: Cuenta[];
   puedeFacturar: boolean;
+  propina: { habilitada: boolean; rateBp: number };
 }) {
   const [cuentaExpandida, setCuentaExpandida] = useState<string | null>(null);
 
@@ -331,7 +366,7 @@ export function CuentasPorCobrar({
                           href={`/imprimir/pedido/${cuenta.id}`}
                           target="_blank"
                           rel="noopener"
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-warning/40 bg-warning/15 hover:bg-warning/25 text-warning-soft font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-warning/40 bg-warning/15 hover:bg-warning/25 text-warning-soft font-bold px-3 h-11 tableta:h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
                         >
                           🖨️ Pre-cuenta
                         </a>
@@ -344,7 +379,11 @@ export function CuentasPorCobrar({
                         </Button>
                       </div>
                     ) : (
-                      <FormularioCobro cuenta={cuenta} puedeFacturar={puedeFacturar} />
+                      <FormularioCobro
+                        cuenta={cuenta}
+                        puedeFacturar={puedeFacturar}
+                        propina={propina}
+                      />
                     )}
                   </CardContent>
                 </Card>

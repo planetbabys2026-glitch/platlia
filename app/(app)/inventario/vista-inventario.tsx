@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useVistaEnUrl } from "@/lib/vista-en-url";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   actualizarStockProductoTerminado,
   crearFacturaCompra,
@@ -35,7 +35,6 @@ import {
   AlertTriangle,
   BookOpen,
   Boxes,
-  Check,
   Edit,
   FileText,
   Filter,
@@ -169,6 +168,22 @@ export function VistaInventario({
     ["stock", "bebidas", "facturas", "recetas", "proveedores"] as const,
     "stock",
   );
+  /**
+   * El título y el contador de la sección abierta.
+   *
+   * Los nombres son los mismos que los del menú lateral, a propósito: cuando el
+   * menú es el único navegador, el rótulo de la pantalla tiene que coincidir
+   * palabra por palabra con el enlace que se apretó.
+   */
+  const seccionActual = {
+    stock: { titulo: "Insumos", icono: Boxes, cuenta: summary.totalItems },
+    bebidas: { titulo: "Bebidas y reventa", icono: ShoppingBag, cuenta: finishedProducts.length },
+    facturas: { titulo: "Facturas de compra", icono: FileText, cuenta: invoices.length },
+    recetas: { titulo: "Recetas", icono: BookOpen, cuenta: undefined },
+    proveedores: { titulo: "Proveedores", icono: Truck, cuenta: suppliers.length },
+  }[tabActiva];
+  const SeccionIcono = seccionActual.icono;
+
   const [busqueda, setBusqueda] = useState("");
   const [openInsumoModal, setOpenInsumoModal] = useState(false);
   const [openBebidaModal, setOpenBebidaModal] = useState(false);
@@ -236,35 +251,23 @@ export function VistaInventario({
         onValueChange={(v) => setTabActiva(v as typeof tabActiva)}
         className="w-full"
       >
+        {/* El encabezado de la sección, donde antes estaba la tira de pestañas.
+            Las secciones se cambian desde el menú lateral —como en Informes— y lo
+            que hace falta acá es saber en cuál estás, porque el `h1` de la
+            pantalla dice "Inventario" y no cambia con la vista. El contador que
+            llevaba cada pestaña se conserva al lado del título. */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-border pb-3">
-          {/* `min-w-0` y sin `shrink-0`: la tira tiene cinco pestañas y no entra
-              al lado de los botones de acción. Con `shrink-0` no cedía y empujaba
-              la fila 150px fuera de la pantalla en una tablet; ahora se encoge y
-              hace su propio scroll, que es para lo que tiene `overflow-x-auto`. */}
-          <TabsList className="inline-flex w-full min-w-0 sm:w-auto items-center justify-start overflow-x-auto p-1 bg-muted/60 scrollbar-none rounded-xl border border-border/50 shadow-xs flex-nowrap">
-            <TabsTrigger value="stock" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
-              <Boxes className="size-3.5" />
-              <span>Insumos ({summary.totalItems})</span>
-            </TabsTrigger>
-            <TabsTrigger value="bebidas" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
-              <ShoppingBag className="size-3.5" />
-              <span>Bebidas & Reventa ({finishedProducts.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="facturas" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
-              <FileText className="size-3.5" />
-              <span>Facturas ({invoices.length})</span>
-            </TabsTrigger>
-            {recipesEnabled && (
-              <TabsTrigger value="recetas" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
-                <BookOpen className="size-3.5" />
-                <span>Recetas</span>
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="proveedores" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
-              <Truck className="size-3.5" />
-              <span>Proveedores ({suppliers.length})</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <SeccionIcono className="size-5 shrink-0 text-brand" />
+            <h2 className="font-display text-lg font-black uppercase tracking-tight text-foreground truncate">
+              {seccionActual.titulo}
+              {seccionActual.cuenta !== undefined && (
+                <span className="numeral ml-2 text-base font-bold text-muted-foreground">
+                  {seccionActual.cuenta}
+                </span>
+              )}
+            </h2>
+          </div>
 
           {/* Acciones Rápidas Dinámicas según la Pestaña Activa */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -276,6 +279,7 @@ export function VistaInventario({
                   onOpenChange={setOpenFacturaModal}
                   suppliers={suppliers}
                   inventoryItems={summary.items}
+                  finishedProducts={finishedProducts}
                 />
               </>
             )}
@@ -292,6 +296,7 @@ export function VistaInventario({
                   onOpenChange={setOpenFacturaModal}
                   suppliers={suppliers}
                   inventoryItems={summary.items}
+                  finishedProducts={finishedProducts}
                 />
               </>
             )}
@@ -302,6 +307,7 @@ export function VistaInventario({
                 onOpenChange={setOpenFacturaModal}
                 suppliers={suppliers}
                 inventoryItems={summary.items}
+                finishedProducts={finishedProducts}
               />
             )}
 
@@ -743,11 +749,13 @@ function ModalNuevaFactura({
   onOpenChange,
   suppliers,
   inventoryItems,
+  finishedProducts = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   suppliers: ProveedorItem[];
   inventoryItems: InsumoItem[];
+  finishedProducts?: ProductoTerminadoItem[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [supplierId, setSupplierId] = useState("");
@@ -755,37 +763,125 @@ function ModalNuevaFactura({
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [includesTax, setIncludesTax] = useState(true);
   const [notes, setNotes] = useState("");
-  const [busquedaInsumo, setBusquedaInsumo] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState<"TODOS" | "INSUMOS" | "PRODUCTOS">("TODOS");
+  const [cantidadesInput, setCantidadesInput] = useState<Record<string, number>>({});
 
-  // Renglones dinámicos de insumos recibidos en la factura
+  // Renglones dinámicos recibidos en la factura (insumos y productos de venta directa)
   const [renglones, setRenglones] = useState<
-    Array<{ inventoryItemId: string; name: string; unit: string; quantity: number; unitCostCop: number; taxRateBp: number }>
+    Array<{
+      inventoryItemId?: string;
+      productId?: string;
+      name: string;
+      unit: string;
+      tipo: "INSUMO" | "PRODUCTO";
+      quantity: number;
+      unitCostCop: number;
+      taxRateBp: number;
+    }>
   >([]);
 
-  const agregarOIncrementarInsumo = (item: InsumoItem) => {
+  type ItemCatalogoCompra = {
+    id: string;
+    key: string;
+    name: string;
+    sku: string | null;
+    unit: string;
+    costCop: number;
+    stockCurrent: number;
+    tipo: "INSUMO" | "PRODUCTO";
+    inventoryItemId?: string;
+    productId?: string;
+  };
+
+  // Catálogo unificado de compras: Insumos de preparación + Productos listos para venta directa
+  const catalogo: ItemCatalogoCompra[] = useMemo(() => {
+    const itemsInsumos: ItemCatalogoCompra[] = inventoryItems.map((insumo) => ({
+      id: insumo.id,
+      key: `insumo-${insumo.id}`,
+      name: insumo.name,
+      sku: insumo.sku,
+      unit: insumo.unit,
+      costCop: insumo.costCop,
+      stockCurrent: insumo.stockCurrent,
+      tipo: "INSUMO",
+      inventoryItemId: insumo.id,
+    }));
+
+    const itemsProductos: ItemCatalogoCompra[] = finishedProducts.map((prod) => {
+      const insumoVinculado = prod.recipeItems?.[0]?.inventoryItem;
+      return {
+        id: prod.id,
+        key: `producto-${prod.id}`,
+        name: prod.name,
+        sku: prod.sku,
+        unit: insumoVinculado?.unit ?? "UNIDAD",
+        costCop: insumoVinculado?.costCop ?? 0,
+        stockCurrent: prod.stockQty,
+        tipo: "PRODUCTO",
+        productId: prod.id,
+        inventoryItemId: insumoVinculado?.id,
+      };
+    });
+
+    return [...itemsInsumos, ...itemsProductos];
+  }, [inventoryItems, finishedProducts]);
+
+  const catalogoFiltrado: ItemCatalogoCompra[] = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return catalogo.filter((item) => {
+      if (filtroTipo === "INSUMOS" && item.tipo !== "INSUMO") return false;
+      if (filtroTipo === "PRODUCTOS" && item.tipo !== "PRODUCTO") return false;
+      if (!q) return true;
+      const matchNombre = item.name.toLowerCase().includes(q);
+      const matchSku = item.sku ? item.sku.toLowerCase().includes(q) : false;
+      return matchNombre || matchSku;
+    });
+  }, [catalogo, busqueda, filtroTipo]);
+
+  const agregarAlComprobante = (
+    item: ItemCatalogoCompra,
+    cantidadDeseada?: number
+  ) => {
+    const cantidadAAgregar = Math.max(1, cantidadDeseada ?? cantidadesInput[item.key] ?? 1);
+
     setRenglones((prev) => {
-      const existe = prev.find((r) => r.inventoryItemId === item.id);
-      if (existe) {
-        return prev.map((r) =>
-          r.inventoryItemId === item.id ? { ...r, quantity: r.quantity + 1 } : r
-        );
+      const index = prev.findIndex((r) =>
+        item.tipo === "INSUMO"
+          ? r.inventoryItemId === item.id
+          : r.productId === item.id
+      );
+
+      if (index >= 0) {
+        const copia = [...prev];
+        copia[index] = {
+          ...copia[index],
+          quantity: copia[index].quantity + cantidadAAgregar,
+        };
+        return copia;
       }
+
       return [
         ...prev,
         {
-          inventoryItemId: item.id,
+          inventoryItemId: item.inventoryItemId,
+          productId: item.productId,
           name: item.name,
           unit: item.unit,
-          quantity: 1,
+          tipo: item.tipo,
+          quantity: cantidadAAgregar,
           unitCostCop: item.costCop,
           taxRateBp: 0,
         },
       ];
     });
+
+    // Restablecer el input temporal a 1
+    setCantidadesInput((prev) => ({ ...prev, [item.key]: 1 }));
   };
 
   const quitarRenglon = (idx: number) => {
-    setRenglones(renglones.filter((_, i) => i !== idx));
+    setRenglones((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const actualizarRenglon = (
@@ -793,9 +889,11 @@ function ModalNuevaFactura({
     campo: "quantity" | "unitCostCop" | "taxRateBp",
     valor: number
   ) => {
-    const copia = [...renglones];
-    copia[idx] = { ...copia[idx], [campo]: valor };
-    setRenglones(copia);
+    setRenglones((prev) => {
+      const copia = [...prev];
+      copia[idx] = { ...copia[idx], [campo]: valor };
+      return copia;
+    });
   };
 
   // Cálculos de totales
@@ -808,7 +906,7 @@ function ModalNuevaFactura({
       return;
     }
     if (renglones.length === 0) {
-      toast.error("Hacé clic en los insumos del catálogo de la izquierda para agregarlos al comprobante de compra.");
+      toast.error("Agregá al menos un insumo o producto de venta directa al comprobante de compra.");
       return;
     }
 
@@ -833,13 +931,6 @@ function ModalNuevaFactura({
     });
   };
 
-  const insumosFiltrados = inventoryItems.filter(
-    (i) =>
-      !busquedaInsumo ||
-      i.name.toLowerCase().includes(busquedaInsumo.toLowerCase()) ||
-      (i.sku && i.sku.toLowerCase().includes(busquedaInsumo.toLowerCase()))
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -852,66 +943,152 @@ function ModalNuevaFactura({
         <DialogHeader className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
           <DialogTitle className="text-base font-bold flex items-center gap-2">
             <FileText className="size-5 text-brand" />
-            <span>Carga Express de Factura de Compra (POS de Compras)</span>
+            <span>Carga Express de Factura de Compra (Insumos y Venta Directa)</span>
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
-          {/* Cuerpo dividido en 2 columnas (Izquierda: Catálogo | Derecha: Comprobante) */}
+          {/* Cuerpo dividido en 2 columnas (Izquierda: Catálogo rápido | Derecha: Comprobante) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-border">
             
-            {/* ── PANEL IZQUIERDO: CATALOGO RAPIDO DE INSUMOS (5 COLS / 40%) ── */}
+            {/* ── PANEL IZQUIERDO: CATALOGO MIXTO (5 COLS / 40%) ── */}
             <div className="lg:col-span-5 p-4 space-y-3 bg-muted/10 flex flex-col overflow-hidden">
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                  1. Elegir Insumos a Ingresar
-                </label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                    1. Catálogo de Compra
+                  </label>
+                  <span className="text-rotulo text-muted-foreground font-mono">
+                    {catalogoFiltrado.length} disponibles
+                  </span>
+                </div>
+
+                {/* Filtros de Pestañas Rápidas */}
+                <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroTipo("TODOS")}
+                    className={cn(
+                      "flex-1 py-1 text-xs font-semibold rounded-md transition-colors",
+                      filtroTipo === "TODOS" ? "bg-brand text-brand-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroTipo("INSUMOS")}
+                    className={cn(
+                      "flex-1 py-1 text-xs font-semibold rounded-md transition-colors",
+                      filtroTipo === "INSUMOS" ? "bg-brand text-brand-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Insumos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroTipo("PRODUCTOS")}
+                    className={cn(
+                      "flex-1 py-1 text-xs font-semibold rounded-md transition-colors",
+                      filtroTipo === "PRODUCTOS" ? "bg-brand text-brand-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Venta Directa
+                  </button>
+                </div>
+
+                {/* Buscador Instantáneo */}
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
                   <Input
-                    value={busquedaInsumo}
-                    onChange={(e) => setBusquedaInsumo(e.target.value)}
-                    placeholder="🔍 Buscar insumo..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="🔍 Buscar por nombre o SKU..."
                     className="h-8 pl-8 text-xs bg-background rounded-lg"
                   />
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                {insumosFiltrados.length === 0 ? (
-                  <p className="text-xs text-muted-foreground p-4 text-center">No se encontraron insumos.</p>
+              {/* Lista de Ítems del Catálogo */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {catalogoFiltrado.length === 0 ? (
+                  <p className="text-xs text-muted-foreground p-6 text-center">
+                    No se encontraron insumos o productos con ese criterio.
+                  </p>
                 ) : (
-                  insumosFiltrados.map((item) => {
-                    const renglon = renglones.find((r) => r.inventoryItemId === item.id);
+                  catalogoFiltrado.map((item) => {
+                    const renglon = renglones.find((r) =>
+                      item.tipo === "INSUMO"
+                        ? r.inventoryItemId === item.id
+                        : r.productId === item.id
+                    );
                     const cantStaged = renglon?.quantity ?? 0;
+                    const cantidadActualInput = cantidadesInput[item.key] ?? 1;
 
                     return (
                       <div
-                        key={item.id}
-                        onClick={() => agregarOIncrementarInsumo(item)}
+                        key={item.key}
                         className={cn(
-                          "p-2.5 rounded-xl border bg-card hover:border-brand/60 transition-all cursor-pointer flex items-center justify-between select-none",
-                          cantStaged > 0 ? "border-brand bg-brand/5 shadow-xs" : "border-border"
+                          "p-2.5 rounded-xl border bg-card transition-all flex flex-col gap-2 select-none",
+                          cantStaged > 0 ? "border-brand/70 bg-brand/5 shadow-xs" : "border-border hover:border-brand/40"
                         )}
                       >
-                        <div className="space-y-0.5">
-                          <span className="font-semibold text-xs text-foreground block line-clamp-1">
-                            {item.name}
-                          </span>
-                          <span className="text-rotulo text-muted-foreground font-mono block">
-                            Unidad: {item.unit} | Costo ref: {formatCop(item.costCop)}
-                          </span>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-xs text-foreground block truncate">
+                                {item.name}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] px-1 py-0 font-bold",
+                                  item.tipo === "INSUMO" ? "text-muted-foreground border-border" : "text-brand border-brand/30 bg-brand/10"
+                                )}
+                              >
+                                {item.tipo === "INSUMO" ? "Insumo" : "Venta Directa"}
+                              </Badge>
+                            </div>
+                            <span className="text-rotulo text-muted-foreground font-mono block">
+                              Unidad: {item.unit} | Stock actual: <strong className="text-foreground">{item.stockCurrent}</strong>
+                              {item.costCop > 0 ? ` | Costo ref: ${formatCop(item.costCop)}` : ""}
+                            </span>
+                          </div>
+
+                          {cantStaged > 0 && (
+                            <Badge className="bg-brand text-brand-foreground text-xs font-bold px-2 py-0.5 rounded-full shrink-0">
+                              +{cantStaged} en factura
+                            </Badge>
+                          )}
                         </div>
 
-                        {cantStaged > 0 ? (
-                          <Badge className="bg-brand text-brand-foreground text-xs font-bold px-2 py-0.5 rounded-full">
-                            +{cantStaged}
-                          </Badge>
-                        ) : (
-                          <Button type="button" size="sm" variant="ghost" className="h-7 text-rotulo font-bold gap-1 px-2">
-                            <Plus className="size-3" /> Agregar
+                        {/* Input de Cantidad Directa por Teclado y Botón Agregar */}
+                        <div className="flex items-center gap-2 pt-1 border-t border-dashed border-border/60">
+                          <div className="flex items-center gap-1 flex-1">
+                            <span className="text-[11px] text-muted-foreground font-medium">Cant:</span>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={cantidadActualInput}
+                              onChange={(e) => {
+                                const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                setCantidadesInput((prev) => ({ ...prev, [item.key]: val }));
+                              }}
+                              className="h-7 w-20 text-xs px-2 font-bold bg-background text-center"
+                            />
+                            <span className="text-[11px] text-muted-foreground font-mono">{item.unit}</span>
+                          </div>
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => agregarAlComprobante(item, cantidadActualInput)}
+                            className="h-7 text-xs font-bold gap-1 px-3 bg-brand/10 hover:bg-brand text-brand hover:text-brand-foreground border border-brand/30"
+                          >
+                            <Plus className="size-3" />
+                            Agregar {cantidadActualInput > 1 ? `(${cantidadActualInput})` : ""}
                           </Button>
-                        )}
+                        </div>
                       </div>
                     );
                   })
@@ -922,7 +1099,7 @@ function ModalNuevaFactura({
             {/* ── PANEL DERECHO: DETALLE DE LA FACTURA (7 COLS / 60%) ── */}
             <div className="lg:col-span-7 p-4 space-y-4 flex flex-col overflow-hidden bg-background">
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                2. Encabezado y Renglones de la Compra
+                2. Encabezado y Renglones de la Factura de Compra
               </label>
 
               {/* Campos Principales */}
@@ -971,10 +1148,10 @@ function ModalNuevaFactura({
                     id="includesTax"
                     checked={includesTax}
                     onChange={(e) => setIncludesTax(e.target.checked)}
-                    className="accent-primary size-4"
+                    className="accent-primary size-4 cursor-pointer"
                   />
                   <label htmlFor="includesTax" className="text-xs font-medium cursor-pointer">
-                    Costos incluyen IVA / Impuestos
+                    Costos ingresados incluyen IVA / Impuestos
                   </label>
                 </div>
               </div>
@@ -983,36 +1160,53 @@ function ModalNuevaFactura({
               <div className="flex-1 overflow-y-auto space-y-2 border border-border rounded-xl p-2 bg-card">
                 {renglones.length === 0 ? (
                   <div className="p-8 text-center space-y-1 text-muted-foreground">
-                    <p className="text-xs font-semibold">No se han agregado insumos</p>
-                    <p className="text-rotulo">Hacé clic en los insumos del panel izquierdo para ir armando el comprobante de compra.</p>
+                    <p className="text-xs font-semibold">No se han agregado insumos ni productos</p>
+                    <p className="text-rotulo">
+                      Elegí insumos o productos de venta directa del panel izquierdo y escribí la cantidad para armar el comprobante de compra.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
                     {renglones.map((r, idx) => (
                       <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border border-border text-xs">
                         <div className="flex-1 min-w-0">
-                          <strong className="text-foreground block truncate">{r.name}</strong>
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-foreground block truncate">{r.name}</strong>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] px-1 py-0 font-bold",
+                                r.tipo === "INSUMO" ? "text-muted-foreground border-border" : "text-brand border-brand/30 bg-brand/10"
+                              )}
+                            >
+                              {r.tipo === "INSUMO" ? "Insumo" : "Venta"}
+                            </Badge>
+                          </div>
                           <span className="text-rotulo text-muted-foreground font-mono">Unidad: {r.unit}</span>
                         </div>
 
-                        <div className="w-20">
+                        <div className="w-24">
                           <label className="text-rotulo text-muted-foreground block font-semibold">Cantidad</label>
                           <Input
                             type="number"
                             min="1"
                             value={r.quantity}
-                            onChange={(e) => actualizarRenglon(idx, "quantity", Math.max(1, Number(e.target.value)))}
-                            className="h-7 text-xs px-1.5 font-bold"
+                            onChange={(e) =>
+                              actualizarRenglon(idx, "quantity", Math.max(1, parseInt(e.target.value, 10) || 1))
+                            }
+                            className="h-7 text-xs px-1.5 font-bold text-center"
                           />
                         </div>
 
                         <div className="w-28">
-                          <label className="text-rotulo text-muted-foreground block font-semibold">Costo COP</label>
+                          <label className="text-rotulo text-muted-foreground block font-semibold">Costo Unit. COP</label>
                           <Input
                             type="number"
                             min="0"
                             value={r.unitCostCop}
-                            onChange={(e) => actualizarRenglon(idx, "unitCostCop", Math.max(0, Number(e.target.value)))}
+                            onChange={(e) =>
+                              actualizarRenglon(idx, "unitCostCop", Math.max(0, parseInt(e.target.value, 10) || 0))
+                            }
                             className="h-7 text-xs px-1.5 font-bold"
                           />
                         </div>
@@ -1027,7 +1221,8 @@ function ModalNuevaFactura({
                         <button
                           type="button"
                           onClick={() => quitarRenglon(idx)}
-                          className="text-muted-foreground hover:text-destructive p-1"
+                          className="text-muted-foreground hover:text-destructive p-1 rounded-md"
+                          title="Eliminar renglón"
                         >
                           <X className="size-4" />
                         </button>

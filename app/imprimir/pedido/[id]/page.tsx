@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import QRCode from "qrcode";
 import { getPedidoParaTiquete } from "@/features/pedidos/queries";
 import { requireBusiness } from "@/lib/auth/dal";
 import { formatCop, formatRateBp } from "@/lib/money";
@@ -172,6 +173,27 @@ export default async function TiquetePage({
     push(lineaDoble("PENDIENTE", formatCop(faltante), ancho));
   }
 
+  // ── Factura electrónica ───────────────────────────────────────────────────
+  // Solo cuando de verdad se emitió. Sin esto, la tirilla reimpresa de una venta
+  // facturada no decía en ninguna parte que hubiera factura, que es medio punto
+  // de haberla emitido.
+  if (pedido.facturaElectronicaCufe) {
+    push(separador(ancho));
+    push(centrar("FACTURA ELECTRONICA DE VENTA", ancho));
+    if (pedido.facturaElectronicaNumero) {
+      push(centrar(`No. ${pedido.facturaElectronicaNumero}`, ancho));
+    }
+    push("CUFE:");
+    // El CUFE es una tira de 96 caracteres: se parte al ancho del rollo, que es
+    // lo único que lo deja legible en 32 o 48 columnas.
+    push(...envolver(pedido.facturaElectronicaCufe, ancho));
+    if (pedido.notaCreditoNumero) {
+      push(separador(ancho));
+      push(centrar("*** ANULADA CON NOTA CREDITO ***", ancho));
+      push(centrar(pedido.notaCreditoNumero, ancho));
+    }
+  }
+
   // ── Pie ───────────────────────────────────────────────────────────────────
   push("");
   if (settings?.receiptFooter) {
@@ -183,6 +205,22 @@ export default async function TiquetePage({
   }
   push("");
   push(centrar("Platlia", ancho));
+
+  /**
+   * El QR de la DIAN, dibujado acá y no pedido a un servicio de imágenes.
+   *
+   * El resto de la aplicación arma sus QR con `api.qrserver.com`, que para una
+   * pantalla está bien. Para la tirilla no: la estación de impresión de un bar
+   * suele estar en una red sin salida, y un QR que no carga es un papel que no
+   * sirve. Se genera como SVG en el servidor, sin pedirle nada a nadie.
+   */
+  const qrDian = pedido.facturaElectronicaUrlQr
+    ? await QRCode.toString(pedido.facturaElectronicaUrlQr, {
+        type: "svg",
+        margin: 0,
+        errorCorrectionLevel: "M",
+      })
+    : null;
 
   return (
     <>
@@ -200,10 +238,21 @@ export default async function TiquetePage({
           margin: 0 auto;
           width: ${ancho}ch;
         }
+        /* El QR no puede quedar más ancho que el rollo ni más chico que lo que
+           un teléfono alcanza a leer de un papel térmico. */
+        .qr-dian { width: ${milimetros === 55 ? 30 : 38}mm; margin: 2mm auto 0; }
+        .qr-dian svg { width: 100%; height: auto; shape-rendering: crispEdges; }
       `}</style>
 
       {imprimirSolo && <ImprimirAlAbrir />}
       <pre className="tiquete">{lineas.join("\n")}</pre>
+      {qrDian && (
+        <div
+          className="qr-dian"
+          aria-label="Código QR de la factura electrónica"
+          dangerouslySetInnerHTML={{ __html: qrDian }}
+        />
+      )}
       <BotonImprimir />
     </>
   );

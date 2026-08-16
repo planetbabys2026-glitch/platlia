@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatDayInTimeZone } from "@/lib/time";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-import { actualizarLimiteSucursales, extenderLicencia, gestionarPaqueteFacturacionElectronica, suspenderEmpresa } from "@/features/superadmin/actions";
+import { actualizarLimiteSucursales, extenderLicencia, suspenderEmpresa } from "@/features/superadmin/actions";
 import { toast } from "sonner";
 import { 
   Search, 
@@ -373,11 +374,6 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
   const [motivoSuspender, setMotivoSuspender] = useState("");
   const [maxSucursales, setMaxSucursales] = useState<number>(negocio.subscription?.maxBranches ?? 1);
   const [motivoSucursales, setMotivoSucursales] = useState("");
-  const [facturacionHabilitada, setFacturacionHabilitada] = useState<boolean>(
-    negocio.settings?.facturacionElectronicaHabilitada ?? false,
-  );
-  const [sumarDocumentos, setSumarDocumentos] = useState<number>(100);
-  const [motivoFacturacion, setMotivoFacturacion] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const suspendido = negocio.status !== "ACTIVO";
@@ -452,32 +448,6 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
         toast.success(`Límite de sucursales actualizado a ${maxSucursales} para ${negocio.name}.`);
         setOpen(false);
         setMotivoSucursales("");
-        router.refresh();
-      } else {
-        toast.error(res.error || "Ocurrió un error.");
-      }
-    });
-  };
-
-  const handleGestionarFacturacion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!motivoFacturacion || motivoFacturacion.trim().length < 3) {
-      toast.error("Ingresa un motivo para la acción (mínimo 3 caracteres)");
-      return;
-    }
-
-    startTransition(async () => {
-      const res = await gestionarPaqueteFacturacionElectronica(ESTADO_INICIAL, {
-        businessId: negocio.id,
-        habilitar: facturacionHabilitada,
-        sumarDocumentos: Number(sumarDocumentos),
-        motivo: motivoFacturacion.trim(),
-      });
-
-      if (res.ok) {
-        toast.success(`Paquete de Facturación Electrónica DIAN actualizado para ${negocio.name}.`);
-        setOpen(false);
-        setMotivoFacturacion("");
         router.refresh();
       } else {
         toast.error(res.error || "Ocurrió un error.");
@@ -675,95 +645,30 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
 
           {/* Pestaña: Facturación Electrónica DIAN */}
           <TabsContent value="factus" className="space-y-4 pt-3">
-            <form onSubmit={handleGestionarFacturacion} className="space-y-4">
-              <div className="p-3 rounded-xl bg-brand/10 border border-brand/20 text-xs space-y-1.5">
-                <span className="font-bold text-brand block">
-                  Facturación Electrónica DIAN (Factus API)
+            <div className="space-y-1.5 rounded-xl border border-brand/20 bg-brand/10 p-3 text-xs">
+              <span className="block font-bold text-brand">Facturación Electrónica DIAN</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-rotulo">
+                <span>
+                  Asignados: <strong>{negocio.settings?.paquetesDocumentosDisponibles ?? 0} doc.</strong>
                 </span>
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-rotulo">
-                  <span>Disponibles: <strong>{negocio.settings?.paquetesDocumentosDisponibles ?? 0} doc.</strong></span>
-                  <span>Consumidos: <strong>{negocio.settings?.documentosEmitidosConsumidos ?? 0} doc.</strong></span>
-                </div>
+                <span>
+                  Emitidos: <strong>{negocio.settings?.documentosEmitidosConsumidos ?? 0} doc.</strong>
+                </span>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground block">
-                  Estado del Módulo DIAN:
-                </label>
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant={facturacionHabilitada ? "default" : "outline"}
-                    onClick={() => setFacturacionHabilitada(true)}
-                    className={`h-9 text-xs font-bold flex-1 ${facturacionHabilitada ? "bg-success hover:bg-success/90 text-white" : ""}`}
-                  >
-                    ✅ Habilitado
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={!facturacionHabilitada ? "default" : "outline"}
-                    onClick={() => setFacturacionHabilitada(false)}
-                    className={`h-9 text-xs font-bold flex-1 ${!facturacionHabilitada ? "bg-muted text-foreground" : ""}`}
-                  >
-                    🚫 Deshabilitado
-                  </Button>
-                </div>
-              </div>
+            {/* Se administra en su propia sección y no acá: repartir la bolsa sin
+                ver cuántos documentos quedan sin asignar es como se agotaba en
+                medio del servicio de un cliente. */}
+            <p className="text-xs text-muted-foreground">
+              El módulo, el paquete de documentos y el rango de numeración de la DIAN se manejan
+              desde la sección de Facturación, donde además se ve cuánto queda de la bolsa que le
+              compramos a Factus.
+            </p>
 
-              <div className="space-y-2">
-                <label htmlFor="sumarDocsInput" className="text-xs font-semibold text-foreground block">
-                  Sumar / Cargar Paquete de Documentos Electrónicos:
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {[0, 50, 100, 500, 1000, 5000].map((cant) => (
-                    <button
-                      key={cant}
-                      type="button"
-                      onClick={() => setSumarDocumentos(cant)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                        sumarDocumentos === cant
-                          ? "bg-brand text-brand-foreground border-brand"
-                          : "bg-muted/60 border-border text-foreground"
-                      }`}
-                    >
-                      +{cant} docs
-                    </button>
-                  ))}
-                </div>
-                <Input
-                  id="sumarDocsInput"
-                  type="number"
-                  min={0}
-                  max={100000}
-                  value={sumarDocumentos}
-                  onChange={(e) => setSumarDocumentos(Number(e.target.value))}
-                  className="text-sm font-semibold h-9"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="motivoFactus" className="text-xs font-semibold text-foreground">
-                  Motivo comercial / Pago de paquete (obligatorio) *
-                </label>
-                <Input
-                  id="motivoFactus"
-                  required
-                  minLength={3}
-                  placeholder="Ej. Compra Paquete 500 Documentos DIAN"
-                  value={motivoFacturacion}
-                  onChange={(e) => setMotivoFacturacion(e.target.value)}
-                  className="text-xs h-9"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isPending}
-                className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold h-10"
-              >
-                {isPending ? "Guardando..." : "Guardar Paquete DIAN"}
-              </Button>
-            </form>
+            <Button asChild className="h-10 w-full bg-brand text-xs font-semibold text-brand-foreground hover:bg-brand/90">
+              <Link href="/superadmin/facturacion">Ir a Facturación electrónica</Link>
+            </Button>
           </TabsContent>
         </Tabs>
       </DialogContent>

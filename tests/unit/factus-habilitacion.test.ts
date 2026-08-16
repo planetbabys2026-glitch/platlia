@@ -12,65 +12,60 @@ const COMPLETO: ConfigFiscal = {
   facturacionElectronicaHabilitada: true,
   paquetesDocumentosDisponibles: 500,
   documentosEmitidosConsumidos: 20,
-  factusClientId: "cli_123",
-  factusClientSecret: "sec_123",
-  factusUsername: "bar@demo.co",
-  factusPassword: "clave",
   factusNumberingRangeId: 8,
   municipalityCode: "05001",
 };
 
+/** La cuenta de Factus de la plataforma, cargada. */
+const PLATAFORMA = true;
+
 describe("puedeFacturarElectronicamente", () => {
   it("con todo cargado, puede", () => {
-    expect(puedeFacturarElectronicamente(COMPLETO)).toBe(true);
-    expect(faltantesParaFacturar(COMPLETO)).toEqual([]);
+    expect(puedeFacturarElectronicamente(COMPLETO, PLATAFORMA)).toBe(true);
+    expect(faltantesParaFacturar(COMPLETO, PLATAFORMA)).toEqual([]);
   });
 
   it("sin habilitar, no puede aunque tenga todo lo demás", () => {
     const config = { ...COMPLETO, facturacionElectronicaHabilitada: false };
-    expect(puedeFacturarElectronicamente(config)).toBe(false);
-    // Un solo mensaje: no tiene sentido pedirle credenciales a quien todavía no
-    // contrató el módulo.
-    expect(faltantesParaFacturar(config)).toHaveLength(1);
+    expect(puedeFacturarElectronicamente(config, PLATAFORMA)).toBe(false);
+    // Un solo mensaje: no tiene sentido enumerarle lo que le falta a quien todavía
+    // no contrató el módulo.
+    expect(faltantesParaFacturar(config, PLATAFORMA)).toHaveLength(1);
   });
 
-  it("habilitado pero sin credenciales, no puede y las nombra todas", () => {
-    const config: ConfigFiscal = {
-      ...COMPLETO,
-      factusClientId: null,
-      factusClientSecret: null,
-      factusUsername: null,
-      factusPassword: null,
-    };
-    expect(puedeFacturarElectronicamente(config)).toBe(false);
-    expect(faltantesParaFacturar(config)).toHaveLength(4);
+  it("sin la cuenta de Factus de la plataforma, nadie puede facturar", () => {
+    // No es un problema del negocio: es que Platlia no tiene sus credenciales
+    // cargadas. Se nombra igual, porque si no la pantalla dice "todo listo" y la
+    // emisión falla sin explicación.
+    expect(puedeFacturarElectronicamente(COMPLETO, false)).toBe(false);
+    expect(faltantesParaFacturar(COMPLETO, false)).toEqual([
+      "La conexión con Factus no está configurada en la plataforma.",
+    ]);
   });
 
-  it("una credencial en blanco cuenta como faltante", () => {
-    expect(puedeFacturarElectronicamente({ ...COMPLETO, factusClientSecret: "   " })).toBe(false);
+  it("sin rango de numeración, no puede", () => {
+    expect(
+      puedeFacturarElectronicamente({ ...COMPLETO, factusNumberingRangeId: null }, PLATAFORMA),
+    ).toBe(false);
   });
 
-  it("con credenciales pero sin rango de numeración, no puede", () => {
-    expect(puedeFacturarElectronicamente({ ...COMPLETO, factusNumberingRangeId: null })).toBe(
+  it("sin municipio, no puede", () => {
+    expect(puedeFacturarElectronicamente({ ...COMPLETO, municipalityCode: null }, PLATAFORMA)).toBe(
       false,
     );
   });
 
-  it("sin municipio, no puede", () => {
-    expect(puedeFacturarElectronicamente({ ...COMPLETO, municipalityCode: null })).toBe(false);
-  });
-
   it("con el paquete agotado, no puede", () => {
     const agotado = { ...COMPLETO, paquetesDocumentosDisponibles: 500, documentosEmitidosConsumidos: 500 };
-    expect(puedeFacturarElectronicamente(agotado)).toBe(false);
-    expect(faltantesParaFacturar(agotado)).toEqual([
+    expect(puedeFacturarElectronicamente(agotado, PLATAFORMA)).toBe(false);
+    expect(faltantesParaFacturar(agotado, PLATAFORMA)).toEqual([
       "No quedan documentos disponibles en el paquete.",
     ]);
   });
 
   it("con el último documento todavía puede", () => {
     const ultimo = { ...COMPLETO, paquetesDocumentosDisponibles: 500, documentosEmitidosConsumidos: 499 };
-    expect(puedeFacturarElectronicamente(ultimo)).toBe(true);
+    expect(puedeFacturarElectronicamente(ultimo, PLATAFORMA)).toBe(true);
   });
 });
 

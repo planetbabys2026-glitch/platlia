@@ -49,6 +49,14 @@ export type ItemNav = {
 export type GrupoNav = {
   titulo: string;
   items: ItemNav[];
+  /**
+   * Si el acordeón de Administración cuelga de este grupo.
+   *
+   * Antes el shell lo enganchaba comparando `grupo.titulo === "Gestión"` en dos
+   * lugares distintos: renombrar el grupo borraba Administración del menú entero
+   * sin que nada fallara.
+   */
+  conAdministracion?: boolean;
 };
 
 type Contexto = {
@@ -62,11 +70,37 @@ type Contexto = {
   esPropietario?: boolean;
   comandasVivas?: number;
   domiciliosActivos?: number;
+  /** Cuentas esperando cobro. Es el contador que llevaba la píldora de Caja. */
+  cuentasPorCobrar?: number;
 };
 
 /** El enlace de una sección: la vista por defecto no ensucia la URL. */
 export function hrefDeSeccion(item: ItemNav, seccion: SeccionNav): string {
   return seccion.vista ? `${item.href}?vista=${seccion.vista}` : item.href;
+}
+
+/**
+ * Las secciones de Caja y cuál es la de entrada.
+ *
+ * Vive acá —y no suelto en cada archivo— porque el menú y la pantalla tienen que
+ * coincidir: un negocio de mostrador no tiene cuentas de mesa que cobrar, así que
+ * "Cobrar cuentas" no se le ofrece y la vista de entrada pasa a ser el historial.
+ * Si divergen, el enlace del menú lleva a una pantalla vacía.
+ *
+ * Depende de `usaMesas`, que es configuración del negocio y no dato del momento:
+ * el enlace sigue siendo estable, que es lo que importaba.
+ */
+export function seccionesDeCaja(usaMesas: boolean): SeccionNav[] {
+  return [
+    ...(usaMesas ? [{ titulo: "Cobrar cuentas", vista: "" }] : []),
+    { titulo: "Cuentas cobradas", vista: usaMesas ? "cobradas" : "" },
+    { titulo: "Movimientos y cierre", vista: "movimientos" },
+  ];
+}
+
+/** La vista de entrada de `/caja`, la que va sin `?vista=`. */
+export function vistaInicialDeCaja(usaMesas: boolean): "cobros" | "cobradas" {
+  return usaMesas ? "cobros" : "cobradas";
 }
 
 export function construirNavegacion({
@@ -79,6 +113,7 @@ export function construirNavegacion({
   esPropietario,
   comandasVivas,
   domiciliosActivos,
+  cuentasPorCobrar,
 }: Contexto): { grupos: GrupoNav[]; administracion: ItemNav[] } {
   const operacion: ItemNav[] = [
     // Salón y POS son excluyentes: un negocio que no sienta mesas entra por el
@@ -103,11 +138,11 @@ export function construirNavegacion({
       titulo: "Caja",
       href: "/caja",
       icono: CreditCard,
+      // La insignia solo con mesas: sin salón nada espera en la caja, y un cero
+      // permanente al lado del ítem no dice nada.
+      insignia: usaMesas ? cuentasPorCobrar : undefined,
       enBarraInferior: true,
-      secciones: [
-        { titulo: "Cobrar cuentas", vista: "" },
-        { titulo: "Movimientos y cierre", vista: "movimientos" },
-      ],
+      secciones: seccionesDeCaja(usaMesas),
     },
     ...(usaDomicilios
       ? [{ titulo: "Domicilios", href: "/domicilios", icono: Bike, insignia: domiciliosActivos }]
@@ -195,7 +230,7 @@ export function construirNavegacion({
   return {
     grupos: [
       { titulo: "Operación", items: operacion },
-      { titulo: "Gestión", items: gestion },
+      { titulo: "Gestión", items: gestion, conAdministracion: true },
     ],
     administracion,
   };

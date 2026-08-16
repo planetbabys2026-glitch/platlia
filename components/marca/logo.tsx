@@ -2,16 +2,17 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Platlia — Logotipo e Isotipo Oficial (Dark Kitchen-Fire Vector System)
+ * Platlia — Logotipo e Isotipo Oficial (Brand Manual v2 / Dark Kitchen-Fire Vector System)
  *
- *  · `Logo`      Tirilla dentada + Palabra PLATLIA + Bajada opcional
- *  · `Logotipo`  Tirilla dentada + Palabra PLATLIA (ideal para navbar y header)
- *  · `Isotipo`   Solo la tirilla dentada con el monograma "P" y acento Brasa
+ *  · `Isotipo`   Tirilla de papel térmico (comanda) de 6 dientes con monograma "P" (Big Shoulders 900) y acento Brasa #FF4E1F
+ *  · `Logotipo`  Isotipo + Palabra PLATLIA + Eyebrow opcional (ideal para navbar, headers y modales)
+ *  · `Logo`      Isotipo + Palabra PLATLIA + Bajada institucional "Gestión de Restaurantes y Bares"
  */
 
-type MarcaProps = {
+export type MarcaProps = {
   className?: string;
   size?: "sm" | "md" | "lg" | "xl";
+  variant?: "dark" | "tinta" | "mono";
   showText?: boolean;
   eyebrow?: string;
   priority?: boolean;
@@ -19,69 +20,75 @@ type MarcaProps = {
 };
 
 /**
- * Isotipo: Tirilla de papel térmico dentada con monograma "P" y acento Brasa #FF4E1F
+ * Isotipo: Tirilla de papel térmico (comanda) dentada con monograma "P" y acento Brasa #FF4E1F
+ * Geometría vectorial oficial (Brand Manual v2):
+ * - Ticket 48×56 sobre retícula de 96 (viewBox centrado: 24 16 48 56)
+ * - 6 picos dentados inferiores
+ * - Monograma P en Big Shoulders Display 900
+ * - Línea brasa 24×5
  */
 export function Isotipo({
   className,
   size = "md",
+  variant = "dark",
   onClick,
 }: MarcaProps) {
   const dims = {
-    sm: { w: 26, h: 32 },
-    md: { w: 32, h: 40 },
-    lg: { w: 42, h: 52 },
-    xl: { w: 60, h: 76 },
+    sm: { w: 24, h: 28 },
+    md: { w: 31, h: 36 },
+    lg: { w: 41, h: 48 },
+    xl: { w: 60, h: 70 },
   }[size];
+
+  // Paleta según variante de fondo
+  const isTinta = variant === "tinta";
+  const isMono = variant === "mono";
+
+  const ticketFill = isTinta ? "#171512" : isMono ? "currentColor" : "#EDE7DA";
+  const pFill = isTinta ? "#EDE7DA" : isMono ? "#171512" : "#171512";
+  const barFill = isMono ? "currentColor" : "#FF4E1F";
 
   return (
     <svg
-      viewBox="0 0 40 50"
+      viewBox="24 16 48 56"
       width={dims.w}
       height={dims.h}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       onClick={onClick}
       className={cn(
-        "flex-shrink-0 transition-transform duration-150 hover:scale-105",
-        onClick && "cursor-pointer",
+        "flex-shrink-0 transition-transform duration-150",
+        onClick && "cursor-pointer hover:scale-105",
         className
       )}
       aria-label="Platlia Isotipo"
+      role="img"
     >
-      {/* Silueta de tirilla dentada con 22 picos */}
+      {/* Silueta de tirilla de comanda con borde dentado de 6 picos */}
       <path
-        d="M2 5 
-           L5 3 L8 5 L11 3 L14 5 L17 3 L20 5 L23 3 L26 5 L29 3 L32 5 L35 3 L38 5 
-           L38 45 
-           L35 47 L32 45 L29 47 L26 45 L23 47 L20 45 L17 47 L14 45 L11 47 L8 45 L5 47 L2 45 
-           Z"
-        fill="currentColor"
-        stroke="var(--linea-30, rgba(201, 194, 175, 0.3))"
-        strokeWidth="1"
-        className="text-foreground/90 dark:text-papel"
-      />
-      {/* Acento en Brasa (#FF4E1F) */}
-      <rect x="7" y="10" width="26" height="3.5" rx="1.5" fill="#FF4E1F" />
-
-      {/* Monograma "P" */}
-      <path
-        d="M13 18 H22 C25 18 27 20 27 23 C27 26 25 28 22 28 H17 V36 H13 Z M17 22 V24.5 H21.5 C22.8 24.5 23.5 24 23.5 23 C23.5 22 22.8 21.8 21.5 21.8 Z"
-        fill="var(--background, #171512)"
-        className="fill-background dark:fill-tinta"
+        d="M24 16H72V64L68 72L64 64L60 72L56 64L52 72L48 64L44 72L40 64L36 72L32 64L28 72L24 64Z"
+        fill={ticketFill}
       />
 
-      {/* Micro líneas de corte térmico */}
-      <line x1="8" y1="40" x2="32" y2="40" stroke="#FF4E1F" strokeWidth="1.5" strokeDasharray="2 2" />
+      {/* Monograma P oficial (Big Shoulders Display 900 vectorizado) */}
+      <path
+        d="M42.2 44V20H47.9Q51.3 20 52.8 21.4Q54.3 22.7 54.4 25.9Q54.4 27.1 54.4 28.2Q54.4 29.3 54.4 30.5Q54.3 33.6 52.8 35Q51.3 36.4 47.9 36.4H46.7V44ZM46.7 32.4H47.9Q48.9 32.4 49.4 32Q49.8 31.6 49.9 30.8Q49.9 30 50 29.1Q50 28.2 50 27.3Q49.9 26.3 49.9 25.6Q49.8 24.8 49.4 24.4Q48.9 24 47.9 24H46.7Z"
+        fill={pFill}
+      />
+
+      {/* Barra de acento Brasa #FF4E1F (el ítem que arde en cocina) */}
+      <rect x="36" y="52" width="24" height="5" fill={barFill} />
     </svg>
   );
 }
 
 /**
- * Logotipo: Isotipo + Palabra "PLATLIA"
+ * Logotipo: Isotipo + Palabra "PLATLIA" (con Eyebrow opcional)
  */
 export function Logotipo({
   className,
   size = "md",
+  variant = "dark",
   eyebrow,
   onClick,
 }: MarcaProps) {
@@ -92,6 +99,13 @@ export function Logotipo({
     xl: "text-4xl",
   }[size];
 
+  const textColor =
+    variant === "tinta"
+      ? "text-[#171512]"
+      : variant === "mono"
+        ? "text-current"
+        : "text-foreground";
+
   return (
     <div
       onClick={onClick}
@@ -101,7 +115,7 @@ export function Logotipo({
         className
       )}
     >
-      <Isotipo size={size} />
+      <Isotipo size={size} variant={variant} />
       <div className="flex flex-col leading-none">
         {eyebrow && (
           <span className="font-mono text-rotulo uppercase tracking-[0.16em] text-brand font-semibold mb-0.5">
@@ -110,7 +124,8 @@ export function Logotipo({
         )}
         <span
           className={cn(
-            "font-display font-black tracking-tight uppercase leading-none text-foreground",
+            "font-display font-black tracking-[-0.02em] uppercase leading-none",
+            textColor,
             fontSizes
           )}
         >
@@ -127,9 +142,17 @@ export function Logotipo({
 export function Logo({
   className,
   size = "lg",
+  variant = "dark",
   eyebrow = "SISTEMA GASTRONÓMICO",
   onClick,
 }: MarcaProps) {
+  const textColor =
+    variant === "tinta"
+      ? "text-[#171512]"
+      : variant === "mono"
+        ? "text-current"
+        : "text-foreground";
+
   return (
     <div
       onClick={onClick}
@@ -139,14 +162,19 @@ export function Logo({
         className
       )}
     >
-      <Isotipo size={size} />
+      <Isotipo size={size} variant={variant} />
       <div className="flex flex-col leading-none">
         {eyebrow && (
           <span className="font-mono text-rotulo uppercase tracking-[0.18em] text-brand font-bold mb-1">
             {eyebrow}
           </span>
         )}
-        <span className="font-display font-black text-3xl sm:text-4xl tracking-tight uppercase leading-none text-foreground">
+        <span
+          className={cn(
+            "font-display font-black text-3xl sm:text-4xl tracking-[-0.02em] uppercase leading-none",
+            textColor
+          )}
+        >
           PLATLIA
         </span>
         <span className="font-sans text-rotulo tracking-wide text-muted-foreground mt-1 font-medium">

@@ -13,6 +13,7 @@ import {
   guardarPromocionSchema,
   extenderSchema,
   gestionFacturacionElectronicaSchema,
+  registrarCompraDocumentosSchema,
   ingresoSchema,
   quitarSuperAdminSchema,
   restablecerContrasenaSuperAdminSchema,
@@ -31,6 +32,13 @@ import { correoDeAltaSuperAdmin } from "@/lib/email/plantillas";
 import { rootDb } from "@/lib/db/root";
 import { env } from "@/lib/env";
 import { DIAS_DE_GRACIA, estadoSegunFechas } from "@/lib/billing/suscripcion";
+import { listarRangosDeNumeracion, obtenerTokenFactus } from "@/lib/billing/factus";
+import {
+  configFactusDePlataforma,
+  plataformaFacturaConfigurada,
+} from "@/lib/billing/factus-plataforma";
+import { getBolsaDocumentosDian } from "@/features/superadmin/queries";
+import { z } from "zod";
 
 /** Comparación en tiempo constante: el token no se adivina midiendo respuestas. */
 function tokenValido(recibido: string, esperado: string): boolean {
@@ -549,6 +557,15 @@ export const actualizarLimiteSucursales = definePublicAction({
   },
 });
 
+/**
+ * Asignar facturación electrónica a un negocio.
+ *
+ * Acá se decide todo lo fiscal del cliente: si el módulo está prendido, cuántos
+ * documentos de NUESTRA bolsa le tocan, y con qué rango de numeración de la DIAN
+ * factura. El dueño ya no edita nada de esto —su pestaña es de solo lectura—
+ * porque un rango mal escrito es una factura rechazada que se descubre con el
+ * cliente esperando en la caja.
+ */
 export const gestionarPaqueteFacturacionElectronica = definePublicAction({
   schema: gestionFacturacionElectronicaSchema,
   async handler({ input }) {
@@ -561,6 +578,17 @@ export const gestionarPaqueteFacturacionElectronica = definePublicAction({
 
     if (!settings) throw new ErrorDeUsuario("Esa empresa no tiene configuración registrada.");
 
+    if (input.sumarDocumentos > 0) {
+      // Sin esta cuenta la bolsa se repartía a ciegas y se agotaba en medio del
+      // servicio de un cliente que creía tener documentos.
+      const { sinAsignar } = await getBolsaDocumentosDian();
+      if (input.sumarDocumentos > sinAsignar) {
+        throw new ErrorDeUsuario(
+          `Solo quedan ${sinAsignar} documentos sin asignar en la bolsa. Registrá una compra antes de repartir más.`,
+        );
+      }
+    }
+
     const nuevosDisponibles = (settings.paquetesDocumentosDisponibles ?? 0) + input.sumarDocumentos;
 
     await rootDb.businessSettings.update({
@@ -568,6 +596,9 @@ export const gestionarPaqueteFacturacionElectronica = definePublicAction({
       data: {
         facturacionElectronicaHabilitada: input.habilitar,
         paquetesDocumentosDisponibles: nuevosDisponibles,
+        factusNumberingRangeId: input.numberingRangeId,
+        factusNumberingRangeIdNc: input.numberingRangeIdNc,
+        municipalityCode: input.municipalityCode ?? settings.municipalityCode,
       },
     });
 
@@ -582,12 +613,79 @@ export const gestionarPaqueteFacturacionElectronica = definePublicAction({
           habilitado: input.habilitar,
           documentosSumados: input.sumarDocumentos,
           totalDisponible: nuevosDisponibles,
+          numberingRangeId: input.numberingRangeId,
+          numberingRangeIdNc: input.numberingRangeIdNc,
+          municipalityCode: input.municipalityCode,
           motivo: input.motivo,
         },
       },
     });
 
     revalidatePath("/superadmin");
+    revalidatePath("/superadmin/facturacion");
+  },
+});
+
+/**
+ * Registrar una compra de documentos electrónicos a Factus.
+ *
+ * Es lo que le da fondo a la bolsa: hasta acá el superadministrador sumaba
+ * documentos por negocio sin que hubiera escrito en ningún lado cuántos habíamos
+ * comprado, así que no había forma de saber cuántos quedaban.
+ */
+export const registrarCompraDocumentos = definePublicAction({
+  schema: registrarCompraDocumentosSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const compra = await rootDb.compraDocumentosDian.create({
+      data: { cantidad: input.cantidad, costoCop: input.costoCop, nota: input.nota },
+    });
+
+    await rootDb.auditLog.create({
+      data: {
+        userId: superAdmin.id,
+        action: "superadmin.facturacion_electronica.compra",
+        entity: "CompraDocumentosDian",
+        entityId: compra.id,
+        metadata: { cantidad: input.cantidad, costoCop: input.costoCop, nota: input.nota },
+      },
+    });
+
+    revalidatePath("/superadmin/facturacion");
+    return { id: compra.id };
+  },
+});
+
+/**
+ * Los rangos de numeración de la cuenta de Factus de la plataforma.
+ *
+ * Se consultan para poder ELEGIR el rango de una lista en vez de escribir un id
+ * de memoria. También sirve de prueba de conexión: si esto responde, las
+ * credenciales están bien.
+ */
+export const consultarRangosDeNumeracion = definePublicAction({
+  schema: z.object({}),
+  async handler() {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    if (!plataformaFacturaConfigurada()) {
+      throw new ErrorDeUsuario(
+        "La cuenta de Factus de la plataforma no está configurada: faltan las variables FACTUS_* del entorno.",
+      );
+    }
+
+    const config = configFactusDePlataforma();
+    try {
+      const { access_token } = await obtenerTokenFactus(config);
+      const rangos = await listarRangosDeNumeracion(access_token, config.baseUrl);
+      return { rangos };
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message.slice(0, 300) : "sin detalle";
+      throw new ErrorDeUsuario(`Factus rechazó la conexión. ${detalle}`);
+    }
   },
 });
 

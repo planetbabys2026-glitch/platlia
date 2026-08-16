@@ -1,17 +1,7 @@
 "use client";
 
 import { useVistaEnUrl } from "@/lib/vista-en-url";
-import {
-  Blocks,
-  Building2,
-  Crown,
-  FileText,
-  QrCode,
-  SlidersHorizontal,
-  Tv,
-} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import {
   FormularioDatos,
   FormularioFactus,
@@ -67,15 +57,6 @@ type PanelConfiguracionProps = {
     documentosEmitidosConsumidos: number;
     factusNumberingRangeId: number | null;
     municipalityCode: string | null;
-    identificationDocumentCode?: string | null;
-    legalOrganizationCode?: string | null;
-    tributeCode?: string | null;
-    responsibilities?: string | null;
-    // Booleanos, no los valores: las credenciales de Factus no cruzan al cliente.
-    tieneClientId: boolean;
-    tieneClientSecret: boolean;
-    tieneUsername: boolean;
-    tienePassword: boolean;
     faltantesParaFacturar: string[];
   };
   facturacion: {
@@ -108,58 +89,21 @@ export function PanelConfiguracion({
   slug,
   mesas,
 }: PanelConfiguracionProps) {
-  // La pestaña vive en la URL: es lo que permite que el menú lateral enlace
-  // "Menú digital QR" en vez de dejar al usuario buscarla adentro.
-  const [tabActiva, setTabActiva] = useVistaEnUrl<TabId>(
+  // La sección vive en la URL: es lo que permite que el menú lateral enlace
+  // "Menú digital QR" en vez de dejar al usuario buscarla adentro. Sin la tira de
+  // píldoras ya nadie la cambia desde acá, así que el setter no se usa.
+  const [tabActiva] = useVistaEnUrl<TabId>(
     "vista",
     ["datos", "modulos", "turnero", "qr", "operacion", "factus", "licencia"],
     "datos",
   );
 
-  const tabs = [
-    { id: "datos" as TabId, label: "Datos del negocio", icono: Building2 },
-    { id: "modulos" as TabId, label: "Módulos", icono: Blocks },
-    { id: "turnero" as TabId, label: "Turnero TV", icono: Tv },
-    { id: "qr" as TabId, label: "Menú Digital QR", icono: QrCode },
-    { id: "operacion" as TabId, label: "Operación y Recibos", icono: SlidersHorizontal },
-    { id: "factus" as TabId, label: "Facturación DIAN", icono: FileText },
-    ...(esPropietario && facturacion
-      ? [{ id: "licencia" as TabId, label: "Licencia y Sucursales", icono: Crown }]
-      : []),
-  ];
-
   return (
     <div className="space-y-6">
-      {/* ─────────────────────────────────────────────────────────────
-          Navegación por Píldoras (Submódulos de Configuración)
-          ───────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-border/80">
-        {tabs.map((tab) => {
-          const Icono = tab.icono;
-          const activa = tabActiva === tab.id;
-
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setTabActiva(tab.id)}
-              className={cn(
-                "inline-flex min-h-11 tableta:min-h-9 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
-                activa
-                  ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
-                  : "bg-[var(--panel-2)] text-muted-foreground border-[var(--linea-30)] hover:text-[var(--papel)]",
-              )}
-            >
-              <Icono className="h-4 w-4 shrink-0" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          Contenido de la Píldora Seleccionada
-          ───────────────────────────────────────────────────────────── */}
+      {/* La tira de píldoras que había acá se fue: las siete secciones se abren
+          desde el menú lateral, como en Informes. Cada panel ya trae su propio
+          `h2` con el nombre de la sección, así que no hace falta reponer nada
+          para saber dónde está uno parado. */}
       {tabActiva === "datos" && (
         <Card className="shadow-sm">
           <CardContent className="space-y-4 pt-6">
@@ -278,7 +222,8 @@ export function PanelConfiguracion({
             <div>
               <h2 className="font-semibold text-lg">Facturación Electrónica DIAN (Factus API)</h2>
               <p className="text-muted-foreground text-xs">
-                Configuración del paquete de documentos y credenciales de transmisión DIAN.
+                Estado del módulo y del paquete de documentos. La configuración la carga el equipo
+                de Platlia.
               </p>
             </div>
             <FormularioFactus
@@ -288,14 +233,6 @@ export function PanelConfiguracion({
                 documentosEmitidosConsumidos: settings.documentosEmitidosConsumidos,
                 factusNumberingRangeId: settings.factusNumberingRangeId,
                 municipalityCode: settings.municipalityCode,
-                identificationDocumentCode: settings.identificationDocumentCode,
-                legalOrganizationCode: settings.legalOrganizationCode,
-                tributeCode: settings.tributeCode,
-                responsibilities: settings.responsibilities,
-                tieneClientId: settings.tieneClientId,
-                tieneClientSecret: settings.tieneClientSecret,
-                tieneUsername: settings.tieneUsername,
-                tienePassword: settings.tienePassword,
                 faltantes: settings.faltantesParaFacturar,
               }}
             />

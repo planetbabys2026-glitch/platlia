@@ -1,3 +1,4 @@
+import { contarCuentasPorCobrar } from "@/features/caja/queries";
 import { contarComandasVivas } from "@/features/cocina/queries";
 import { contarDomiciliosActivos } from "@/features/domicilios/queries";
 import { getSettings } from "@/features/negocio/queries";
@@ -63,11 +64,12 @@ export async function GET(req: Request) {
             // de cocina queda abierta toda la noche y cruza el corte del día de
             // negocio, que no es medianoche sino `businessDayStartMinutes`.
             const businessDate = currentBusinessDate(settings);
-            const [cocina, domicilios] = await Promise.all([
+            const [cocina, domicilios, caja] = await Promise.all([
               contarComandasVivas(businessId, businessDate),
               contarDomiciliosActivos(businessId),
+              contarCuentasPorCobrar(businessId, businessDate),
             ]);
-            enviar({ tipo: "contadores", cocina, domicilios });
+            enviar({ tipo: "contadores", cocina, domicilios, caja });
           } catch {
             // Un recuento que falla no cierra el stream: en la próxima vuelta
             // se vuelve a intentar y la insignia se corrige sola.

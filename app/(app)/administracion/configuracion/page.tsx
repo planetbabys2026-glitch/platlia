@@ -4,6 +4,7 @@ import { getSettings } from "@/features/negocio/queries";
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
 import { faltantesParaFacturar } from "@/lib/billing/factus-habilitacion";
+import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { tenantDb } from "@/lib/db/tenant";
 import { PanelConfiguracion } from "./panel-configuracion";
 
@@ -40,20 +41,11 @@ export default async function ConfiguracionPage() {
    *
    * `PanelConfiguracion` es `"use client"`: todo lo que reciba viaja al navegador
    * dentro de la carga de RSC y se puede leer en el código fuente de la página.
-   * Se sacan del objeto por destructuring —y no eligiendo campo por campo— para
-   * que una columna secreta que se agregue mañana no se cuele por olvido; en su
-   * lugar viaja solo si está cargada, que es lo único que el formulario necesita
-   * para pintarse.
+   *
+   * Antes había que sacarle a mano las cuatro credenciales de Factus. Ya no viven
+   * en `BusinessSettings` —la cuenta es de la plataforma y está en el entorno—,
+   * así que no queda ningún secreto en esta tabla que pueda colarse.
    */
-  const {
-    factusClientId,
-    factusClientSecret,
-    factusUsername,
-    factusPassword,
-    ...settingsSinSecretos
-  } = settings;
-
-  const cargada = (valor: string | null) => Boolean(valor && valor.trim() !== "");
 
   return (
     <div className="space-y-6">
@@ -67,12 +59,8 @@ export default async function ConfiguracionPage() {
       <PanelConfiguracion
         negocio={negocio}
         settings={{
-          ...settingsSinSecretos,
-          tieneClientId: cargada(factusClientId),
-          tieneClientSecret: cargada(factusClientSecret),
-          tieneUsername: cargada(factusUsername),
-          tienePassword: cargada(factusPassword),
-          faltantesParaFacturar: faltantesParaFacturar(settings),
+          ...settings,
+          faltantesParaFacturar: faltantesParaFacturar(settings, plataformaFacturaConfigurada()),
         }}
         facturacion={facturacion}
         mesasHabilitado={ctx.modules.has(AppModule.MESAS)}

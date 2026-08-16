@@ -216,7 +216,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                             href={waUrl}
                             target="_blank"
                             rel="noopener"
-                            className="inline-flex items-center gap-1 text-rotulo font-bold text-success-soft hover:underline"
+                            className="inline-flex min-h-11 tableta:min-h-0 items-center gap-1 text-rotulo font-bold text-success-soft hover:underline"
                           >
                             <MessageSquare className="size-3" /> WhatsApp
                           </a>

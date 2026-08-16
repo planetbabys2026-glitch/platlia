@@ -141,7 +141,7 @@ export function auditarStockCarritoRecetas(
   carta: CategoriaConProductos[],
   inventoryEnabled: boolean = true,
 ): string | null {
-  if (cart.length === 0) return null;
+  if (!inventoryEnabled || cart.length === 0) return null;
 
   const productosMap = new Map<string, ProductoStockCalculo & { id: string; name: string }>();
   for (const cat of carta) {
@@ -162,8 +162,6 @@ export function auditarStockCarritoRecetas(
         return `Stock insuficiente del producto "${prod.name}". Solicitados: ${item.quantity}, disponibles: ${prod.stockQty}.`;
       }
     }
-
-    if (!inventoryEnabled) continue;
 
     for (const renglon of componerRecetaEfectiva(prod, item.opciones ?? [])) {
       const insumo = renglon.inventoryItem;
@@ -287,19 +285,20 @@ export async function verificarYDescontarStockReceta(
     );
   }
 
+  // Si el negocio no lleva inventario activo, el stock no se audita ni se descuenta en la venta.
+  if (!inventoryEnabled) return;
+
   if (producto.trackStock && producto.stockQty < quantity) {
     throw new ErrorDeUsuario(
       `Stock insuficiente de "${producto.name}". Disponibles: ${producto.stockQty}, solicitados: ${quantity}.`,
     );
   }
 
-  if (inventoryEnabled) {
-    const frena = insumoQueFrena(receta, quantity);
-    if (frena) {
-      throw new ErrorDeUsuario(
-        `Stock insuficiente del insumo "${frena.insumo.name}" para preparar "${producto.name}". Requerido: ${frena.requerido} ${frena.insumo.unit}, disponible en inventario: ${frena.insumo.stockCurrent} ${frena.insumo.unit}.`,
-      );
-    }
+  const frena = insumoQueFrena(receta, quantity);
+  if (frena) {
+    throw new ErrorDeUsuario(
+      `Stock insuficiente del insumo "${frena.insumo.name}" para preparar "${producto.name}". Requerido: ${frena.requerido} ${frena.insumo.unit}, disponible en inventario: ${frena.insumo.stockCurrent} ${frena.insumo.unit}.`,
+    );
   }
 
   if (producto.trackStock) {
@@ -309,30 +308,28 @@ export async function verificarYDescontarStockReceta(
     });
   }
 
-  if (inventoryEnabled) {
-    for (const renglon of receta) {
-      const insumo = renglon.inventoryItem;
-      const descuentoTotal = renglon.quantityRequired * quantity;
-      const nuevoStock = insumo.stockCurrent - descuentoTotal;
+  for (const renglon of receta) {
+    const insumo = renglon.inventoryItem;
+    const descuentoTotal = renglon.quantityRequired * quantity;
+    const nuevoStock = insumo.stockCurrent - descuentoTotal;
 
-      await tx.inventoryItem.update({
-        where: { id: insumo.id },
-        data: { stockCurrent: { decrement: descuentoTotal } },
-      });
+    await tx.inventoryItem.update({
+      where: { id: insumo.id },
+      data: { stockCurrent: { decrement: descuentoTotal } },
+    });
 
-      await tx.inventoryMovement.create({
-        data: {
-          businessId,
-          inventoryItemId: insumo.id,
-          type: "VENTA",
-          quantity: -descuentoTotal,
-          stockAfter: nuevoStock,
-          unitCostCop: insumo.costCop ?? 0,
-          referenceId: referenceId ?? null,
-          notes: customNotes ?? `Venta de ${producto.name} x${quantity}`,
-        },
-      });
-    }
+    await tx.inventoryMovement.create({
+      data: {
+        businessId,
+        inventoryItemId: insumo.id,
+        type: "VENTA",
+        quantity: -descuentoTotal,
+        stockAfter: nuevoStock,
+        unitCostCop: insumo.costCop ?? 0,
+        referenceId: referenceId ?? null,
+        notes: customNotes ?? `Venta de ${producto.name} x${quantity}`,
+      },
+    });
   }
 }
 
@@ -353,6 +350,8 @@ export async function restaurarStockReceta(
 
   const { referenceId, customNotes, inventoryEnabled = true, modifierOptionIds = [] } = options ?? {};
 
+  if (!inventoryEnabled) return;
+
   const resuelto = await resolverReceta(tx, productId, modifierOptionIds, false);
   if (!resuelto) return;
   const { producto, receta } = resuelto;
@@ -364,30 +363,28 @@ export async function restaurarStockReceta(
     });
   }
 
-  if (inventoryEnabled) {
-    for (const renglon of receta) {
-      const insumo = renglon.inventoryItem;
-      const reintegroTotal = renglon.quantityRequired * quantity;
-      const nuevoStock = insumo.stockCurrent + reintegroTotal;
+  for (const renglon of receta) {
+    const insumo = renglon.inventoryItem;
+    const reintegroTotal = renglon.quantityRequired * quantity;
+    const nuevoStock = insumo.stockCurrent + reintegroTotal;
 
-      await tx.inventoryItem.update({
-        where: { id: insumo.id },
-        data: { stockCurrent: { increment: reintegroTotal } },
-      });
+    await tx.inventoryItem.update({
+      where: { id: insumo.id },
+      data: { stockCurrent: { increment: reintegroTotal } },
+    });
 
-      await tx.inventoryMovement.create({
-        data: {
-          businessId,
-          inventoryItemId: insumo.id,
-          type: "DEVOLUCION",
-          quantity: reintegroTotal,
-          stockAfter: nuevoStock,
-          unitCostCop: insumo.costCop ?? 0,
-          referenceId: referenceId ?? null,
-          notes: customNotes ?? `Devolución por anulación de ${producto.name} x${quantity}`,
-        },
-      });
-    }
+    await tx.inventoryMovement.create({
+      data: {
+        businessId,
+        inventoryItemId: insumo.id,
+        type: "DEVOLUCION",
+        quantity: reintegroTotal,
+        stockAfter: nuevoStock,
+        unitCostCop: insumo.costCop ?? 0,
+        referenceId: referenceId ?? null,
+        notes: customNotes ?? `Devolución por anulación de ${producto.name} x${quantity}`,
+      },
+    });
   }
 }
 

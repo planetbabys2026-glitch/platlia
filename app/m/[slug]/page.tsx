@@ -33,7 +33,9 @@ export default async function MenuQrPublicPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ mesa?: string; tableId?: string; tipo?: string }>;
 }) {
-  const [{ slug }, { mesa, tableId, tipo }] = await Promise.all([params, searchParams]);
+  // El `?mesa=` del QR ya no se lee: era solo una etiqueta y cualquiera podía
+  // escribir la que quisiera. El nombre sale de la mesa que resuelve `tableId`.
+  const [{ slug }, { tableId, tipo }] = await Promise.all([params, searchParams]);
 
   // 1. Buscar negocio público por slug
   const business = await rootDb.business.findFirst({
@@ -140,6 +142,24 @@ export default async function MenuQrPublicPage({
     }),
   ]);
 
+  /**
+   * La mesa se resuelve acá, no se cree la de la URL.
+   *
+   * El QR trae `?mesa=<nombre>&tableId=<id>`, y hasta ahora el modo "pedido de
+   * mesa" se decidía por la ETIQUETA: `esMesa = Boolean(mesaParam)`. Con eso,
+   * `/m/bar-demo?mesa=cualquier+cosa` abría el flujo de mesa sin mesa, y el
+   * nombre que veía el comensal era el que dijera la URL, no el real.
+   *
+   * `tenantDb` acota la búsqueda al negocio del slug, así que el id de una mesa
+   * de otra sucursal no resuelve por más que venga escrito.
+   */
+  const mesaResuelta = tableId
+    ? await tenantDb(business.id).table.findFirst({
+        where: { id: tableId, deletedAt: null, status: { not: "INACTIVA" } },
+        select: { id: true, name: true },
+      })
+    : null;
+
   return (
     <ClienteMenuQr
       business={business}
@@ -154,12 +174,17 @@ export default async function MenuQrPublicPage({
         qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
         qrMenuAccent: settings.qrMenuAccent,
         turnNumberMax: settings.turnNumberMax,
+        tipSuggestionEnabled: settings.tipSuggestionEnabled,
+        tipSuggestionRateBp: settings.tipSuggestionRateBp,
       }}
       categorias={categorias}
       productos={productos}
       placeholderUrl={placeholder?.imageUrl ?? null}
-      mesaParam={mesa}
-      tableIdParam={tableId}
+      mesaParam={mesaResuelta?.name}
+      tableIdParam={mesaResuelta?.id}
+      // Un QR que apunta a una mesa que ya no existe: se dice, en vez de dejar
+      // que el comensal arme el pedido y falle recién al confirmarlo.
+      mesaInvalida={Boolean(tableId) && !mesaResuelta}
       tipoParam={tipo}
     />
   );

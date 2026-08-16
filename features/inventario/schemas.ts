@@ -32,7 +32,10 @@ export const crearProveedorSchema = z.object({
 });
 
 export const lineaFacturaItemSchema = z.object({
-  inventoryItemId: z.string().min(1, "Elegí el insumo."),
+  inventoryItemId: z.string().optional(),
+  productId: z.string().optional(),
+  name: z.string().optional(),
+  unit: z.string().optional(),
   quantity: z.number().int().min(1, "La cantidad debe ser mayor a 0."),
   unitCostCop: z.number().int().min(0, "El costo debe ser positivo."),
   taxRateBp: z.number().int().min(0).max(10000).default(0),

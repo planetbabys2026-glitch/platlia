@@ -32,6 +32,8 @@ const MAXIMO_EN_CAMPANA = 20;
 type EstadoAvisos = {
   cocina: number;
   domicilios: number;
+  /** Cuentas esperando cobro. Antes vivía en la píldora de Caja. */
+  caja: number;
   avisos: Aviso[];
   noLeidos: number;
   sonido: boolean;
@@ -52,15 +54,18 @@ export function useAvisos(): EstadoAvisos {
 export function ProveedorAvisos({
   cocinaInicial = 0,
   domiciliosInicial = 0,
+  cajaInicial = 0,
   children,
 }: {
   cocinaInicial?: number;
   domiciliosInicial?: number;
+  cajaInicial?: number;
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const [cocina, setCocina] = useState(cocinaInicial);
   const [domicilios, setDomicilios] = useState(domiciliosInicial);
+  const [caja, setCaja] = useState(cajaInicial);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [noLeidos, setNoLeidos] = useState(0);
   // Arranca en `true` y se corrige en el efecto: leer localStorage durante el
@@ -138,6 +143,7 @@ export function ProveedorAvisos({
           if (dato.tipo === "contadores") {
             setCocina(Number(dato.cocina) || 0);
             setDomicilios(Number(dato.domicilios) || 0);
+            setCaja(Number(dato.caja) || 0);
           } else if (dato.tipo === "aviso" && dato.aviso) {
             recibirAvisoRef.current(dato.aviso as Aviso);
           }
@@ -173,7 +179,7 @@ export function ProveedorAvisos({
 
   return (
     <ContextoAvisos.Provider
-      value={{ cocina, domicilios, avisos, noLeidos, sonido, alternarSonido, marcarLeidos }}
+      value={{ cocina, domicilios, caja, avisos, noLeidos, sonido, alternarSonido, marcarLeidos }}
     >
       {children}
     </ContextoAvisos.Provider>

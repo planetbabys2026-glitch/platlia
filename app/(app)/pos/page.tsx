@@ -4,6 +4,7 @@ import { getCajaAbierta } from "@/features/caja/queries";
 import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
+import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { requireModule } from "@/lib/auth/dal";
 import { ModuloPosInteractive } from "./modulo-pos-interactive";
 
@@ -32,12 +33,14 @@ export default async function PosPage({
       caja={caja}
       pedidosAbiertos={pedidos}
       pedidoInicial={pedidoInicial}
-      puedeFacturar={puedeFacturarElectronicamente(settings)}
+      puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}
       settings={{
         deliveryEnabled: settings.deliveryEnabled,
         requireOpenCashSession: settings.requireOpenCashSession,
         cashRoundingCop: settings.cashRoundingCop,
         pricesIncludeTax: settings.pricesIncludeTax,
+        tipSuggestionEnabled: settings.tipSuggestionEnabled,
+        tipSuggestionRateBp: settings.tipSuggestionRateBp,
       }}
     />
   );

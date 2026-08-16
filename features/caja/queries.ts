@@ -135,6 +135,88 @@ export async function getMovimientos(businessId: string, cashSessionId: string) 
 }
 
 /**
+ * Cuántas cuentas hay esperando cobro. Solo el número, para la insignia del menú.
+ *
+ * Es el contador que antes vivía en la píldora "Cobro de cuentas" y que se perdía
+ * al sacar la tira: es urgencia, no tamaño, así que sube al menú y se ve desde
+ * cualquier pantalla en vez de solo estando parado en Caja.
+ */
+export async function contarCuentasPorCobrar(businessId: string, businessDate: Date) {
+  return tenantDb(businessId).order.count({
+    where: {
+      businessDate,
+      status: { in: ["ABIERTA", "CUENTA_PEDIDA"] },
+      items: { some: { status: { not: "ANULADO" } } },
+    },
+  });
+}
+
+/** Tope de pedidos que trae el historial de una jornada. */
+export const TOPE_CUENTAS_COBRADAS = 500;
+
+/**
+ * Lo que ya se cobró en la jornada, para poder volver a mirarlo.
+ *
+ * Hasta acá una cuenta cobrada desaparecía de la pantalla: `getCuentasPorCobrar`
+ * filtra por `ABIERTA` / `CUENTA_PEDIDA`, y no había ninguna otra vista que
+ * listara pedidos uno por uno —los informes son todos agregados—. Reimprimir una
+ * tirilla o revisar a quién se le cobró hace media hora no tenía dónde hacerse.
+ *
+ * No trae los renglones a propósito: quinientos pedidos por sus ítems es un
+ * payload que la tabla no usa, y el detalle completo ya lo da la tirilla, que
+ * está a un clic. Se devuelve también el total para poder avisar cuando la
+ * jornada pasó el tope en vez de mentir por omisión.
+ */
+export async function getCuentasCobradas(businessId: string, businessDate: Date) {
+  const db = tenantDb(businessId);
+  const where = { businessDate, status: "PAGADA" } as const;
+
+  const [pedidos, total] = await Promise.all([
+    db.order.findMany({
+      where,
+      // `closedAt` y no `openedAt`: la pregunta es "qué se cobró recién", y una
+      // mesa que estuvo abierta tres horas se cobró al final, no al principio.
+      orderBy: { closedAt: "desc" },
+      take: TOPE_CUENTAS_COBRADAS,
+      select: {
+        id: true,
+        code: true,
+        type: true,
+        channel: true,
+        turnNumber: true,
+        totalCop: true,
+        tipCop: true,
+        closedAt: true,
+        customerName: true,
+        customerPhone: true,
+        docType: true,
+        docNumber: true,
+        table: { select: { name: true } },
+        closedBy: { select: { name: true } },
+        // Los anulados no cuentan como cobro: el mismo criterio que usa el
+        // arqueo (`getResumenCaja` filtra `voidedAt: null`).
+        payments: {
+          where: { voidedAt: null },
+          select: { method: true, amountCop: true },
+        },
+        _count: { select: { items: true } },
+        facturaElectronicaNumero: true,
+        facturaElectronicaCufe: true,
+        facturaElectronicaUrlPdf: true,
+        facturaElectronicaEstado: true,
+        facturaElectronicaError: true,
+        notaCreditoNumero: true,
+        notaCreditoCufe: true,
+        notaCreditoUrlPdf: true,
+      },
+    }),
+    db.order.count({ where }),
+  ]);
+
+  return { pedidos, total };
+}
+
+/**
  * Trae las cuentas y pedidos pendientes de cobro para la caja.
  *
  * Las que tienen `CUENTA_PEDIDA` salen arriba de todo con prioridad para que el

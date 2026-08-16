@@ -111,15 +111,19 @@ export function sumTaxLines(lines: readonly TaxLine[]): OrderTotals {
 /**
  * Propina sugerida. En Colombia es voluntaria y hay que preguntarla antes de
  * sumarla, así que esto calcula la sugerencia y nada más: quien decide es la
- * pantalla de cobro.
+ * persona.
  *
- * Se calcula sobre el consumo antes de impuesto, que es la práctica habitual.
+ * **Se calcula sobre el consumo COMPLETO, con impuesto incluido**: es el número
+ * que el cliente ve en la cuenta, y el 10% que se le ofrece es sobre eso. Y la
+ * propina en sí no lleva impuesto —entra al pedido como `Order.tipCop`, aparte de
+ * los renglones, y en la factura electrónica viaja como una línea con tarifa
+ * cero—.
  */
-export function computeSuggestedTip(subtotalCop: Cop, rateBp: number): Cop {
-  assertCop(subtotalCop, "el subtotal");
+export function computeSuggestedTip(consumoCop: Cop, rateBp: number): Cop {
+  assertCop(consumoCop, "el consumo");
   assertCop(rateBp, "la tasa de propina en puntos básicos");
   if (rateBp < 0) {
     throw new RangeError(`La propina no puede ser negativa, llegó ${rateBp}.`);
   }
-  return Math.round((subtotalCop * rateBp) / 10_000);
+  return Math.round((consumoCop * rateBp) / 10_000);
 }

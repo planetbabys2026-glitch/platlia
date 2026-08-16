@@ -2,10 +2,15 @@
  * Quién puede emitir factura electrónica, y qué le falta al que no puede.
  *
  * La facturación electrónica no es de todas las empresas: la mayoría de los bares
- * factura con tiquete y punto. Habilitarla son tres cosas que pasan en lugares
- * distintos —el superadministrador la prende y vende el paquete de documentos, el
- * dueño carga las credenciales de Factus y su rango de numeración de la DIAN, y el
- * paquete se va gastando— y ninguna de las tres, sola, alcanza.
+ * factura con tiquete y punto. Habilitarla son cuatro cosas que pasan en lugares
+ * distintos —la plataforma tiene su cuenta de Factus configurada, el
+ * superadministrador prende el módulo del negocio, le asigna documentos de la
+ * bolsa y le carga el rango de numeración que la DIAN le autorizó a ese NIT— y
+ * ninguna, sola, alcanza.
+ *
+ * Las credenciales de Factus NO son de cada negocio: la cuenta es una sola, de
+ * Platlia, y vive en el entorno. Por eso este predicado recibe aparte si la
+ * plataforma está configurada, en vez de buscarle credenciales a la empresa.
  *
  * Por eso hay UN solo predicado y todo el producto lo consulta: el cobro decide
  * con él si muestra los campos fiscales, y Configuración muestra con él qué falta.
@@ -51,10 +56,6 @@ export type ConfigFiscal = {
   facturacionElectronicaHabilitada: boolean;
   paquetesDocumentosDisponibles: number;
   documentosEmitidosConsumidos: number;
-  factusClientId: string | null;
-  factusClientSecret: string | null;
-  factusUsername: string | null;
-  factusPassword: string | null;
   factusNumberingRangeId: number | null;
   municipalityCode: string | null;
 };
@@ -78,17 +79,25 @@ function vacio(valor: string | null | undefined): boolean {
  * Configuración, y lo que necesita el dueño es saber qué campo llenar, no un
  * enum que después haya que traducir en dos lugares.
  */
-export function faltantesParaFacturar(config: ConfigFiscal): string[] {
+export function faltantesParaFacturar(
+  config: ConfigFiscal,
+  /**
+   * Si la cuenta de Factus de la plataforma está configurada. Se pasa por
+   * parámetro y no se lee del entorno acá para que el módulo siga siendo puro:
+   * en el servidor sale de `plataformaFacturaConfigurada()`.
+   */
+  plataformaConfigurada: boolean,
+): string[] {
   if (!config.facturacionElectronicaHabilitada) {
     return ["La facturación electrónica no está habilitada para este negocio."];
   }
 
   const faltantes: string[] = [];
 
-  if (vacio(config.factusClientId)) faltantes.push("Falta el Client ID de Factus.");
-  if (vacio(config.factusClientSecret)) faltantes.push("Falta el Client Secret de Factus.");
-  if (vacio(config.factusUsername)) faltantes.push("Falta el usuario de Factus.");
-  if (vacio(config.factusPassword)) faltantes.push("Falta la contraseña de Factus.");
+  // Esto no lo arregla el negocio: es la cuenta de Factus de Platlia.
+  if (!plataformaConfigurada) {
+    faltantes.push("La conexión con Factus no está configurada en la plataforma.");
+  }
 
   if (!config.factusNumberingRangeId) {
     faltantes.push("Falta el ID del rango de numeración autorizado por la DIAN.");
@@ -106,10 +115,13 @@ export function faltantesParaFacturar(config: ConfigFiscal): string[] {
 
 /**
  * El interruptor. Lo consultan el cobro de caja y el del POS para decidir si
- * piden los datos del cliente.
+ * piden los datos del cliente, y el emisor antes de salir a la API.
  */
-export function puedeFacturarElectronicamente(config: ConfigFiscal): boolean {
-  return faltantesParaFacturar(config).length === 0;
+export function puedeFacturarElectronicamente(
+  config: ConfigFiscal,
+  plataformaConfigurada: boolean,
+): boolean {
+  return faltantesParaFacturar(config, plataformaConfigurada).length === 0;
 }
 
 /**

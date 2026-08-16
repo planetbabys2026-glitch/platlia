@@ -303,6 +303,101 @@ Node plano y `server-only` lanza fuera de la condición `react-server`. La guard
 pedidos por QR indefinidamente. Misma clase de olvido: `crearNegocioPropio` validaba "ya tenés
 negocio" solo en la página, y una Server Action es un POST alcanzable con curl.
 
+## Facturación electrónica DIAN (Factus)
+
+**La cuenta de Factus es UNA, de la plataforma.** Factus nos vende una bolsa de documentos y Platlia
+la reparte entre los negocios. Las credenciales viven en el entorno (`FACTUS_CLIENT_ID`,
+`FACTUS_CLIENT_SECRET`, `FACTUS_USERNAME`, `FACTUS_PASSWORD`, `FACTUS_URL`) y las lee
+`lib/billing/factus-plataforma.ts`, el único archivo de esta familia que toca `lib/env.ts`: el
+mapeador queda puro para poder probarlo, porque los tests corren en jsdom y `lib/env.ts` revienta a
+propósito con `window` definido.
+
+Antes estaban por negocio en `BusinessSettings`, en texto plano y editables por el dueño de cada bar.
+Sacarlas de la base cierra el problema mejor que cifrarlas: una copia de la base ya no se lleva la
+llave de la facturación de todo el mundo.
+
+**Lo que sí es de cada negocio** es lo que la DIAN le autorizó a ESE NIT —`factusNumberingRangeId`,
+`factusNumberingRangeIdNc`, `municipalityCode`— y **lo asigna el superadministrador** en
+`/superadmin/facturacion`. La pestaña del cliente es de solo lectura: un rango mal escrito es una
+factura rechazada que aparece recién al emitir, con alguien esperando en la caja.
+
+**La bolsa se reparte contra algo.** `CompraDocumentosDian` es una tabla de plataforma —hermana de
+`ListaDePrecios`— con cada paquete comprado. `getBolsaDocumentosDian()` da comprado / asignado /
+consumido / **sin asignar**, y asignar más de lo que queda se rechaza. Antes se sumaban documentos
+por negocio sin que estuviera escrito en ningún lado cuántos habíamos comprado.
+
+### El payload: cuatro errores que costaban plata
+
+`construirPayloadFactus` existía desde antes y **nunca se había ejecutado contra la API**. Lo que
+estaba mal, verificado contra el sandbox:
+
+1. **`price` iba con el impuesto adentro.** La DIAN pide el precio unitario SIN impuesto y se mandaba
+   `unitPriceCop`, que en Colombia es el precio de carta con el impuesto incluido. Factus le sumaba
+   el `rate` encima: una cerveza de $5.000 se facturaba $5.400. Va la base congelada del renglón,
+   `lineSubtotalCop / quantity`.
+2. **`cash_rounding_amount` no es el paso de redondeo del efectivo**, sino la diferencia entre lo que
+   suman los pagos y el total de la factura (tope ±500). Se mandaba `settings.cashRoundingCop` (50)
+   siempre.
+3. **La propina no viajaba.** Como los pagos sí la incluyen, la diferencia se iba muy por encima de
+   los ±500 y toda venta con propina habría sido rechazada. Va como un renglón sin impuesto
+   ("Propina voluntaria"): la alternativa, `allowance_charges`, exige un `concept_type` del catálogo
+   de la DIAN que no está documentado, y equivocarlo es una factura rechazada.
+4. **`reference_code` llevaba el año en curso**, así que dos reintentos a caballo del 31 de diciembre
+   eran dos documentos para la misma venta. Ahora se deriva solo del `order.id`, y es lo que permite
+   recuperar un documento perdido.
+
+Los totales no coinciden al centavo y está bien: nosotros sacamos el impuesto por diferencia
+(`lib/tax.ts`, para que base + impuesto dé exacto el precio de carta) y Factus lo recalcula
+multiplicando. Una venta de $5.000 se factura $5.000,40 y los 40 centavos son el ajuste de redondeo.
+`totalesDeFactura()` reproduce la aritmética de Factus para poder afirmar eso con un test en vez de
+con fe.
+
+**`taxKindSnapshot` se congela en `OrderItem`.** La DIAN separa IVA (`01`) de impuesto al consumo
+(`04`), y el `kind` solo vivía en `TaxRate`, alcanzable únicamente por el producto ACTUAL: facturar
+leyendo de ahí sería declarar una venta vieja con la tarifa de hoy.
+
+### La nota crédito es otro endpoint, no otro `document`
+
+Mandarla a `/v2/bills/validate` con `document: "03"` y `related_documents` la rechaza —"El campo id
+rango de numeración es inválido"— porque ese endpoint solo acepta rangos de factura de venta. Va a
+**`/v2/credit-notes/validate`**, referencia la factura por `bill_number` (no por documento
+relacionado), lleva `correction_concept_code` y `customization_id: "20"`, y usa **su propio rango**:
+en la cuenta de Factus, "Factura de Venta" y "Nota Crédito" son resoluciones distintas.
+
+**Una nota crédito trae CUDE, no CUFE.** Leer solo `cufe` guardaba como error una nota que la DIAN sí
+había validado: el documento existía y el sistema no se enteraba, que es el peor estado posible. Lo
+resuelve `identificadorDian()`.
+
+**`GET /v2/numbering-ranges` responde `{ data: { data: [...] } }`**, envuelto dos veces. Leer solo el
+primer `data` devolvía siempre una lista vacía, y una lista vacía se parece demasiado a "la cuenta no
+tiene rangos" como para notarlo.
+
+### Emitir: tres reglas
+
+1. **La llamada a Factus va FUERA de toda transacción.** Una transacción abierta contra la red es un
+   lock de base esperando a un tercero que habla con la DIAN.
+2. **La venta se reclama antes de salir**, con un `updateMany` condicionado: dos clics en el botón
+   son dos facturas ante la DIAN. Ojo con SQL: `NOT (estado = 'EMITIENDO')` da NULL —no `true`—
+   cuando la columna es nula, así que la condición necesita un `OR estado IS NULL` explícito o
+   rechaza justamente la primera factura de cada venta. El reclamo caduca a los dos minutos para que
+   un proceso muerto no bloquee la venta para siempre.
+3. **Si la respuesta se pierde, se busca el documento por su `reference_code`**
+   (`buscarDocumentoPorReferencia`). Sin esa segunda vuelta queda un documento vivo ante la DIAN que
+   el sistema no registró y que el reintento no puede recrear.
+
+El paquete se descuenta con el CUFE/CUDE en la mano, nunca antes. `documentosEmitidosConsumidos`
+existía desde el principio y no se incrementaba en ningún lado.
+
+**`data.errors` de la respuesta no significa rechazo**: la DIAN manda notificaciones (FAJ44b, RUT01)
+que conviven con una factura válida. Lo que decide es `is_validated`.
+
+### En la tirilla
+
+Una venta facturada imprime número, CUFE y **el QR**, generado con `qrcode` como SVG en el servidor.
+El resto de la aplicación arma sus QR con `api.qrserver.com`, que para una pantalla está bien; para
+la tirilla no, porque la estación de impresión de un bar suele estar en una red sin salida y un QR
+que no carga es un papel que no sirve.
+
 ## Despliegue (VPS con Dokploy / nixpacks)
 
 `nixpacks.toml` manda; sin él nixpacks adivina y se equivoca en tres cosas, todas verificadas
@@ -388,12 +483,84 @@ ancho fijo separa la palabra de su número como si fueran dos datos.
 **No poner `font-display` y `.numeral` en el mismo elemento**: las dos declaran la familia y se
 pisan. Ese bug estaba en la tarjeta de KPI.
 
-### El menú despliega las secciones de cada módulo
+### El menú QR es una ruta pública: todo lo que llega por la URL es del cliente
+
+**El slug identifica al negocio y es único** (`Business.slug @unique`, y los dos generadores buscan
+uno libre antes de crear). Dos sucursales con el mismo nombre reciben slugs distintos, así que por
+ahí no se mezclan pedidos.
+
+**La mesa se resuelve en el servidor, contra `tenantDb`.** El QR trae
+`?mesa=<nombre>&tableId=<id>`, y el nombre es **solo una etiqueta**: no se lee para nada. El id de
+una mesa de otra sucursal no resuelve porque `tenantDb` le agrega el `businessId` al `where`.
+
+Dos cosas que estaban mal y no fallaban:
+
+- **El modo "pedido de mesa" se decidía por la etiqueta** (`esMesa = Boolean(mesaParam)`), así que
+  `?mesa=cualquier+cosa` abría el flujo de mesa sin ninguna mesa detrás.
+- **Un pedido de mesa cuya mesa no resolvía se creaba igual, con `tableId: null`.** Al mesero le
+  llegaba una comanda que decía "mesa" y no decía cuál. Pasaba solo con un QR pegado a una mesa que
+  el negocio archivó después, que es exactamente el pedido que parece mezclado. Ahora se rechaza, y
+  la pantalla lo avisa al abrir en vez de dejar armar el pedido y fallar al confirmarlo.
+
+**`consultarEstadoPedidoQR` exige el teléfono completo.** Buscaba con `code: Number(q)` y
+`customerPhone: { contains: q }`: escribir "3" devolvía el pedido número 3 del negocio —de quien
+fuera— con nombre, teléfono y dirección de entrega. Escribir 1, 2, 3… era leer la agenda del día
+entera. El número de pedido dejó de servir para consultar; para el pedido recién hecho —y para el de
+mesa, que no tiene teléfono— se consulta por el `id`, que es un cuid y no se adivina probando.
+
+**`backdrop-filter` crea bloque contenedor para los hijos `position: fixed`.** El contenedor del
+menú QR tenía `backdrop-blur`, así que la barra del pedido se anclaba al fondo de ese div —1400px de
+carta— en vez de a la pantalla: había que deslizar hasta el final para verla. El desenfoque va en una
+capa `absolute` aparte. Lo mismo le pasaba al carrito y al rastreo.
+
+**La barra del pedido dice QUÉ lleva, no solo cuánto.** Decía "Ver mi pedido (2) · $17.000", así que
+para saber si ya había pedido la cerveza había que abrir el carrito, mirar y cerrarlo.
+
+**El pedido queda recordado en el teléfono unas horas** (`app/m/[slug]/pedido-recordado.ts`): una
+recarga no le hace perder el rastreo. Se guarda **solo el id**, nunca el teléfono ni la dirección.
+Dos comensales que escanean el mismo QR desde sus propios teléfonos no comparten `localStorage`, y
+para el aparato prestado está la ventana de vigencia, que lo descarta antes del turno siguiente.
+Cerrar el rastreo a mano también olvida.
+
+**Los errores no salen crudos a la calle.** El `catch` devolvía `err.message`, así que una excepción
+de Prisma le habría contado al comensal cómo está hecha la base. Solo se muestran los
+`ErrorDeUsuario`; el resto va al log con un mensaje genérico.
+
+### El menú es el ÚNICO navegador de secciones
 
 Los módulos que por dentro son varias pantallas —Caja, Informes, Inventario, Configuración—
-declaran sus `secciones` en `app/(app)/navegacion.ts` y el menú las abre cuando el módulo está
-activo. Antes esas vistas solo existían como una tira de pestañas adentro de la pantalla: para saber
-que Inventario tenía Proveedores había que entrar y mirar.
+declaran sus `secciones` en `app/(app)/navegacion.ts` y el menú las despliega. Antes esas vistas
+solo existían como una tira de pestañas adentro de la pantalla: para saber que Inventario tenía
+Proveedores había que entrar y mirar.
+
+**Las píldoras internas se fueron.** Durante un tiempo convivieron las dos formas —la tira de
+píldoras en Brasa sólido adentro de la pantalla y el menú lateral—, que además de duplicar saturaba
+de acento. Informes nunca tuvo píldoras y funciona; el resto se alineó con eso. Lo que había que
+reponer para no perder información:
+
+- **Cada sección dice su nombre en la pantalla.** El `h1` es el del módulo y no cambia con `?vista=`,
+  así que sin píldoras alguien que abre `/inventario?vista=proveedores` no tendría nada que se lo
+  diga. Inventario pinta el rótulo de la sección con su contador donde estaba el `TabsList`;
+  Configuración ya traía un `h2` por panel.
+- **El contador de cuentas por cobrar subió al menú**, como insignia del ítem Caja: es urgencia, no
+  tamaño, y ahora se ve desde cualquier pantalla. Va por el stream de avisos
+  (`contarCuentasPorCobrar` junto a cocina y domicilios), no por props.
+
+**Los módulos con secciones son acordeones de verdad**, con flecha y estado propio, igual que
+Administración. Antes se desplegaban solos si el módulo estaba activo y no había forma de cerrarlos.
+La fila es un `<div>` con el `<Link>` que navega y un `<button>` aparte para la flecha: un `<button>`
+adentro de un `<a>` es HTML inválido. La animación va por `grid-template-rows: 0fr → 1fr` —la misma
+de `seccion-plegable.tsx`— y también se le puso a Administración, que solo rotaba la flecha.
+
+El acordeón de Administración cuelga del grupo marcado con `conAdministracion`. Antes se enganchaba
+comparando `grupo.titulo === "Gestión"` en dos lugares distintos, así que renombrar el grupo borraba
+Administración del menú entero sin que nada fallara.
+
+**Caja tiene tres secciones y su vista de entrada depende del negocio.** `seccionesDeCaja(usaMesas)` y
+`vistaInicialDeCaja(usaMesas)` viven juntas en `navegacion.ts` porque el menú y la pantalla tienen
+que coincidir: un negocio de mostrador no tiene cuentas de mesa que cobrar, así que no se le ofrece
+"Cobrar cuentas" y entra por el historial. Depende de configuración del negocio, no de datos del
+momento, así que el enlace sigue llevando siempre al mismo lado.
 
 **La sección viaja en la URL** (`?vista=`), porque un enlace del menú no puede apuntar a un
 `useState`. `lib/vista-en-url.ts` es el hook compartido: usa `replace` y no `push` —cambiar de
@@ -413,6 +580,62 @@ pantalla de trabajo.
 **Colapsada, la barra apila.** El encabezado y el pie ponían su contenido en fila, y en 80px de
 ancho —48px útiles arriba, 56px abajo— no entraban: el botón de colapsar y el de cerrar sesión se
 salían del borde. Con `flex-col` entran los dos.
+
+### La propina se elige ANTES de que la cuenta llegue a caja
+
+Estaba todo construido y desconectado: `BusinessSettings.tipSuggestionEnabled` y
+`tipSuggestionRateBp` se editaban en Configuración, `computeSuggestedTip` vivía en `lib/tax.ts` con
+sus tests, `ponerPropina` era una Server Action completa y `Order.tipCop` ya entraba en
+`recalcularTotales`, en la tirilla y en Informes. **Ninguna pantalla la ofrecía**: el interruptor de
+Configuración era decorativo, `pagoSchema` no tenía el campo, y en 27 pedidos la suma de propinas era
+cero. Informes mostraba "PROPINAS SUGERIDAS $0" para siempre.
+
+**Se decide en el momento en que se le pregunta al cliente, no en la caja.** Son tres puertas:
+
+| Dónde | Quién elige | Con qué acción |
+|---|---|---|
+| `/pedido/[id]`, al **Pedir la cuenta** | el mesero, en la mesa | `pedirCuenta` |
+| Menú QR, al confirmar el pedido | el propio comensal | `crearPedidoClienteQR` |
+| POS, en el modal de cobro | el cajero de mostrador | `procesarVentaPosCompleta` |
+
+La caja la muestra **ya elegida** y deja cambiarla o quitarla (`registrarPago`), pero ahí es la
+corrección, no la decisión. Si se eligiera recién al cobrar, la pre-cuenta que el mesero llevó a la
+mesa diría un total y la caja cobraría otro; y un pedido por QR llegaría sin propina, con alguien
+teniendo que ir a preguntar.
+
+**La propina viaja con la acción que ya existe, nunca en una llamada aparte.** Es la misma razón por
+la que los datos fiscales viajan con el cobro (`features/pedidos/schemas.ts`): una propina guardada
+que después no se cobra deja el pedido con un total que nadie pagó. `ponerPropina` quedó sin uso.
+
+**El porcentaje es sobre el consumo COMPLETO, con impuesto incluido** —el número que el cliente ve en
+la cuenta— y **la propina no lleva impuesto**: entra como `Order.tipCop`, aparte de los renglones, y
+en la factura electrónica viaja como una línea con tarifa cero.
+
+**Arranca en "Sin propina" siempre.** En Colombia es voluntaria y hay que preguntarla antes de
+sumarla: preseleccionarla es exactamente lo que esa regla evita. Sugerirla es ofrecerla de un toque.
+
+`features/pedidos/components/propina.tsx` es el único selector, con `tema="qr"` para el menú público,
+que no se pinta con la paleta de la aplicación. Un solo componente para que la propina no termine
+calculándose de tres maneras según por dónde entre el pedido.
+
+### Caja: lo cobrado no desaparece
+
+`getCuentasPorCobrar` filtra por `ABIERTA` / `CUENTA_PEDIDA`, así que apenas se cobraba, el pedido se
+iba de la pantalla y no volvía a aparecer en ninguna parte del producto: los informes son todos
+agregados y no existía ningún listado por pedido. Reimprimir una tirilla o revisar a quién se le
+cobró hace media hora no tenía dónde hacerse.
+
+`getCuentasCobradas` es su hermana (`status: "PAGADA"`, ordenada por `closedAt`) y alimenta la
+sección "Cuentas cobradas". **No trae los renglones a propósito**: quinientos pedidos por sus ítems
+es un payload que la tabla no usa, y el detalle completo ya lo da la tirilla, que está a un clic.
+
+El filtrado, la búsqueda y el paginado son **en memoria sobre la jornada**: es un conjunto acotado,
+responde sin ida y vuelta por cada tecla y no hay forma de paginar mal. Si la jornada pasa el tope
+(`TOPE_CUENTAS_COBRADAS`), la pantalla lo dice en vez de mentir por omisión. La jornada viaja en
+`?jornada=` con el mismo `parseBusinessDate` que usa Informes, así que se puede enlazar.
+
+El historial **no depende de que haya caja abierta**: reimprimir la tirilla de anoche tiene que
+funcionar con el turno cerrado.
 
 ### Las categorías se pliegan
 
@@ -478,6 +701,8 @@ app/imprimir/            HTML limpio para @page 55mm/80mm
 app/turnero/             el televisor del salón: fuera de (app), sin barra de navegación
 lib/db/                  pool.ts · root.ts (rootDb) · tenant.ts (tenantDb) · tenant-models.ts
 lib/{auth,actions,billing,printing,email}/      infraestructura
+lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plataforma
+features/dian/           emitir factura y nota crédito
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests
 features/<dominio>/{actions,queries,schemas}.ts + components/
 components/ui/           shadcn (generado)

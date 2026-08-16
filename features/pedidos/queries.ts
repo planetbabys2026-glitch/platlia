@@ -44,6 +44,7 @@ export async function getPedido(businessId: string, orderId: string) {
           taxRateBpSnapshot: true,
           basePriceCopSnapshot: true,
           status: true,
+          sentToKitchenAt: true,
           notes: true,
           canceledReason: true,
           modifiers: {
@@ -106,6 +107,12 @@ export async function getPedidoParaTiquete(businessId: string, orderId: string) 
       tipCop: true,
       totalCop: true,
       paidCop: true,
+      // La tirilla de una venta facturada tiene que llevar el número, el CUFE y
+      // el QR de la DIAN, o no sirve como comprobante.
+      facturaElectronicaNumero: true,
+      facturaElectronicaCufe: true,
+      facturaElectronicaUrlQr: true,
+      notaCreditoNumero: true,
       table: { select: { name: true } },
       openedBy: { select: { name: true } },
       business: {

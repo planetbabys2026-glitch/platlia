@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { OrderChannel, OrderItemStatus, OrderStatus, OrderType } from "@/generated/prisma/enums";
+import { ErrorDeUsuario } from "@/lib/actions/define-action";
 import { licenciaVigente } from "@/lib/auth/reglas";
 import { getSettings } from "@/features/negocio/queries";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
 import { recalcularTotales } from "@/features/pedidos/totales";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
+import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { crearPedidoClienteQRSchema, type CrearPedidoClienteQRInput } from "@/features/pedidos/qr-schemas";
 import { describirAviso } from "@/lib/avisos";
 import {
@@ -75,7 +77,7 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
     }
 
     const businessDate = currentBusinessDate(settings);
-    const puedeFacturar = puedeFacturarElectronicamente(settings);
+    const puedeFacturar = puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada());
     const db = tenantDb(business.id);
 
     const resultado = await db.$transaction(async (tx) => {
@@ -95,17 +97,34 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
       // El nombre va al aviso que salta en las demás pantallas: "Mesa 12 · Sofía"
       // se entiende de un vistazo, un id no.
       let mesaNombre: string | null = null;
-      if (input.type === "MESA" && input.tableId) {
-        const mesa = await tx.table.findFirst({
-          where: { id: input.tableId, deletedAt: null },
-          select: { id: true, name: true, status: true },
-        });
-        // Una mesa archivada o fuera de servicio no recibe pedidos: su QR puede
-        // seguir pegado a una mesa que el negocio ya sacó del salón.
-        if (mesa && mesa.status !== "INACTIVA") {
-          tableId = mesa.id;
-          mesaNombre = mesa.name;
+      if (input.type === "MESA") {
+        /**
+         * Un pedido de mesa SIN mesa no se crea: se rechaza.
+         *
+         * Antes, si el `tableId` no resolvía —una mesa archivada, borrada, de otro
+         * negocio, o un QR al que alguien le sacó el parámetro— el pedido entraba
+         * igual con `tableId: null`. Al mesero le llegaba una comanda que decía
+         * "mesa" y no decía cuál, y no había forma de averiguarlo: el comensal ya
+         * se había ido a sentar. Es exactamente el pedido que parece mezclado.
+         *
+         * La búsqueda va por `tx`, que es `tenantDb(business.id)`: el id de una
+         * mesa de otra empresa no resuelve acá aunque venga escrito en la URL.
+         */
+        const mesa = input.tableId
+          ? await tx.table.findFirst({
+              where: { id: input.tableId, deletedAt: null },
+              select: { id: true, name: true, status: true },
+            })
+          : null;
+
+        if (!mesa || mesa.status === "INACTIVA") {
+          throw new ErrorDeUsuario(
+            "Este código QR ya no corresponde a una mesa activa. Pedile al mesero que te tome el pedido.",
+          );
         }
+
+        tableId = mesa.id;
+        mesaNombre = mesa.name;
       }
 
       // Buscar usuario bot/sistema o primer miembro para openedById
@@ -160,7 +179,7 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
             id: true,
             name: true,
             priceCop: true,
-            taxRate: { select: { rateBp: true, name: true } },
+            taxRate: { select: { rateBp: true, name: true, kind: true } },
           },
         });
 
@@ -192,6 +211,10 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
             basePriceCopSnapshot: producto.priceCop,
             taxRateBpSnapshot: producto.taxRate.rateBp,
             taxRateNameSnapshot: producto.taxRate.name,
+            // El `kind` también se congela: la DIAN separa IVA de impuesto al
+            // consumo, y leerlo del producto actual al facturar sería declarar una
+            // venta vieja con la tarifa de hoy.
+            taxKindSnapshot: producto.taxRate.kind,
             taxIncludedSnapshot: settings.pricesIncludeTax,
             quantity: itemInput.quantity,
             lineSubtotalCop: linea.lineSubtotalCop,
@@ -215,7 +238,13 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
         });
       }
 
-      // 7. Totales, con la misma función que usan la mesa y el POS. Antes se
+      // 7. La propina que eligió el comensal, antes de recalcular para que entre
+      // en el total con el que la cuenta llega a la caja.
+      if (input.tipCop !== undefined && input.tipCop > 0) {
+        await tx.order.update({ where: { id: order.id }, data: { tipCop: input.tipCop } });
+      }
+
+      // 8. Totales, con la misma función que usan la mesa y el POS. Antes se
       // sumaban a mano acá, que era la única de las cuatro rutas de creación de
       // renglones que no pasaba por `recalcularTotales`: cualquier cambio en cómo
       // se calcula un total se olvidaba justo del pedido que hace el cliente.
@@ -285,8 +314,12 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
 
     return { ok: true, data: resultado };
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : "Ocurrió un error al procesar tu pedido.";
-    return { ok: false, error: errorMsg };
+    // Solo los mensajes escritos para que los lea una persona salen a la calle.
+    // Cualquier otra excepción —una de Prisma, por ejemplo— le contaría al
+    // comensal cómo está hecha la base por dentro. Esto es una ruta pública.
+    if (err instanceof ErrorDeUsuario) return { ok: false, error: err.message };
+    console.error("[qr] no se pudo crear el pedido", err);
+    return { ok: false, error: "No pudimos tomar tu pedido. Probá de nuevo o pedile al mesero." };
   }
 }
 
@@ -294,7 +327,7 @@ export async function consultarEstadoPedidoQR(businessSlug: string, query: strin
   try {
     const q = query.trim();
     if (!q) {
-      return { ok: false, error: "Ingresá tu número de celular o de pedido." };
+      return { ok: false, error: "Ingresá tu número de celular." };
     }
 
     const business = await rootDb.business.findUnique({
@@ -310,17 +343,45 @@ export async function consultarEstadoPedidoQR(businessSlug: string, query: strin
     const businessDate = currentBusinessDate(settings);
     const db = tenantDb(business.id);
 
-    const isCode = !isNaN(Number(q));
-    const codeNum = isCode ? Number(q) : -1;
+    /**
+     * Esta consulta es pública y sin sesión: hay que poder rastrear el pedido
+     * propio sin registrarse. Por eso mismo tiene que ser imposible leer el ajeno.
+     *
+     * Como estaba, no lo era. `code: Number(q)` con `q = "3"` devolvía el pedido
+     * número 3 del negocio —de quien fuera— con su nombre, su teléfono y su
+     * dirección de entrega. Escribir 1, 2, 3… era leer la agenda del día entera.
+     * Y `customerPhone: { contains: q }` con "300" devolvía el pedido más reciente
+     * de cualquiera cuyo número contuviera esos dígitos.
+     *
+     * Ahora hace falta el teléfono COMPLETO. No es una contraseña, pero es lo
+     * único que el cliente tiene y que un curioso no adivina de a una prueba por
+     * vez. El número de pedido solo sirve acompañado del teléfono.
+     */
+    const soloDigitos = q.replace(/\D/g, "");
+    const MINIMO_DE_TELEFONO = 7; // en Colombia, un fijo sin indicativo
+
+    /**
+     * El id del propio pedido también sirve, y es la vía del pedido de mesa: ahí
+     * no hay teléfono que pedir. Es un cuid de 25 caracteres, así que no se
+     * adivina probando —que es justamente lo que sí pasaba con el número de
+     * pedido— y lo tiene solo quien acaba de hacer el pedido en esta pantalla.
+     */
+    const pareceId = /^[a-z0-9]{20,}$/i.test(q);
+
+    if (!pareceId && soloDigitos.length < MINIMO_DE_TELEFONO) {
+      return {
+        ok: false,
+        error: "Escribí tu número de celular completo, el mismo con el que hiciste el pedido.",
+      };
+    }
 
     const order = await db.order.findFirst({
       where: {
         businessId: business.id,
         businessDate,
-        OR: [
-          ...(isCode ? [{ code: codeNum }] : []),
-          { customerPhone: { contains: q } },
-        ],
+        // Igualdad, no `contains`: con `contains` un número corto barría los
+        // pedidos de todos los que lo tuvieran adentro.
+        ...(pareceId ? { id: q } : { customerPhone: soloDigitos }),
       },
       orderBy: { openedAt: "desc" },
       select: {
@@ -351,12 +412,16 @@ export async function consultarEstadoPedidoQR(businessSlug: string, query: strin
     });
 
     if (!order) {
-      return { ok: false, error: "No se encontró ningún pedido reciente con este número de celular o código." };
+      return {
+        ok: false,
+        error: "No encontramos un pedido de hoy con ese celular. Revisá el número, o pedile al mesero que lo busque.",
+      };
     }
 
     return { ok: true, order };
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : "No se pudo consultar el pedido.";
-    return { ok: false, error: errorMsg };
+    if (err instanceof ErrorDeUsuario) return { ok: false, error: err.message };
+    console.error("[qr] no se pudo consultar el pedido", err);
+    return { ok: false, error: "No se pudo consultar el pedido." };
   }
 }

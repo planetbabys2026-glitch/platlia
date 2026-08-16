@@ -10,8 +10,10 @@ import { ModuloPosInteractive } from "@/app/(app)/pos/modulo-pos-interactive";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
+import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { requireModule, tieneRol } from "@/lib/auth/dal";
 import { formatCop } from "@/lib/money";
+import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { Carta } from "./carta";
 import { CuentaMovil } from "./cuenta-movil";
@@ -66,12 +68,14 @@ export default async function PedidoPage({
         caja={caja}
         pedidosAbiertos={pedidos}
         pedidoInicial={pedido}
-        puedeFacturar={puedeFacturarElectronicamente(settings)}
+        puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}
         settings={{
           deliveryEnabled: settings.deliveryEnabled,
           requireOpenCashSession: settings.requireOpenCashSession,
           cashRoundingCop: settings.cashRoundingCop,
           pricesIncludeTax: settings.pricesIncludeTax,
+          tipSuggestionEnabled: settings.tipSuggestionEnabled,
+          tipSuggestionRateBp: settings.tipSuggestionRateBp,
         }}
       />
     );
@@ -79,6 +83,9 @@ export default async function PedidoPage({
 
   const editable = pedido.status === "ABIERTA" || pedido.status === "CUENTA_PEDIDA";
   const renglones = pedido.items.filter((i) => i.status !== "ANULADO");
+  const itemsSinEnviarCount = pedido.items.filter(
+    (i) => i.status === "PENDIENTE" && i.sentToKitchenAt === null,
+  ).length;
   const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);
   const nombreDeCuenta = pedido.customerName?.trim() || null;
   // El mesero canta y ajusta la mesa, pero no factura: anularItem, anularPedido
@@ -101,6 +108,7 @@ export default async function PedidoPage({
               orderId={pedido.id}
               turnNumber={pedido.turnNumber}
               isMesa={pedido.type === "MESA"}
+              itemsSinEnviarCount={itemsSinEnviarCount}
             />
           }
         />
@@ -113,18 +121,38 @@ export default async function PedidoPage({
         </CardContent>
       </Card>
 
-      {/* Botón para imprimir ticket con el turno asignado */}
-      <a
-        href={`/imprimir/pedido/${pedido.id}`}
-        target="_blank"
-        rel="noopener"
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-all shadow-sm"
-      >
-        🖨️ Imprimir ticket {pedido.turnNumber !== null ? `(Turno ${formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")})` : ""}
-      </a>
+      {/* Botón para imprimir ticket: solo visible en modo POS (venta rápida mostrador) o cuando ya está cobrado/facturado en caja */}
+      {(pedido.type !== "MESA" || pedido.status === "PAGADA") && (
+        <a
+          href={`/imprimir/pedido/${pedido.id}`}
+          target="_blank"
+          rel="noopener"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-all shadow-sm"
+        >
+          🖨️ Imprimir ticket {pedido.turnNumber !== null ? `(Turno ${formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")})` : ""}
+        </a>
+      )}
 
       {pedido.status === "ABIERTA" && pedido.type === "MESA" && (
-        <SegunConsumo conConsumo={<PedirCuenta orderId={pedido.id} esMesa={true} />} />
+        <SegunConsumo
+          conConsumo={
+            <PedirCuenta
+              orderId={pedido.id}
+              esMesa={true}
+              tipActualCop={pedido.tipCop}
+              propina={{
+                habilitada: settings.tipSuggestionEnabled,
+                rateBp: settings.tipSuggestionRateBp,
+                // Sobre el consumo completo, descontando la propina que ya
+                // tuviera para no calcular un porcentaje sobre otra propina.
+                sugeridaCop: computeSuggestedTip(
+                  pedido.totalCop - pedido.tipCop,
+                  settings.tipSuggestionRateBp,
+                ),
+              }}
+            />
+          }
+        />
       )}
 
       {/* En modo POS (pedido rápido), se permite facturar/cobrar directamente sin enviar a caja */}
@@ -243,15 +271,17 @@ export default async function PedidoPage({
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Ventana nueva: la impresión no puede sacar al cajero de la cuenta. */}
-          <a
-            href={`/imprimir/pedido/${pedido.id}`}
-            target="_blank"
-            rel="noopener"
-            className="text-primary text-sm font-medium hover:underline"
-          >
-            Imprimir cuenta
-          </a>
+          {/* Ventana nueva: la impresión de cuenta solo para roles de caja/admin o en pedidos cobrados */}
+          {(puedeCobrar || pedido.type !== "MESA" || pedido.status === "PAGADA") && (
+            <a
+              href={`/imprimir/pedido/${pedido.id}`}
+              target="_blank"
+              rel="noopener"
+              className="text-primary text-sm font-medium hover:underline"
+            >
+              Imprimir cuenta
+            </a>
+          )}
           {/* Se vuelve a la mesa, no al salón: es donde están las otras cuentas
               del mismo grupo y desde donde se abre una más. */}
           <Link

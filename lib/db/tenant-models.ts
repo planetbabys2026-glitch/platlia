@@ -59,6 +59,9 @@ export const GLOBAL_MODELS: ReadonlySet<string> = new Set([
   // La lista de precios es de Platlia, no de un negocio: la edita el
   // superadministrador y la leen todos por igual.
   "ListaDePrecios",
+  // La bolsa de documentos electrónicos también: se le compra a Factus a nombre
+  // de la plataforma y después se reparte entre los negocios.
+  "CompraDocumentosDian",
 ]);
 
 /**

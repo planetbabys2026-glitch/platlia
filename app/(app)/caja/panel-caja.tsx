@@ -1,13 +1,14 @@
 "use client";
 
 import { useVistaEnUrl } from "@/lib/vista-en-url";
-import { ArrowDownUp, CreditCard } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCop } from "@/lib/money";
 import { formatDateTimeInTimeZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { vistaInicialDeCaja } from "../navegacion";
 import { CuentasPorCobrar } from "./cuentas-por-cobrar";
 import { AbrirCaja, CerrarCaja, Movimiento } from "./formularios";
+import { VentasCobradas } from "./ventas-cobradas";
 
 const TIPO: Record<string, string> = {
   INGRESO: "Entrada",
@@ -48,8 +49,15 @@ type PanelCajaProps = {
     createdAt: Date;
   }>;
   cuentas: React.ComponentProps<typeof CuentasPorCobrar>["cuentas"];
+  cobradas: React.ComponentProps<typeof VentasCobradas>["pedidos"];
+  cobradasTotal: number;
+  cobradasTope: number;
+  jornada: Date;
+  esHoy: boolean;
   /** Si el negocio está en condiciones de emitir factura electrónica. */
   puedeFacturar: boolean;
+  /** Si el negocio sugiere propina al cobrar, y con qué tarifa. */
+  propina: { habilitada: boolean; rateBp: number };
   usaMesas: boolean;
   timeZone: string;
 };
@@ -60,73 +68,34 @@ export function PanelCaja({
   resumen,
   movimientos,
   cuentas,
+  cobradas,
+  cobradasTotal,
+  cobradasTope,
+  jornada,
+  esHoy,
   puedeFacturar,
+  propina,
   usaMesas,
   timeZone,
 }: PanelCajaProps) {
   /**
-   * La pestaña vive en la URL para que el menú lateral pueda enlazarla.
+   * La sección vive en la URL para que el menú lateral pueda enlazarla, y la
+   * tira de píldoras que había acá se fue: el menú es el único navegador, como
+   * en Informes.
    *
-   * Se perdió una comodidad al hacerlo: antes arrancaba en "movimientos" cuando
-   * no había cuentas por cobrar. Ahora la vista por defecto es siempre "cobros",
-   * porque una pestaña que cambia sola según los datos no se puede enlazar —el
-   * mismo enlace llevaría a lugares distintos según la hora del día—.
+   * La vista de entrada depende de `usaMesas` —un negocio de mostrador no tiene
+   * cuentas de mesa que cobrar— y sale del mismo lugar que la lista del menú,
+   * para que no puedan divergir. Es configuración del negocio, no dato del
+   * momento: el enlace sigue llevando siempre al mismo lado.
    */
-  const [tabActiva, setTabActiva] = useVistaEnUrl(
+  const [tabActiva] = useVistaEnUrl(
     "vista",
-    ["cobros", "movimientos"] as const,
-    "cobros",
+    ["cobros", "cobradas", "movimientos"] as const,
+    vistaInicialDeCaja(usaMesas),
   );
 
   return (
     <div className="space-y-6">
-      {/* ─────────────────────────────────────────────────────────────
-          Navegación por Píldoras (Los 2 Módulos de Caja)
-          ───────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-border/80 pb-3 overflow-x-auto scrollbar-none">
-        {usaMesas && (
-          <button
-            type="button"
-            onClick={() => setTabActiva("cobros")}
-            className={cn(
-              "inline-flex min-h-11 tableta:min-h-9 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
-              tabActiva === "cobros"
-                ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
-                : "bg-[var(--panel-2)] text-muted-foreground border-[var(--linea-30)] hover:text-[var(--papel)]",
-            )}
-          >
-            <CreditCard className="h-4 w-4 shrink-0" />
-            <span>Cobro de Cuentas (Salón / Mesas)</span>
-            {cuentas.length > 0 && (
-              <span
-                className={cn(
-                  "ml-1 rounded-full px-2 py-0.5 text-rotulo font-extrabold",
-                  tabActiva === "cobros"
-                    ? "bg-[var(--tinta)] text-[var(--papel)]"
-                    : "bg-[var(--brasa)]/20 text-[var(--brasa)]",
-                )}
-              >
-                {cuentas.length}
-              </span>
-            )}
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setTabActiva("movimientos")}
-          className={cn(
-            "inline-flex min-h-11 tableta:min-h-9 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
-            tabActiva === "movimientos"
-              ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
-              : "bg-[var(--panel-2)] text-muted-foreground border-[var(--linea-30)] hover:text-[var(--papel)]",
-          )}
-        >
-          <ArrowDownUp className="h-4 w-4 shrink-0" />
-          <span>Movimientos y Cierre de Turno</span>
-        </button>
-      </div>
-
       {/* ─────────────────────────────────────────────────────────────
           MÓDULO 1: COBRO DE CUENTAS (SALÓN / MESAS)
           ───────────────────────────────────────────────────────────── */}
@@ -138,12 +107,31 @@ export function PanelCaja({
               Tickets y pedidos enviados a la caja desde el módulo de Salón.
             </p>
           </div>
-          <CuentasPorCobrar cuentas={cuentas} puedeFacturar={puedeFacturar} />
+          <CuentasPorCobrar
+            cuentas={cuentas}
+            puedeFacturar={puedeFacturar}
+            propina={propina}
+          />
         </div>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          MÓDULO 2: MOVIMIENTOS, ARQUEO Y CIERRE DE TURNO
+          MÓDULO 2: LO QUE YA SE COBRÓ
+          ───────────────────────────────────────────────────────────── */}
+      {tabActiva === "cobradas" && (
+        <VentasCobradas
+          pedidos={cobradas}
+          puedeFacturar={puedeFacturar}
+          total={cobradasTotal}
+          tope={cobradasTope}
+          jornada={jornada}
+          esHoy={esHoy}
+          timeZone={timeZone}
+        />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MÓDULO 3: MOVIMIENTOS, ARQUEO Y CIERRE DE TURNO
           ───────────────────────────────────────────────────────────── */}
       {tabActiva === "movimientos" && (
         <div className="space-y-6">

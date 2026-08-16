@@ -44,7 +44,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
       inventoryMovement: {
         create: vi.fn().mockResolvedValue({}),
       },
-    } as any;
+    } as unknown as Parameters<typeof verificarYDescontarStockReceta>[0];
 
     await verificarYDescontarStockReceta(mockTx, "biz-1", "prod-1", 3, {
       referenceId: "order-1",
@@ -97,7 +97,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
       },
       inventoryItem: { update: vi.fn() },
       inventoryMovement: { create: vi.fn() },
-    } as any;
+    } as unknown as Parameters<typeof verificarYDescontarStockReceta>[0];
 
     await expect(
       verificarYDescontarStockReceta(mockTx, "biz-1", "prod-1", 3, {
@@ -141,7 +141,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
       inventoryMovement: {
         create: vi.fn().mockResolvedValue({}),
       },
-    } as any;
+    } as unknown as Parameters<typeof restaurarStockReceta>[0];
 
     await restaurarStockReceta(mockTx, "biz-1", "prod-1", 2, {
       referenceId: "order-1",
@@ -194,7 +194,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
       },
       inventoryItem: { update: vi.fn() },
       inventoryMovement: { create: vi.fn() },
-    } as any;
+    } as unknown as Parameters<typeof ajustarStockCantidadReceta>[0];
 
     // Aumento de cantidad: de 2 a 5 (+3 porciones)
     await ajustarStockCantidadReceta(mockTx, "biz-1", "prod-1", 2, 5, {
@@ -293,7 +293,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           },
         ],
       },
-    ] as any;
+    ] as unknown as Parameters<typeof auditarStockCarritoRecetas>[1];
 
     // 2 sencillas (requiere 2 panes) + 1 doble (requiere 2 panes) = 4 panes requeridos. Stock actual: 3.
     const cart = [

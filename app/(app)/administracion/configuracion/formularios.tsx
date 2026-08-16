@@ -3,8 +3,9 @@
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ReceiptWidth } from "@/generated/prisma/enums";
-import { guardarConfiguracionFactus, guardarDatosNegocio, probarConexionFactus, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
+import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { pagarSuscripcion, solicitarSedeAdicional } from "@/features/facturacion/actions";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { enlaceWhatsapp } from "@/lib/soporte";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
@@ -284,6 +286,7 @@ export function FormularioModulos({
   recipesEnabled: boolean;
 }) {
   const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
+  const [invChecked, setInvChecked] = useState(inventoryEnabled);
 
   return (
     <form action={accion} className="space-y-4">
@@ -307,12 +310,39 @@ export function FormularioModulos({
         ayuda="Si lo apagás, 'Domicilio' deja de ofrecerse como tipo de pedido."
       />
 
-      <Casilla
-        name="inventoryEnabled"
-        label="Gestión de Inventario (Insumos, Entradas por Factura y Stock)"
-        defaultChecked={inventoryEnabled}
-        ayuda="Al activarlo, aparece el módulo de Inventario en el menú superior para propietarios, administradores y cajeros."
-      />
+      <div className="space-y-2">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            name="inventoryEnabled"
+            checked={invChecked}
+            onChange={(e) => setInvChecked(e.target.checked)}
+            className="size-4 mt-0.5 rounded border-[var(--linea-30)] accent-brand cursor-pointer"
+          />
+          <div className="space-y-0.5">
+            <span className="font-semibold text-sm text-foreground block">
+              Gestión de Inventario (Insumos, Entradas por Factura y Stock)
+            </span>
+            <span className="text-muted-foreground text-xs block">
+              Al activarlo, aparece el módulo de Inventario en el menú superior para propietarios, administradores y cajeros.
+            </span>
+          </div>
+        </label>
+
+        {invChecked && !inventoryEnabled && (
+          <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning-soft flex items-start gap-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+            <AlertTriangle className="size-4 shrink-0 text-warning mt-0.5" />
+            <div className="space-y-0.5">
+              <strong className="font-bold text-foreground block">
+                ⚠️ Reinicio de stock al activar inventario
+              </strong>
+              <span>
+                Al guardar con el inventario activado, todos los stocks (insumos y productos) se establecerán en <strong>0</strong> para que puedas registrar tu inventario inicial real y evitar saldos negativos por ventas anteriores.
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
 
       <Casilla
         name="recipesEnabled"
@@ -2027,294 +2057,156 @@ export type FactusSettings = {
   documentosEmitidosConsumidos: number;
   factusNumberingRangeId: number | null;
   municipalityCode: string | null;
-  identificationDocumentCode?: string | null;
-  legalOrganizationCode?: string | null;
-  tributeCode?: string | null;
-  responsibilities?: string | null;
-  /**
-   * Si cada credencial está cargada. Booleanos y no los valores: son secretos y
-   * no tienen por qué cruzar del servidor al navegador para pintar un formulario.
-   */
-  tieneClientId: boolean;
-  tieneClientSecret: boolean;
-  tieneUsername: boolean;
-  tienePassword: boolean;
   /** Lo que falta para poder facturar, calculado en el servidor. */
   faltantes: string[];
 };
 
-/** Campo de credencial: vacío significa "no la cambies". */
-function CampoSecreto({
-  id,
-  label,
-  cargada,
-  tipo = "password",
-}: {
-  id: string;
-  label: string;
-  cargada: boolean;
-  tipo?: "text" | "password";
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs font-semibold">
-        {label} {!cargada && <span className="text-destructive">*</span>}
-      </Label>
-      <Input
-        id={id}
-        name={id}
-        type={tipo}
-        autoComplete="off"
-        placeholder={cargada ? "•••••••• (guardada)" : "Pegá el valor de Factus"}
-        className="h-10 text-xs rounded-xl font-mono"
-      />
-      <span className="text-rotulo text-muted-foreground block">
-        {cargada
-          ? "Ya está guardada. Dejalo vacío para conservarla."
-          : "Todavía no está cargada."}
-      </span>
-    </div>
-  );
-}
-
+/**
+ * El estado fiscal del negocio, de solo lectura.
+ *
+ * Acá se editaban las credenciales de Factus y el rango de numeración. Ya no: la
+ * cuenta de Factus es de la plataforma —Factus nos vende una bolsa de documentos
+ * y Platlia la reparte—, así que las credenciales viven en el entorno y el rango
+ * que la DIAN le autorizó a este NIT lo asigna el superadministrador. Un dígito
+ * equivocado en ese id es una factura rechazada que aparece recién al emitir, con
+ * el cliente esperando en la caja.
+ *
+ * Lo que sí necesita ver el dueño está todo acá: si está prendido, cuántos
+ * documentos le quedan, con qué rango se está facturando y a quién escribirle.
+ */
 export function FormularioFactus({ settings }: { settings: FactusSettings }) {
-  const [estado, accion] = useActionState(guardarConfiguracionFactus, ESTADO_INICIAL);
-  const [prueba, probar, probando] = useActionState(probarConexionFactus, ESTADO_INICIAL);
-
   const habilitado = settings.facturacionElectronicaHabilitada;
   const disponibles = settings.paquetesDocumentosDisponibles ?? 0;
   const consumidos = settings.documentosEmitidosConsumidos ?? 0;
   const remanentes = Math.max(0, disponibles - consumidos);
   const listo = settings.faltantes.length === 0;
 
-  return (
-    <div className="space-y-6">
-      {!habilitado ? (
-        <div className="p-5 rounded-2xl bg-warning/10 border border-warning/30 text-warning-soft space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-bold">🚫 Módulo de Facturación Electrónica DIAN Deshabilitado</span>
-          </div>
+  if (!habilitado) {
+    return (
+      <div className="space-y-4">
+        <div className="space-y-2 rounded-2xl border border-warning/30 bg-warning/10 p-5 text-warning-soft">
+          <p className="text-base font-bold">Facturación electrónica DIAN no habilitada</p>
           <p className="text-xs leading-relaxed opacity-90">
-            La generación de facturas electrónicas con la API de Factus DIAN es una función opcional con costo adicional por paquete de documentos.
-            Contacta a nuestro equipo comercial o de soporte desde el botón de ayuda para adquirir y desbloquear tu paquete de documentos electrónicamente.
+            Emitir facturas electrónicas ante la DIAN es un módulo opcional: se cobra por paquete de
+            documentos. Escribinos y lo activamos para este negocio.
           </p>
         </div>
+        <EnlaceSoporte />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Documentos del paquete */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Recuadro rotulo="Paquete asignado" valor={disponibles} unidad="docs" />
+        <Recuadro rotulo="Emitidos" valor={consumidos} unidad="docs" />
+        <Recuadro
+          rotulo="Disponibles"
+          valor={remanentes}
+          unidad="docs"
+          alerta={remanentes === 0}
+        />
+      </div>
+
+      {remanentes === 0 && (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>
+            No quedan documentos en el paquete: las ventas se siguen cobrando, pero no se puede
+            emitir factura electrónica hasta recargarlo.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Con qué se está facturando */}
+      <div className="space-y-3 rounded-2xl border border-[var(--linea-16)] bg-[var(--panel)] p-5">
+        <h3 className="font-display text-lg font-black uppercase tracking-tight">
+          Resolución y datos DIAN
+        </h3>
+        <dl className="space-y-2 text-xs">
+          <Dato
+            termino="Rango de numeración"
+            valor={
+              settings.factusNumberingRangeId
+                ? `#${settings.factusNumberingRangeId}`
+                : "Sin asignar"
+            }
+          />
+          <Dato termino="Código DANE del municipio" valor={settings.municipalityCode ?? "—"} />
+        </dl>
+        <p className="text-rotulo text-muted-foreground">
+          Los asigna el equipo de Platlia con la resolución que la DIAN le autorizó a tu NIT.
+        </p>
+      </div>
+
+      {/* Estado */}
+      {listo ? (
+        <Alert className="border-success/40 bg-success/10 text-success-soft">
+          <AlertDescription>
+            Todo listo: al cobrar podés marcar &quot;factura electrónica&quot; y emitirla desde
+            Caja, en la sección de cuentas cobradas.
+          </AlertDescription>
+        </Alert>
       ) : (
-        <form action={accion} className="space-y-6">
-          {!estado.ok && estado.error && (
-            <Alert variant="destructive" role="alert">
-              <AlertDescription>{estado.error}</AlertDescription>
-            </Alert>
-          )}
-
-          {estado.ok && (
-            <Alert className="border-success/40 bg-success/10 text-success-soft">
-              <AlertDescription>¡Configuración DIAN guardada con éxito!</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Tarjeta de Resumen de Paquete */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-4 rounded-xl bg-brand/5 border border-brand/20 space-y-1">
-              <span className="text-rotulo font-semibold text-muted-foreground uppercase">Paquete Total</span>
-              <p className="numeral text-2xl font-bold text-brand">{disponibles} <span className="text-xs font-normal">docs</span></p>
-            </div>
-            <div className="p-4 rounded-xl bg-card border border-border space-y-1">
-              <span className="text-rotulo font-semibold text-muted-foreground uppercase">Emitidos / Consumidos</span>
-              <p className="numeral text-2xl font-bold text-foreground">{consumidos} <span className="text-xs font-normal">docs</span></p>
-            </div>
-            <div className="p-4 rounded-xl bg-success/10 border border-success/30 space-y-1">
-              <span className="text-rotulo font-semibold text-success-soft uppercase">Remanentes</span>
-              <p className="numeral text-2xl font-bold text-success-soft">{remanentes} <span className="text-xs font-normal">docs</span></p>
-            </div>
-          </div>
-
-          {/* Estado: la única forma de que el dueño sepa por qué el cobro no le
-              ofrece facturar. Antes no había ninguna: la opción simplemente no
-              aparecía y no había nada que mirar. */}
-          <div
-            className={cn(
-              "p-4 rounded-xl border space-y-2",
-              listo
-                ? "bg-success/10 border-success/30"
-                : "bg-warning/10 border-warning/30",
-            )}
-          >
-            {listo ? (
-              <p className="text-sm font-bold text-success-soft">
-                ✅ Listo para facturar · {remanentes} documentos disponibles
-              </p>
-            ) : (
-              <>
-                <p className="text-sm font-bold text-warning-soft">
-                  Falta configurar para poder facturar
-                </p>
-                <ul className="list-disc space-y-0.5 pl-5 text-xs text-warning-soft">
-                  {settings.faltantes.map((falta) => (
-                    <li key={falta}>{falta}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            <p className="text-rotulo text-muted-foreground">
-              Mientras esto no esté completo, el cobro en Caja y en el POS no pide
-              datos del cliente y toda venta se factura a consumidor final.
-            </p>
-          </div>
-
-          {/* Credenciales de la API */}
-          <div className="space-y-4 pt-2">
-            <h3 className="font-semibold text-sm text-foreground">Credenciales de Factus</h3>
-            <p className="text-xs text-muted-foreground">
-              Las entrega Factus al activar tu cuenta. Se guardan en este negocio y
-              no se vuelven a mostrar.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <CampoSecreto
-                id="factusClientId"
-                label="Client ID"
-                cargada={settings.tieneClientId}
-                tipo="text"
-              />
-              <CampoSecreto
-                id="factusClientSecret"
-                label="Client Secret"
-                cargada={settings.tieneClientSecret}
-              />
-              <CampoSecreto
-                id="factusUsername"
-                label="Usuario"
-                cargada={settings.tieneUsername}
-                tipo="text"
-              />
-              <CampoSecreto
-                id="factusPassword"
-                label="Contraseña"
-                cargada={settings.tienePassword}
-              />
-            </div>
-          </div>
-
-          {/* Formulario de Parámetros DIAN para esta Sede */}
-          <div className="space-y-4 pt-2">
-            <h3 className="font-semibold text-sm text-foreground">Parámetros de Facturación DIAN (Esta Sucursal)</h3>
-            <p className="text-xs text-muted-foreground">
-              Especifica los datos fiscales y rangos de resolución aprobados por la DIAN para esta sede.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="factusNumberingRangeId" className="text-xs font-semibold">ID Rango Numeración / Resolución DIAN *</Label>
-                <Input
-                  id="factusNumberingRangeId"
-                  name="factusNumberingRangeId"
-                  type="number"
-                  defaultValue={settings.factusNumberingRangeId ?? ""}
-                  placeholder="Ej. 389"
-                  className="h-10 text-xs rounded-xl font-mono"
-                  required
-                />
-                <span className="text-rotulo text-muted-foreground block">ID del rango activo obtenido en Factus para tus facturas.</span>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="municipalityCode" className="text-xs font-semibold">Código Municipio DANE / DIAN *</Label>
-                <Input
-                  id="municipalityCode"
-                  name="municipalityCode"
-                  defaultValue={settings.municipalityCode ?? "05001"}
-                  placeholder="Ej. 68679 (Floridablanca) / 05001 (Medellín)"
-                  className="h-10 text-xs rounded-xl font-mono"
-                  required
-                />
-                <span className="text-rotulo text-muted-foreground block">Código DANE oficial de 5 dígitos del municipio de la sede.</span>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="legalOrganizationCode" className="text-xs font-semibold">Organización Jurídica *</Label>
-                <select
-                  id="legalOrganizationCode"
-                  name="legalOrganizationCode"
-                  defaultValue={settings.legalOrganizationCode ?? "1"}
-                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
-                >
-                  <option value="1">1 - Persona Jurídica (Empresa / Sociedad SAS)</option>
-                  <option value="2">2 - Persona Natural (Comerciante Individual)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="identificationDocumentCode" className="text-xs font-semibold">Tipo Documento de Identificación *</Label>
-                <select
-                  id="identificationDocumentCode"
-                  name="identificationDocumentCode"
-                  defaultValue={settings.identificationDocumentCode ?? "31"}
-                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
-                >
-                  <option value="31">31 - NIT (Número de Identificación Tributaria)</option>
-                  <option value="13">13 - Cédula de Ciudadanía</option>
-                  <option value="22">22 - Cédula de Extranjería</option>
-                  <option value="41">41 - Pasaporte</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="tributeCode" className="text-xs font-semibold">Código de Tributo Principal DIAN *</Label>
-                <select
-                  id="tributeCode"
-                  name="tributeCode"
-                  defaultValue={settings.tributeCode ?? "ZZ"}
-                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
-                >
-                  <option value="ZZ">ZZ - No aplica / Exento / Excluido</option>
-                  <option value="01">01 - IVA (Impuesto al Valor Agregado 19%)</option>
-                  <option value="04">04 - INC (Impuesto Nacional al Consumo 8%)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="responsibilities" className="text-xs font-semibold">Responsabilidad Fiscal DIAN *</Label>
-                <select
-                  id="responsibilities"
-                  name="responsibilities"
-                  defaultValue={settings.responsibilities ?? "R-99-PN"}
-                  className="w-full h-10 rounded-xl border border-input px-3 text-xs bg-background"
-                >
-                  <option value="R-99-PN">R-99-PN - No responsable de IVA</option>
-                  <option value="O-13">O-13 - Gran Contribuyente</option>
-                  <option value="O-15">O-15 - Autorretenedor</option>
-                  <option value="O-47">O-47 - Régimen Simple de Tributación (RST)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <Enviar>Guardar Parámetros DIAN</Enviar>
-          </div>
-        </form>
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>
+            <span className="font-bold">Falta algo para poder facturar:</span>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {settings.faltantes.map((falta) => (
+                <li key={falta}>{falta}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Fuera del <form> de guardar: son dos envíos distintos y anidar
-          formularios no es válido en HTML. */}
-      {habilitado && (
-        <form action={probar} className="space-y-2 border-t border-border pt-4">
-          <Button type="submit" variant="outline" disabled={probando} className="h-10 text-xs">
-            {probando ? "Probando…" : "Probar conexión con Factus"}
-          </Button>
-          {!prueba.ok && prueba.error && (
-            <Alert variant="destructive" role="alert">
-              <AlertDescription>{prueba.error}</AlertDescription>
-            </Alert>
-          )}
-          {prueba.ok && prueba.data && (
-            <Alert className="border-success/40 bg-success/10 text-success-soft">
-              <AlertDescription>{prueba.data.mensaje}</AlertDescription>
-            </Alert>
-          )}
-        </form>
-      )}
+      <EnlaceSoporte />
     </div>
+  );
+}
+
+function Recuadro({
+  rotulo,
+  valor,
+  unidad,
+  alerta,
+}: {
+  rotulo: string;
+  valor: number;
+  unidad: string;
+  alerta?: boolean;
+}) {
+  return (
+    <div className="space-y-1 rounded-xl border border-[var(--linea-16)] bg-[var(--panel-2)] p-4">
+      <span className="text-rotulo font-semibold uppercase text-muted-foreground">{rotulo}</span>
+      <p
+        className={`numeral text-2xl font-bold ${alerta ? "text-destructive-soft" : "text-foreground"}`}
+      >
+        {valor} <span className="text-xs font-normal text-muted-foreground">{unidad}</span>
+      </p>
+    </div>
+  );
+}
+
+function Dato({ termino, valor }: { termino: string; valor: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-[var(--linea-16)] pb-1.5 last:border-0">
+      <dt className="text-muted-foreground">{termino}</dt>
+      <dd className="font-mono font-bold text-foreground">{valor}</dd>
+    </div>
+  );
+}
+
+function EnlaceSoporte() {
+  return (
+    <a
+      href={enlaceWhatsapp("Quiero hablar sobre la facturación electrónica DIAN.")}
+      target="_blank"
+      rel="noopener"
+      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-brand/40 bg-brand/10 px-4 text-xs font-bold text-brand transition-colors hover:bg-brand/20"
+    >
+      Escribirle a soporte
+    </a>
   );
 }

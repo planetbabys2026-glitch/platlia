@@ -16,6 +16,7 @@ import {
   liberarMesaSchema,
   pagoSchema,
   pedidoSchema,
+  pedirCuentaSchema,
   ponerNotaItemSchema,
   procesarVentaPosCompletaSchema,
   propinaSchema,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/redis";
 import { tieneRol } from "@/lib/auth/reglas";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
+import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { etiquetaDeCuenta } from "@/lib/salon/mesa";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
@@ -202,7 +204,7 @@ export const agregarItem = defineAction({
           isAvailable: true,
           active: true,
           trackStock: true,
-          taxRate: { select: { rateBp: true, name: true } },
+          taxRate: { select: { rateBp: true, name: true, kind: true } },
         },
       });
       if (!producto || !producto.active) throw new ErrorDeUsuario("Ese producto no existe.");
@@ -244,6 +246,7 @@ export const agregarItem = defineAction({
           basePriceCopSnapshot: producto.priceCop,
           taxRateBpSnapshot: producto.taxRate.rateBp,
           taxRateNameSnapshot: producto.taxRate.name,
+          taxKindSnapshot: producto.taxRate.kind,
           taxIncludedSnapshot: settings.pricesIncludeTax,
           quantity: input.quantity,
           lineSubtotalCop: linea.lineSubtotalCop,
@@ -280,7 +283,7 @@ export const cambiarCantidad = defineAction({
   schema: cambiarCantidadSchema,
   roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
-  async handler({ input, db }) {
+  async handler({ input, ctx, db }) {
     const orderId = await db.$transaction(async (tx) => {
       const item = await tx.orderItem.findFirst({
         where: { id: input.itemId },
@@ -289,10 +292,16 @@ export const cambiarCantidad = defineAction({
           orderId: true,
           quantity: true,
           unitPriceCop: true,
-          discountCop: true,
+          basePriceCopSnapshot: true,
           taxRateBpSnapshot: true,
+          taxRateNameSnapshot: true,
+          taxKindSnapshot: true,
           taxIncludedSnapshot: true,
+          nameSnapshot: true,
+          notes: true,
+          discountCop: true,
           status: true,
+          sentToKitchenAt: true,
           productId: true,
           businessId: true,
           product: { select: { trackStock: true } },
@@ -303,6 +312,85 @@ export const cambiarCantidad = defineAction({
       if (item.status === "ANULADO") throw new ErrorDeUsuario("Ese renglón está anulado.");
       if (item.order.status === "PAGADA" || item.order.status === "ANULADA") {
         throw new ErrorDeUsuario("El pedido ya está cerrado.");
+      }
+
+      const settings = await getSettings(item.businessId);
+
+      // Si el ítem ya fue enviado a cocina y se aumenta la cantidad,
+      // se crea un nuevo renglón para la adición en estado PENDIENTE (sentToKitchenAt: null),
+      // para que cocina reciba la comanda del plato adicional al confirmar.
+      if (item.status !== "PENDIENTE" || item.order.status === "CUENTA_PEDIDA") {
+        if (input.quantity > item.quantity) {
+          const delta = input.quantity - item.quantity;
+          const lineaDelta = computeTaxLine({
+            unitPriceCop: item.unitPriceCop,
+            quantity: delta,
+            taxRateBp: item.taxRateBpSnapshot,
+            taxIncluded: item.taxIncludedSnapshot,
+            discountCop: 0,
+          });
+
+          // Obtener modificadores para clonarlos en la adición
+          const modificadoresOriginales = await tx.orderItemModifier.findMany({
+            where: { orderItemId: item.id },
+            select: {
+              optionId: true,
+              groupNameSnapshot: true,
+              optionNameSnapshot: true,
+              priceDeltaCopSnapshot: true,
+              sortOrder: true,
+            },
+          });
+
+          await tx.orderItem.create({
+            data: {
+              businessId: item.businessId,
+              orderId: item.orderId,
+              productId: item.productId,
+              nameSnapshot: item.nameSnapshot,
+              unitPriceCop: item.unitPriceCop,
+              basePriceCopSnapshot: item.basePriceCopSnapshot,
+              taxRateBpSnapshot: item.taxRateBpSnapshot,
+              taxRateNameSnapshot: item.taxRateNameSnapshot,
+              taxKindSnapshot: item.taxKindSnapshot,
+              taxIncludedSnapshot: item.taxIncludedSnapshot,
+              quantity: delta,
+              lineSubtotalCop: lineaDelta.lineSubtotalCop,
+              lineTaxCop: lineaDelta.lineTaxCop,
+              lineTotalCop: lineaDelta.lineTotalCop,
+              notes: item.notes,
+              createdById: ctx.user.id,
+              sentToKitchenAt: null,
+              status: "PENDIENTE",
+              modifiers: {
+                create: modificadoresOriginales.map((m) => ({
+                  businessId: item.businessId,
+                  optionId: m.optionId,
+                  groupNameSnapshot: m.groupNameSnapshot,
+                  optionNameSnapshot: m.optionNameSnapshot,
+                  priceDeltaCopSnapshot: m.priceDeltaCopSnapshot,
+                  sortOrder: m.sortOrder,
+                })),
+              },
+            },
+          });
+
+          await ajustarStockCantidadReceta(
+            tx,
+            item.businessId,
+            item.productId,
+            0,
+            delta,
+            {
+              referenceId: item.orderId,
+              inventoryEnabled: settings.inventoryEnabled,
+              modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
+            },
+          );
+
+          await recalcularTotales(tx, item.orderId);
+          return item.orderId;
+        }
       }
 
       // Se recalcula con la tarifa CONGELADA en el renglón, no con la vigente.
@@ -324,7 +412,6 @@ export const cambiarCantidad = defineAction({
         },
       });
 
-      const settings = await getSettings(item.businessId);
       await ajustarStockCantidadReceta(
         tx,
         item.businessId,
@@ -521,13 +608,13 @@ export const anularItem = defineAction({
 });
 
 export const pedirCuenta = defineAction({
-  schema: pedidoSchema,
+  schema: pedirCuentaSchema,
   roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
   async handler({ input, db, ctx }) {
     const pedido = await db.order.findFirst({
       where: { id: input.orderId },
-      select: { id: true, status: true, tableId: true },
+      select: { id: true, status: true, tableId: true, tipCop: true },
     });
     if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
     if (pedido.status !== "ABIERTA") {
@@ -535,6 +622,21 @@ export const pedirCuenta = defineAction({
     }
 
     await db.$transaction(async (tx) => {
+      /**
+       * La propina se guarda en el mismo commit que manda la cuenta a caja.
+       *
+       * Es lo que hace que la pre-cuenta impresa muestre el total que de verdad
+       * se va a cobrar: si se eligiera recién en la caja, el papel que el mesero
+       * llevó a la mesa diría otra cosa.
+       */
+      if (input.tipCop !== undefined && input.tipCop !== pedido.tipCop) {
+        await tx.order.update({
+          where: { id: pedido.id },
+          data: { tipCop: input.tipCop },
+        });
+        await recalcularTotales(tx, pedido.id);
+      }
+
       await tx.order.update({
         where: { id: pedido.id },
         data: { status: "CUENTA_PEDIDA", billRequestedAt: new Date() },
@@ -591,6 +693,7 @@ export const registrarPago = defineAction({
           businessDate: true,
           totalCop: true,
           paidCop: true,
+          tipCop: true,
           tableId: true,
           cashSessionId: true,
         },
@@ -615,6 +718,21 @@ export const registrarPago = defineAction({
         changeCop = input.tenderedCop - input.amountCop;
       }
 
+      /**
+       * La propina se guarda ANTES del pago, para que el total contra el que se
+       * mide el faltante ya la incluya.
+       *
+       * Viene en el mismo cobro y no de una acción aparte: una propina cargada
+       * que después no se cobra deja el pedido con un total que nadie pagó. `0`
+       * es válido y significa que la deseleccionaron.
+       */
+      if (input.tipCop !== undefined && input.tipCop !== pedido.tipCop) {
+        await tx.order.update({
+          where: { id: pedido.id },
+          data: { tipCop: input.tipCop },
+        });
+      }
+
       await tx.orderPayment.create({
         data: {
           businessId: ctx.business.id,
@@ -632,7 +750,7 @@ export const registrarPago = defineAction({
       // Los datos para la factura electrónica viajan con el cobro, y se guardan
       // solo si el negocio de verdad puede emitir: el gate está acá y no solo en
       // la pantalla, porque una Server Action se alcanza por POST directo.
-      if (input.facturaElectronica && puedeFacturarElectronicamente(settings)) {
+      if (input.facturaElectronica && puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())) {
         await tx.order.update({
           where: { id: pedido.id },
           data: {
@@ -1012,7 +1130,7 @@ export const confirmarPedido = defineAction({
           table: { select: { name: true } },
           items: {
             where: { status: { not: "ANULADO" } },
-            select: { id: true },
+            select: { id: true, status: true, sentToKitchenAt: true },
           },
         },
       });
@@ -1032,18 +1150,29 @@ export const confirmarPedido = defineAction({
         turnNumber = await siguienteTurnoLibre(tx, pedido.businessDate, settings.turnNumberMax);
       }
 
+      const ahora = new Date();
+      const itemsPendientes = pedido.items.filter(
+        (i) => i.status === "PENDIENTE" && i.sentToKitchenAt === null,
+      );
+
+      // Si el pedido estaba en CUENTA_PEDIDA y se adicionaron platos, regresa a ABIERTA
+      const nuevoStatus = pedido.status === "CUENTA_PEDIDA" ? "ABIERTA" : pedido.status;
+
       await tx.order.update({
         where: { id: pedido.id },
         data: {
           turnNumber,
+          status: nuevoStatus,
           items: {
             updateMany: {
-              where: { status: "PENDIENTE" },
-              data: { sentToKitchenAt: new Date() },
+              where: { status: "PENDIENTE", sentToKitchenAt: null },
+              data: { sentToKitchenAt: ahora },
             },
           },
         },
       });
+
+      const cantNuevos = itemsPendientes.length > 0 ? itemsPendientes.length : pedido.items.length;
 
       return {
         turnNumber,
@@ -1054,7 +1183,7 @@ export const confirmarPedido = defineAction({
           mesa: pedido.table?.name ?? null,
           cuenta: pedido.customerName,
           turno: turnNumber,
-          productos: pedido.items.length,
+          productos: cantNuevos,
         }),
       };
     });
@@ -1100,7 +1229,7 @@ export const procesarVentaPosCompleta = defineAction({
     // puede emitir: el gate va acá y no solo en la pantalla, porque una Server
     // Action se alcanza por POST directo sin pasar por la interfaz.
     const datosFiscales =
-      input.facturaElectronica && puedeFacturarElectronicamente(settings)
+      input.facturaElectronica && puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())
         ? {
             docType: input.docType ?? null,
             docNumber: input.docNumber ?? null,
@@ -1294,7 +1423,7 @@ export const procesarVentaPosCompleta = defineAction({
               priceCop: true,
               isAvailable: true,
               active: true,
-              taxRate: { select: { rateBp: true, name: true } },
+              taxRate: { select: { rateBp: true, name: true, kind: true } },
             },
           });
 
@@ -1331,6 +1460,7 @@ export const procesarVentaPosCompleta = defineAction({
               basePriceCopSnapshot: producto.priceCop,
               taxRateBpSnapshot: producto.taxRate.rateBp,
               taxRateNameSnapshot: producto.taxRate.name,
+              taxKindSnapshot: producto.taxRate.kind,
               taxIncludedSnapshot: settings.pricesIncludeTax,
               quantity: itemInput.quantity,
               lineSubtotalCop: linea.lineSubtotalCop,
@@ -1362,6 +1492,15 @@ export const procesarVentaPosCompleta = defineAction({
           }
           const p = input.pago;
           if (!p) throw new ErrorDeUsuario("Faltan los datos del pago.");
+
+          // La propina va antes de recalcular, para que el total ya la incluya.
+          if (p.tipCop !== undefined && p.tipCop > 0) {
+            await tx.order.update({
+              where: { id: pedido.id },
+              data: { tipCop: p.tipCop },
+            });
+            await recalcularTotales(tx, pedido.id);
+          }
 
           const pActualizado = await tx.order.findUniqueOrThrow({
             where: { id: pedido.id },

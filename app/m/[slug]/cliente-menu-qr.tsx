@@ -24,9 +24,12 @@ import {
   type ProductoConModificadores,
 } from "@/features/carta/components/selector-modificadores";
 import { claveDeLinea } from "@/lib/modificadores";
+import { olvidarPedido, pedidoRecordado, recordarPedido } from "./pedido-recordado";
 import { SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { acentoSirveComoTexto, mezclarHacia, textoSobre } from "@/lib/contraste";
+import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
+import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 
@@ -81,12 +84,17 @@ type ClienteMenuQrProps = {
     qrMenuHeaderSubtitle: string | null;
     qrMenuAccent: string;
     turnNumberMax: number;
+    /** Si el negocio sugiere propina, y con qué tarifa. */
+    tipSuggestionEnabled: boolean;
+    tipSuggestionRateBp: number;
   };
   categorias: Categoria[];
   productos: Producto[];
   placeholderUrl: string | null;
   mesaParam?: string;
   tableIdParam?: string;
+  /** El QR apunta a una mesa que ya no existe o no es de este negocio. */
+  mesaInvalida?: boolean;
   tipoParam?: string;
 };
 
@@ -123,6 +131,7 @@ export function ClienteMenuQr({
   placeholderUrl,
   mesaParam,
   tableIdParam,
+  mesaInvalida,
 }: ClienteMenuQrProps) {
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>("todas");
   const [busqueda, setBusqueda] = useState("");
@@ -154,30 +163,55 @@ export function ClienteMenuQr({
   const [modalConsultaAbierto, setModalConsultaAbierto] = useState(false);
   const [pedidoActivoTrack, setPedidoActivoTrack] = useState<TrackedOrder | null>(null);
 
+  /**
+   * Al abrir la pantalla, recuperar el pedido de este teléfono.
+   *
+   * Solo se guarda el id, y solo por unas horas: ver `pedido-recordado.ts`. Si el
+   * servidor no lo encuentra —venció el día de negocio, o el pedido se anuló— se
+   * olvida en vez de dejar el recuerdo colgado para siempre.
+   */
+  useEffect(() => {
+    const id = pedidoRecordado(business.slug);
+    if (!id) return;
+
+    let vigente = true;
+    void (async () => {
+      const res = await consultarEstadoPedidoQR(business.slug, id);
+      if (!vigente) return;
+      if (res.ok && res.order) setPedidoActivoTrack(res.order as TrackedOrder);
+      else olvidarPedido(business.slug);
+    })();
+
+    return () => {
+      vigente = false;
+    };
+    // Solo al montar: es la recuperación de la sesión anterior.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Conectar a Redis SSE stream cuando hay un pedido siendo rastreado
   useEffect(() => {
     if (!pedidoActivoTrack?.id) return;
 
     const eventSource = new EventSource("/api/domicilios/stream");
     eventSource.onmessage = async () => {
-      const qTarget = pedidoActivoTrack.customerPhone || pedidoActivoTrack.code.toString();
-      if (qTarget) {
-        const res = await consultarEstadoPedidoQR(business.slug, qTarget);
-        if (res.ok && res.order) {
-          setPedidoActivoTrack(res.order as TrackedOrder);
-        }
+      // Por id: el pedido de mesa no tiene teléfono, y el número de pedido dejó
+      // de servir para consultar porque se adivinaba probando 1, 2, 3…
+      const res = await consultarEstadoPedidoQR(business.slug, pedidoActivoTrack.id);
+      if (res.ok && res.order) {
+        setPedidoActivoTrack(res.order as TrackedOrder);
       }
     };
 
     return () => {
       eventSource.close();
     };
-  }, [pedidoActivoTrack?.id, pedidoActivoTrack?.customerPhone, pedidoActivoTrack?.code, business.slug]);
+  }, [pedidoActivoTrack?.id, business.slug]);
 
   const consultarPedido = async (busquedaDirecta?: string) => {
     const target = (busquedaDirecta || queryConsulta).trim();
     if (!target) {
-      setErrorConsulta("Ingresá un celular o número de pedido.");
+      setErrorConsulta("Ingresá tu número de celular.");
       return;
     }
 
@@ -199,7 +233,10 @@ export function ClienteMenuQr({
     }
   };
 
-  const esMesa = Boolean(mesaParam);
+  // La mesa la resolvió el servidor contra la base: si hay id, hay mesa de verdad.
+  // Antes esto miraba la etiqueta de la URL, así que `?mesa=lo+que+sea` abría el
+  // flujo de mesa sin ninguna mesa detrás.
+  const esMesa = Boolean(tableIdParam);
   const logo = settings.qrMenuLogoUrl || business.logoUrl;
   const titulo = settings.qrMenuHeaderTitle || business.name;
   const subtitulo = settings.qrMenuHeaderSubtitle || (esMesa ? `Atención en Mesa ${mesaParam}` : "Menú Digital");
@@ -349,10 +386,24 @@ export function ClienteMenuQr({
     [cartList],
   );
 
+  const [propinaCop, setPropinaCop] = useState(0);
+
   const totalCop = useMemo(
     () => cartList.reduce((acc, i) => acc + precioUnitarioQR(i) * i.quantity, 0),
     [cartList],
   );
+
+  /**
+   * La propina que elige el propio comensal.
+   *
+   * Por QR no hay mesero a quién decirle que sí o que no, así que la decisión
+   * tiene que estar acá: si quedara para la caja, el pedido llegaría sin ella y
+   * alguien tendría que ir a preguntar a la mesa.
+   *
+   * Va sobre el consumo completo y no lleva impuesto.
+   */
+  const propinaSugeridaCop = computeSuggestedTip(totalCop, settings.tipSuggestionRateBp);
+  const totalConPropinaCop = totalCop + propinaCop;
 
   // Enviar pedido al backend
   const enviarPedido = async () => {
@@ -391,6 +442,7 @@ export function ClienteMenuQr({
         customerAddress: customerAddress.trim() || undefined,
         docType: docType || undefined,
         docNumber: docNumber.trim() || undefined,
+        tipCop: propinaCop,
         items: cartList.map((i) => ({
           productId: i.producto.id,
           modifierOptionIds: i.opciones.map((o) => o.id),
@@ -409,9 +461,12 @@ export function ClienteMenuQr({
       setCarrito({});
       setCarritoAbierto(false);
 
-      // Iniciar trazabilidad en vivo
-      const queryTarget = customerPhone.trim() || res.data.code.toString();
-      void consultarPedido(queryTarget);
+      // Queda recordado en este teléfono: si la pantalla se recarga, el rastreo
+      // vuelve solo en vez de obligarlo a acordarse de su número.
+      recordarPedido(business.slug, res.data.orderId);
+
+      // Por id y no por teléfono: el pedido de mesa no tiene teléfono.
+      void consultarPedido(res.data.orderId);
     } catch {
       setErrorEnvio("Ocurrió un error inesperado al enviar tu pedido.");
     } finally {
@@ -535,7 +590,17 @@ export function ClienteMenuQr({
       className="min-h-screen text-[color:var(--qr-texto)] selection:bg-[var(--qr-acento)] selection:text-[color:var(--qr-sobre-acento)]"
       style={{ ...backgroundStyle, ...tema }}
     >
-      <div className="mx-auto max-w-md min-h-screen flex flex-col relative pb-24 shadow-2xl bg-black/30 backdrop-blur-sm border-x border-white/10">
+      {/* El desenfoque va en una capa aparte, NO en este contenedor.
+          `backdrop-filter` crea un bloque contenedor para los descendientes
+          `position: fixed`, así que con el blur acá la barra del pedido se
+          anclaba al fondo de este div —1451px de menú— en vez de a la pantalla:
+          para verla había que deslizar hasta el final, que es justo lo que no
+          tiene que pasar. Lo mismo le ocurría al carrito y al rastreo. */}
+      <div className="mx-auto max-w-md min-h-screen flex flex-col relative pb-40 shadow-2xl border-x border-white/10">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-black/30 backdrop-blur-sm"
+        />
         
         {/* ─────────────────────────────────────────────────────────────
             HEADER / BRANDING DEL RESTAURANTE
@@ -557,6 +622,19 @@ export function ClienteMenuQr({
             <h1 className="text-2xl font-black tracking-tight text-[color:var(--qr-texto)]">{titulo}</h1>
             <p className="text-xs font-medium text-[color:var(--qr-texto-2)] mt-0.5">{subtitulo}</p>
           </div>
+
+          {/* El QR trae una mesa que ya no existe. Se dice acá y no al confirmar:
+              armar un pedido entero para que falle al final es la peor forma de
+              enterarse, y el comensal ya no tiene a quién reclamarle. */}
+          {mesaInvalida && (
+            <p
+              role="alert"
+              className="mx-auto max-w-xs rounded-lg border border-warning/50 bg-warning/15 px-3 py-2 text-xs font-semibold text-warning-soft"
+            >
+              Este código QR ya no corresponde a una mesa. Podés pedir para llevar o a
+              domicilio, o pedirle al mesero que te atienda.
+            </p>
+          )}
 
           <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
             {esMesa ? (
@@ -593,7 +671,12 @@ export function ClienteMenuQr({
               </div>
               <button
                 type="button"
-                onClick={() => setPedidoActivoTrack(null)}
+                onClick={() => {
+                  // Cerrarlo a mano es decir "ya está": no tiene que volver
+                  // solo en la próxima recarga.
+                  setPedidoActivoTrack(null);
+                  olvidarPedido(business.slug);
+                }}
                 className="text-[color:var(--qr-texto-2)] hover:text-[color:var(--qr-texto)]"
               >
                 <X className="size-4" />
@@ -700,14 +783,16 @@ export function ClienteMenuQr({
               </div>
 
               <p className="text-xs text-[color:var(--qr-texto-2)] leading-relaxed">
-                Ingresá tu número de <strong>celular / WhatsApp</strong> o el <strong>número de pedido (#)</strong> para ver el estado en tiempo real.
+                Ingresá el <strong>celular completo</strong> con el que hiciste el pedido y vas a
+                ver su estado en tiempo real. Pedimos el número entero para que nadie más
+                pueda ver tu pedido.
               </p>
 
               <div className="space-y-3">
                 <Input
                   value={queryConsulta}
                   onChange={(e) => setQueryConsulta(e.target.value)}
-                  placeholder="Ej: 3001234567 o #12"
+                  placeholder="Ej: 3001234567"
                   className="bg-white/10 border-white/20 text-[color:var(--qr-texto)] text-sm h-11 rounded-xl placeholder:text-[color:var(--qr-texto-3)]"
                 />
 
@@ -866,18 +951,43 @@ export function ClienteMenuQr({
                 BARRA FLOTANTE INFERIOR DE VER PEDIDO
                 ───────────────────────────────────────────────────────────── */}
             {totalItems > 0 && (
-              <div className="fixed bottom-0 inset-x-0 p-4 z-30 max-w-md mx-auto">
-                <Button
-                  type="button"
-                  onClick={() => setCarritoAbierto(true)}
-                  className="w-full bg-[var(--qr-acento)] hover:bg-[var(--qr-acento)]/90 text-[color:var(--qr-sobre-acento)] font-extrabold h-14 rounded-2xl shadow-2xl flex items-center justify-between px-5 text-sm transition-all hover:scale-[1.02]"
-                >
-                  <div className="flex items-center gap-2">
-                    <ShoppingBag className="size-5" />
-                    <span>Ver mi pedido ({totalItems})</span>
+              <div className="fixed bottom-0 inset-x-0 z-30 mx-auto max-w-md p-3">
+                {/* Lo que lleva pedido, a la vista.
+                    Antes esta barra decía cuántos y cuánto, pero no QUÉ: para
+                    saber si ya había pedido la cerveza había que abrir el
+                    carrito, mirar y cerrarlo. Ahora los renglones se leen sin
+                    tocar nada, y el carrito queda para editar y confirmar. */}
+                <div className="rounded-2xl border border-[var(--qr-acento)]/40 bg-[color:var(--qr-superficie-2)] shadow-2xl backdrop-blur-md">
+                  <ul className="max-h-28 space-y-1 overflow-y-auto px-4 pt-3 text-xs">
+                    {cartList.map((item) => (
+                      <li key={item.lineKey} className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate text-[color:var(--qr-texto-2)]">
+                          <span className="numeral font-bold text-[color:var(--qr-texto)]">
+                            {item.quantity}×
+                          </span>{" "}
+                          {item.producto.name}
+                        </span>
+                        <span className="numeral shrink-0 text-[color:var(--qr-texto)]">
+                          {formatCop(precioUnitarioQR(item) * item.quantity)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="p-3">
+                    <Button
+                      type="button"
+                      onClick={() => setCarritoAbierto(true)}
+                      className="w-full bg-[var(--qr-acento)] hover:bg-[var(--qr-acento)]/90 text-[color:var(--qr-sobre-acento)] font-extrabold h-14 rounded-xl flex items-center justify-between px-5 text-sm transition-all"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ShoppingBag className="size-5" />
+                        <span>Ver mi pedido ({totalItems})</span>
+                      </span>
+                      <span className="numeral text-base font-black">{formatCop(totalCop)}</span>
+                    </Button>
                   </div>
-                  <span className="numeral text-base font-black">{formatCop(totalCop)}</span>
-                </Button>
+                </div>
               </div>
             )}
 
@@ -1050,11 +1160,28 @@ export function ClienteMenuQr({
                     ))}
                   </div>
 
-                  {/* Total y Confirmación */}
+                  {/* Propina, Total y Confirmación */}
                   <div className="border-t border-white/10 pt-3 space-y-3">
+                    <SelectorDePropina
+                      tema="qr"
+                      habilitado={settings.tipSuggestionEnabled}
+                      sugeridaCop={propinaSugeridaCop}
+                      rateBp={settings.tipSuggestionRateBp}
+                      valorCop={propinaCop}
+                      onCambiar={setPropinaCop}
+                      id="qr"
+                    />
+
+                    {propinaCop > 0 && (
+                      <div className="flex justify-between items-center text-xs text-[color:var(--qr-texto-2)]">
+                        <span>Consumo</span>
+                        <span className="numeral">{formatCop(totalCop)}</span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center text-base font-extrabold text-[color:var(--qr-texto)]">
                       <span>Total a Pagar</span>
-                      <span className="numeral text-xl text-[color:var(--qr-acento-texto)]">{formatCop(totalCop)}</span>
+                      <span className="numeral text-xl text-[color:var(--qr-acento-texto)]">{formatCop(totalConPropinaCop)}</span>
                     </div>
 
                     <Button

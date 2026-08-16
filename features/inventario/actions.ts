@@ -127,7 +127,10 @@ export const crearFacturaCompra = defineAction({
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
     let lineas: Array<{
-      inventoryItemId: string;
+      inventoryItemId?: string;
+      productId?: string;
+      name?: string;
+      unit?: string;
       quantity: number;
       unitCostCop: number;
       taxRateBp?: number;
@@ -140,13 +143,23 @@ export const crearFacturaCompra = defineAction({
     }
 
     if (!Array.isArray(lineas) || lineas.length === 0) {
-      throw new ErrorDeUsuario("Agregá al menos un insumo a la factura de compra.");
+      throw new ErrorDeUsuario("Agregá al menos un insumo o producto a la factura de compra.");
     }
 
     let subtotal = 0;
     let totalTax = 0;
 
-    const itemsProcesados = lineas.map((linea) => {
+    // Resolver cada línea garantizando que tenga su inventoryItemId
+    const itemsProcesados: Array<{
+      inventoryItemId: string;
+      productId?: string;
+      quantity: number;
+      unitCostCop: number;
+      taxRateBp: number;
+      totalCop: number;
+    }> = [];
+
+    for (const linea of lineas) {
       const cant = Math.max(1, Math.round(Number(linea.quantity) || 1));
       const costo = Math.max(0, Math.round(Number(linea.unitCostCop) || 0));
       const taxBp = Math.max(0, Math.round(Number(linea.taxRateBp) || 0));
@@ -156,12 +169,10 @@ export const crearFacturaCompra = defineAction({
 
       if (taxBp > 0) {
         if (input.includesTax) {
-          // El precio ya incluye impuesto
           const base = Math.round(lineaSubtotal / (1 + taxBp / 10000));
           lineaTax = lineaSubtotal - base;
           lineaSubtotal = base;
         } else {
-          // El impuesto se suma al costo
           lineaTax = Math.round(lineaSubtotal * (taxBp / 10000));
         }
       }
@@ -169,14 +180,62 @@ export const crearFacturaCompra = defineAction({
       subtotal += lineaSubtotal;
       totalTax += lineaTax;
 
-      return {
-        inventoryItemId: linea.inventoryItemId,
+      let inventoryItemId = linea.inventoryItemId;
+
+      if (!inventoryItemId && linea.productId) {
+        // Buscar si el producto ya tiene un insumo vinculado
+        const recipeItem = await db.productRecipeItem.findFirst({
+          where: { productId: linea.productId },
+          select: { inventoryItemId: true },
+        });
+
+        if (recipeItem) {
+          inventoryItemId = recipeItem.inventoryItemId;
+        } else {
+          // Si no tiene insumo, crear el insumo correspondiente para el producto terminado
+          const prod = await db.product.findUnique({
+            where: { id: linea.productId },
+            select: { name: true, sku: true },
+          });
+
+          const nuevoInsumo = await db.inventoryItem.create({
+            data: {
+              businessId: ctx.business.id,
+              name: prod?.name ?? linea.name ?? "Producto",
+              sku: prod?.sku ?? null,
+              unit: "UNIDAD",
+              costCop: costo,
+              stockCurrent: 0,
+              stockMin: 0,
+            },
+          });
+
+          await db.productRecipeItem.create({
+            data: {
+              businessId: ctx.business.id,
+              productId: linea.productId,
+              inventoryItemId: nuevoInsumo.id,
+              quantityRequired: 1,
+            },
+          });
+
+          inventoryItemId = nuevoInsumo.id;
+        }
+      }
+
+      if (!inventoryItemId) {
+        throw new ErrorDeUsuario("Uno de los ítems de la factura no tiene un insumo o producto válido.");
+      }
+
+      itemsProcesados.push({
+        inventoryItemId,
+        productId: linea.productId,
         quantity: cant,
         unitCostCop: costo,
         taxRateBp: taxBp,
         totalCop: lineaSubtotal + lineaTax,
-      };
-    });
+      });
+    }
 
     const totalFactura = subtotal + totalTax;
 
@@ -204,7 +263,7 @@ export const crearFacturaCompra = defineAction({
       },
     });
 
-    // Actualizar stock de insumos y registrar movimientos Kardex de COMPRA
+    // Actualizar stock de insumos, productos de venta directa y registrar movimientos Kardex de COMPRA
     for (const item of itemsProcesados) {
       const insumo = await db.inventoryItem.findUnique({
         where: { id: item.inventoryItemId },
@@ -217,9 +276,28 @@ export const crearFacturaCompra = defineAction({
         where: { id: insumo.id },
         data: {
           stockCurrent: nuevoStock,
-          costCop: item.unitCostCop, // Actualiza costo unitario con la compra recibida
+          costCop: item.unitCostCop,
         },
       });
+
+      // Si el ítem corresponde a un producto terminado o está vinculado a uno, incrementar también su stockQty
+      if (item.productId) {
+        await db.product.update({
+          where: { id: item.productId },
+          data: { stockQty: { increment: item.quantity } },
+        });
+      } else {
+        const recipeLink = await db.productRecipeItem.findFirst({
+          where: { inventoryItemId: item.inventoryItemId },
+          select: { productId: true },
+        });
+        if (recipeLink) {
+          await db.product.update({
+            where: { id: recipeLink.productId },
+            data: { stockQty: { increment: item.quantity } },
+          });
+        }
+      }
 
       await db.inventoryMovement.create({
         data: {
@@ -236,6 +314,7 @@ export const crearFacturaCompra = defineAction({
     }
 
     revalidatePath("/inventario");
+    revalidatePath("/pos");
   },
 });
 
@@ -285,7 +364,7 @@ export const guardarReceta = defineAction({
 export const actualizarStockProductoTerminado = defineAction({
   schema: actualizarStockProductoTerminadoSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
-  async handler({ input, ctx, db }) {
+  async handler({ input, db }) {
     await db.product.update({
       where: { id: input.productId },
       data: {
@@ -383,7 +462,7 @@ export const crearProductoTerminado = defineAction({
 export const editarProductoTerminado = defineAction({
   schema: editarProductoTerminadoSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
-  async handler({ input, ctx, db }) {
+  async handler({ input, db }) {
     // 1. Actualizar datos del producto (Nombre, Categoría, SKU, Precio Venta, Stock)
     await db.product.update({
       where: { id: input.productId },

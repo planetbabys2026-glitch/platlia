@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -42,6 +42,7 @@ type AppShellProps = {
   /** Contadores calculados en el servidor, para que la primera pintura ya traiga el número. */
   cocinaInicial?: number;
   domiciliosInicial?: number;
+  cajaInicial?: number;
   children: React.ReactNode;
 };
 
@@ -55,6 +56,7 @@ export function AppShell(props: AppShellProps) {
     <ProveedorAvisos
       cocinaInicial={props.cocinaInicial}
       domiciliosInicial={props.domiciliosInicial}
+      cajaInicial={props.cajaInicial}
     >
       <Shell {...props} />
     </ProveedorAvisos>
@@ -74,6 +76,8 @@ function EnlaceNav({
   denso,
   onNavegar,
   vistaActual,
+  abierta,
+  onAlternar,
 }: {
   item: ItemNav;
   activo: boolean;
@@ -82,71 +86,112 @@ function EnlaceNav({
   onNavegar?: () => void;
   /** El `?vista=` de la URL, para marcar la sección abierta. */
   vistaActual?: string;
+  /** Si el acordeón de secciones está desplegado. */
+  abierta?: boolean;
+  onAlternar?: () => void;
 }) {
   const Icono = item.icono;
+  const idPanel = useId();
+  // Colapsada la barra no hay dónde poner las secciones: 80px no alcanzan ni
+  // para el rótulo más corto.
+  const secciones = colapsado ? undefined : item.secciones;
 
-  const enlace = (
-    <Link
-      href={item.href}
-      onClick={onNavegar}
-      title={colapsado ? item.titulo : undefined}
-      aria-current={activo ? "page" : undefined}
+  const fila = (
+    <div
       className={cn(
-        "group relative flex items-center rounded-lg font-medium transition-colors",
-        denso ? "gap-3 px-3 py-2.5 text-sm" : "min-h-11 gap-3.5 px-3.5 py-2.5 text-base",
-        colapsado && "justify-center px-0",
-        activo
-          ? "bg-brand/15 font-bold text-brand"
-          : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
+        "group relative flex items-center rounded-lg transition-colors",
+        activo ? "bg-brand/15" : "hover:bg-[var(--panel-2)]",
       )}
     >
       {/* El riel del export: 3px de Brasa contra el borde izquierdo. Marca la
           posición sin depender del color del texto, que es lo que se pierde de
           reojo, y del lado por donde se leen los ítems. */}
       {activo ? (
-        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-brand" />
+        <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-brand" />
       ) : null}
-      <Icono
+
+      <Link
+        href={item.href}
+        onClick={onNavegar}
+        title={colapsado ? item.titulo : undefined}
+        aria-current={activo ? "page" : undefined}
         className={cn(
-          "size-[18px] shrink-0",
-          activo ? "text-brand" : "text-muted-foreground",
+          "flex min-w-0 flex-1 items-center font-medium transition-colors",
+          denso ? "gap-3 px-3 py-2.5 text-sm" : "min-h-11 gap-3.5 px-3.5 py-2.5 text-base",
+          colapsado && "justify-center px-0",
+          activo ? "font-bold text-brand" : "text-muted-foreground group-hover:text-foreground",
         )}
-      />
-      {!colapsado && <span className="truncate">{item.titulo}</span>}
-      {item.insignia !== undefined && <Insignia valor={item.insignia} comoPunto={colapsado} />}
-    </Link>
+      >
+        <Icono
+          className={cn("size-[18px] shrink-0", activo ? "text-brand" : "text-muted-foreground")}
+        />
+        {!colapsado && <span className="truncate">{item.titulo}</span>}
+        {item.insignia !== undefined && <Insignia valor={item.insignia} comoPunto={colapsado} />}
+      </Link>
+
+      {/* La flecha es un botón aparte y no parte del enlace: un `<button>` dentro
+          de un `<a>` es HTML inválido, y además plegar no es navegar. */}
+      {secciones && (
+        <button
+          type="button"
+          onClick={onAlternar}
+          aria-expanded={abierta}
+          aria-controls={idPanel}
+          aria-label={`${abierta ? "Plegar" : "Desplegar"} ${item.titulo}`}
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+            denso ? "px-2 py-2.5" : "min-h-11 px-3",
+          )}
+        >
+          <ChevronDown
+            aria-hidden
+            className={cn("size-4 transition-transform duration-200", abierta && "rotate-180")}
+          />
+        </button>
+      )}
+    </div>
   );
 
-  // Las secciones solo se despliegan cuando el módulo está abierto: mostrar las
-  // siete de Configuración desde cualquier pantalla convertiría el menú en una
-  // lista de treinta renglones. Colapsada la barra no hay dónde ponerlas.
-  const secciones = item.secciones;
-  if (!secciones || !activo || colapsado) return enlace;
+  if (!secciones) return fila;
 
   return (
     <div>
-      {enlace}
-      <div className="ml-4 mt-1 space-y-0.5 border-l border-dashed border-[var(--linea-30)] pl-3">
-        {secciones.map((seccion) => {
-          const activaSeccion = (vistaActual ?? "") === seccion.vista;
-          return (
-            <Link
-              key={seccion.vista || "principal"}
-              href={hrefDeSeccion(item, seccion)}
-              onClick={onNavegar}
-              aria-current={activaSeccion ? "page" : undefined}
-              className={cn(
-                "flex items-center rounded-md transition-colors",
-                denso ? "px-3 py-1.5 text-xs" : "min-h-11 px-3 py-2 text-sm",
-                activaSeccion
-                  ? "bg-brand/10 font-bold text-brand"
-                  : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
-              )}
-            >
-              <span className="truncate">{seccion.titulo}</span>
-            </Link>
-          );
-        })}
+      {fila}
+      <div
+        id={idPanel}
+        // `inert` y no `hidden`: `display:none` cortaría la animación en seco.
+        inert={!abierta}
+        aria-hidden={!abierta}
+        className={cn(
+          "grid transition-[grid-template-rows] duration-200 ease-out",
+          abierta ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        {/* `min-h-0` es lo que deja que la fila del grid llegue a 0fr. */}
+        <div className="min-h-0 overflow-hidden">
+          <div className="ml-4 mt-1 space-y-0.5 border-l border-dashed border-[var(--linea-30)] pl-3">
+            {secciones.map((seccion) => {
+              const activaSeccion = activo && (vistaActual ?? "") === seccion.vista;
+              return (
+                <Link
+                  key={seccion.vista || "principal"}
+                  href={hrefDeSeccion(item, seccion)}
+                  onClick={onNavegar}
+                  aria-current={activaSeccion ? "page" : undefined}
+                  className={cn(
+                    "flex items-center rounded-md font-medium transition-colors",
+                    denso ? "px-3 py-2 text-xs" : "min-h-11 px-3 py-2 text-sm",
+                    activaSeccion
+                      ? "bg-brand font-bold text-brand-foreground"
+                      : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
+                  )}
+                >
+                  <span className="truncate">{seccion.titulo}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -172,13 +217,32 @@ function Shell({
   esPropietario,
   children,
 }: AppShellProps) {
-  const { cocina: comandasVivas, domicilios: domiciliosActivos } = useAvisos();
+  const {
+    cocina: comandasVivas,
+    domicilios: domiciliosActivos,
+    caja: cuentasPorCobrar,
+  } = useAvisos();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const vistaActual = searchParams.get("vista") ?? "";
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(pathname.startsWith("/administracion"));
+  /**
+   * Qué módulos tienen las secciones desplegadas, por `href`. Solo guarda lo que
+   * la persona tocó a mano; sin entrada, manda el valor por defecto, que es
+   * "abierto si estoy adentro del módulo".
+   *
+   * Antes no había estado: las secciones se mostraban siempre que el módulo
+   * estuviera activo y no había forma de cerrarlas. Ahora se abren solas al
+   * entrar —que es lo que uno espera— pero se pueden plegar estando adentro,
+   * igual que Administración.
+   */
+  const [seccionesAbiertas, setSeccionesAbiertas] = useState<Record<string, boolean>>({});
+
+  const alternarSecciones = useCallback((href: string, abiertaAhora: boolean) => {
+    setSeccionesAbiertas((previo) => ({ ...previo, [href]: !abiertaAhora }));
+  }, []);
 
   // Cargar estado colapsado guardado en localStorage
   useEffect(() => {
@@ -243,6 +307,7 @@ function Shell({
     esPropietario,
     comandasVivas,
     domiciliosActivos,
+    cuentasPorCobrar,
   });
   const barraInferior = itemsDeBarraInferior(grupos);
   const esAdminActivo = pathname.startsWith("/administracion");
@@ -257,6 +322,7 @@ function Shell({
         }}
         title={collapsed && denso ? "Administración" : undefined}
         aria-expanded={adminOpen}
+        aria-controls={`admin-${denso ? "barra" : "cajon"}`}
         className={cn(
           "group relative flex w-full items-center justify-between rounded-lg font-medium transition-colors",
           denso ? "gap-3 px-3 py-2.5 text-sm" : "min-h-11 gap-3.5 px-3.5 py-2.5 text-base",
@@ -284,31 +350,46 @@ function Shell({
         )}
       </button>
 
-      {adminOpen && !(collapsed && denso) && (
-        <div className="ml-4 space-y-1 border-l border-dashed border-[var(--linea-30)] pl-3 pt-1">
-          {administracion.map((sub) => {
-            const SubIcono = sub.icono;
-            const activo = pathname === sub.href;
+      {!(collapsed && denso) && (
+        <div
+          id={`admin-${denso ? "barra" : "cajon"}`}
+          // Misma técnica que las secciones de un módulo: `grid-template-rows`
+          // de 0fr a 1fr llega a la altura real sin medirla con JS. Antes el
+          // submenú aparecía de golpe y solo giraba la flecha.
+          inert={!adminOpen}
+          aria-hidden={!adminOpen}
+          className={cn(
+            "grid transition-[grid-template-rows] duration-200 ease-out",
+            adminOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="ml-4 space-y-1 border-l border-dashed border-[var(--linea-30)] pl-3 pt-1">
+              {administracion.map((sub) => {
+                const SubIcono = sub.icono;
+                const activo = pathname === sub.href;
 
-            return (
-              <Link
-                key={sub.href}
-                href={sub.href}
-                onClick={denso ? undefined : () => setMobileOpen(false)}
-                aria-current={activo ? "page" : undefined}
-                className={cn(
-                  "flex items-center rounded-md font-medium transition-colors",
-                  denso ? "gap-2.5 px-3 py-2 text-xs" : "min-h-11 gap-3 px-3 py-2 text-sm",
-                  activo
-                    ? "bg-brand font-bold text-brand-foreground"
-                    : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
-                )}
-              >
-                <SubIcono className="size-4 shrink-0" />
-                <span>{sub.titulo}</span>
-              </Link>
-            );
-          })}
+                return (
+                  <Link
+                    key={sub.href}
+                    href={sub.href}
+                    onClick={denso ? undefined : () => setMobileOpen(false)}
+                    aria-current={activo ? "page" : undefined}
+                    className={cn(
+                      "flex items-center rounded-md font-medium transition-colors",
+                      denso ? "gap-2.5 px-3 py-2 text-xs" : "min-h-11 gap-3 px-3 py-2 text-sm",
+                      activo
+                        ? "bg-brand font-bold text-brand-foreground"
+                        : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
+                    )}
+                  >
+                    <SubIcono className="size-4 shrink-0" />
+                    <span>{sub.titulo}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -368,17 +449,23 @@ function Shell({
           {grupos.map((grupo) => (
             <div key={grupo.titulo} className="space-y-1">
               {!collapsed && <RotuloGrupo>{grupo.titulo}</RotuloGrupo>}
-              {grupo.items.map((item) => (
-                <EnlaceNav
-                  key={item.href}
-                  item={item}
-                  activo={esRutaActiva(pathname, item.href)}
-                  colapsado={collapsed}
-                  denso
-                  vistaActual={vistaActual}
-                />
-              ))}
-              {grupo.titulo === "Gestión" ? acordeonAdmin(true) : null}
+              {grupo.items.map((item) => {
+                const activo = esRutaActiva(pathname, item.href);
+                const abierta = seccionesAbiertas[item.href] ?? activo;
+                return (
+                  <EnlaceNav
+                    key={item.href}
+                    item={item}
+                    activo={activo}
+                    colapsado={collapsed}
+                    denso
+                    vistaActual={vistaActual}
+                    abierta={abierta}
+                    onAlternar={() => alternarSecciones(item.href, abierta)}
+                  />
+                );
+              })}
+              {grupo.conAdministracion ? acordeonAdmin(true) : null}
             </div>
           ))}
         </nav>
@@ -526,16 +613,22 @@ function Shell({
                 {grupos.map((grupo) => (
                   <div key={grupo.titulo} className="space-y-1">
                     <RotuloGrupo>{grupo.titulo}</RotuloGrupo>
-                    {grupo.items.map((item) => (
-                      <EnlaceNav
-                        key={item.href}
-                        item={item}
-                        activo={esRutaActiva(pathname, item.href)}
-                        onNavegar={() => setMobileOpen(false)}
-                        vistaActual={vistaActual}
-                      />
-                    ))}
-                    {grupo.titulo === "Gestión" ? acordeonAdmin(false) : null}
+                    {grupo.items.map((item) => {
+                      const activo = esRutaActiva(pathname, item.href);
+                      const abierta = seccionesAbiertas[item.href] ?? activo;
+                      return (
+                        <EnlaceNav
+                          key={item.href}
+                          item={item}
+                          activo={activo}
+                          onNavegar={() => setMobileOpen(false)}
+                          vistaActual={vistaActual}
+                          abierta={abierta}
+                          onAlternar={() => alternarSecciones(item.href, abierta)}
+                        />
+                      );
+                    })}
+                    {grupo.conAdministracion ? acordeonAdmin(false) : null}
                   </div>
                 ))}
               </nav>

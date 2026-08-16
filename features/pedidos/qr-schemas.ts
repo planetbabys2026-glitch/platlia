@@ -19,6 +19,14 @@ export const crearPedidoClienteQRSchema = z
     customerAddress: z.string().trim().optional(),
     docType: z.string().trim().optional(),
     docNumber: z.string().trim().optional(),
+    /**
+     * La propina que el comensal aceptó, en pesos.
+     *
+     * La elige él mismo al confirmar: por QR no hay mesero a quién decirle, y si
+     * la decisión quedara para la caja el pedido llegaría sin ella y alguien
+     * tendría que ir a preguntar a la mesa.
+     */
+    tipCop: z.number().int().min(0).max(10_000_000).optional(),
     items: z.array(qrClienteItemSchema).min(1, "Elegí al menos un producto para enviar tu pedido."),
   })
   /**

@@ -65,6 +65,22 @@ const schema = z.object({
   // ─── Redis (Turnero SSE Pub/Sub) ──────────────────────────────────────────
   REDIS_URL: opcional(z.string().min(1)),
 
+  // ─── Facturación electrónica DIAN (Factus) ────────────────────────────────
+  // La cuenta de Factus es UNA, de la plataforma: Factus nos vende una bolsa de
+  // documentos y nosotros la repartimos entre los negocios. Antes estas cuatro
+  // credenciales vivían por empresa en `BusinessSettings`, en texto plano y
+  // editables por el dueño; acá una copia de la base ya no se lleva la llave de
+  // la facturación de todos los clientes.
+  //
+  // Lo que sí es de cada negocio —el rango de numeración que la DIAN le autorizó
+  // a SU NIT, el municipio, los códigos fiscales— sigue en `BusinessSettings` y
+  // lo asigna el superadministrador.
+  FACTUS_URL: opcional(z.url().transform((valor) => valor.replace(/\/+$/, ""))),
+  FACTUS_CLIENT_ID: opcional(z.string().min(1)),
+  FACTUS_CLIENT_SECRET: opcional(z.string().min(1)),
+  FACTUS_USERNAME: opcional(z.string().min(1)),
+  FACTUS_PASSWORD: opcional(z.string().min(1)),
+
   // ─── Bootstrap del superadministrador ─────────────────────────────────────
   // Se define únicamente durante el primer despliegue y se borra después. Sin
   // ella, /pl-bootstrap responde 404 y es indistinguible de una ruta inexistente.

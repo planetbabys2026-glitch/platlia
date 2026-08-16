@@ -1,4 +1,5 @@
 import { AppModule } from "@/generated/prisma/enums";
+import { contarCuentasPorCobrar } from "@/features/caja/queries";
 import { contarComandasVivas } from "@/features/cocina/queries";
 import { contarDomiciliosActivos } from "@/features/domicilios/queries";
 import { getSettings } from "@/features/negocio/queries";
@@ -23,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let usaDomicilios = true;
   let cocinaInicial = 0;
   let domiciliosInicial = 0;
+  let cajaInicial = 0;
 
   if (ctx.business.id) {
     try {
@@ -36,11 +38,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // Los contadores del menú se calculan acá para que la primera pintura ya
       // traiga el número: el stream los refresca después, pero sin esto la
       // insignia arranca en cero y salta a tres medio segundo más tarde.
-      [cocinaInicial, domiciliosInicial] = await Promise.all([
-        usaCocina
-          ? contarComandasVivas(ctx.business.id, currentBusinessDate(settings))
-          : Promise.resolve(0),
+      const businessDate = currentBusinessDate(settings);
+      [cocinaInicial, domiciliosInicial, cajaInicial] = await Promise.all([
+        usaCocina ? contarComandasVivas(ctx.business.id, businessDate) : Promise.resolve(0),
         usaDomicilios ? contarDomiciliosActivos(ctx.business.id) : Promise.resolve(0),
+        // Solo con mesas: sin salón no hay cuentas esperando en la caja, las
+        // ventas del mostrador se cobran en el acto.
+        usaMesas
+          ? contarCuentasPorCobrar(ctx.business.id, businessDate)
+          : Promise.resolve(0),
       ]);
     } catch {
       // Si la empresa aún no tiene settings cargados
@@ -84,6 +90,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       usaRecetas={usaRecetas}
       cocinaInicial={cocinaInicial}
       domiciliosInicial={domiciliosInicial}
+      cajaInicial={cajaInicial}
     >
       {mostrarAviso && (
         <AvisoLicencia diasRestantes={diasParaCorte} puedeFacturar={puedeFacturar} />

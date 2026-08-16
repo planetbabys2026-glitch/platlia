@@ -122,6 +122,22 @@ export const anularItemSchema = z.object({
 export const pedidoSchema = z.object({ orderId: id });
 
 /**
+ * Pedir la cuenta, con la propina que el cliente aceptó.
+ *
+ * La propina se decide ACÁ y no al cobrar: la pre-cuenta que la caja imprime
+ * tiene que salir ya con la elección que el cliente le dio al mesero. Si se
+ * eligiera recién en la caja, el papel que se lleva a la mesa mostraría un total
+ * distinto al que se termina cobrando.
+ */
+export const pedirCuentaSchema = z.object({
+  orderId: id,
+  tipCop: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : v),
+    montoCopPositivo.optional(),
+  ),
+});
+
+/**
  * La etiqueta de la cuenta: "Andrés", "Camila". Es lo que distingue las cuentas
  * de una misma mesa en el salón, en la comanda de cocina y en el tiquete. No
  * tiene nada que ver con la facturación: a quién se factura se decide al cobrar.
@@ -155,6 +171,18 @@ export const pagoSchema = exigirDatosFiscales(
     amountCop: montoCopPositivo.refine((v) => v > 0, "El pago tiene que ser mayor a cero."),
     /** Con cuánto pagó: solo aplica al efectivo y sirve para calcular el vuelto. */
     tenderedCop: z.preprocess(
+      (v) => (v === "" || v === undefined ? undefined : v),
+      montoCopPositivo.optional(),
+    ),
+    /**
+     * La propina que el cliente aceptó, en pesos. Viaja CON el cobro y no en una
+     * acción aparte por la misma razón que los datos fiscales: si no, existe el
+     * estado intermedio "con propina y sin pago", y una propina cargada que
+     * después no se cobra descuadra el total del pedido.
+     *
+     * Reemplaza la que tuviera el pedido: `0` es deseleccionarla.
+     */
+    tipCop: z.preprocess(
       (v) => (v === "" || v === undefined ? undefined : v),
       montoCopPositivo.optional(),
     ),
@@ -192,6 +220,11 @@ const ventaPosCompleta = z
         method: z.enum(PaymentMethod),
         amountCop: montoCopPositivo,
         tenderedCop: z.preprocess(
+          (v) => (v === "" || v === undefined ? undefined : Number(v)),
+          montoCopPositivo.optional(),
+        ),
+        /** La propina aceptada. Viaja con el cobro, no en una acción aparte. */
+        tipCop: z.preprocess(
           (v) => (v === "" || v === undefined ? undefined : Number(v)),
           montoCopPositivo.optional(),
         ),

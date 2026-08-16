@@ -38,7 +38,6 @@ import {
 import {
   auditarStockCarritoRecetas,
   calcularStockDisponibleProducto,
-  type ProductoStockCalculo,
 } from "@/lib/inventory/stock";
 import {
   DatosFiscales,
@@ -47,7 +46,9 @@ import {
 } from "@/features/pedidos/components/datos-fiscales";
 import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consumo";
 import { claveDeLinea } from "@/lib/modificadores";
+import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
+import { computeSuggestedTip } from "@/lib/tax";
 import { SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,12 @@ export type PosProducto = ProductoConModificadores & {
   imageUrl: string | null;
   trackStock?: boolean;
   stockQty?: number;
+  /**
+   * La tarifa de impuesto del producto. Ya viajaba en la carta —para que el
+   * renglón optimista calcule su impuesto con la misma tarifa que va a quedar
+   * congelada— pero el tipo no la declaraba.
+   */
+  taxRate?: { rateBp: number };
   recipeItems?: Array<{
     quantityRequired: number;
     inventoryItem: {
@@ -165,6 +172,9 @@ type ModuloPosInteractiveProps = {
     requireOpenCashSession: boolean;
     cashRoundingCop: number;
     pricesIncludeTax: boolean;
+    /** Si el negocio sugiere propina al cobrar, y con qué tarifa. */
+    tipSuggestionEnabled: boolean;
+    tipSuggestionRateBp: number;
   };
   /**
    * Si el negocio está en condiciones de emitir factura electrónica. Llega
@@ -437,6 +447,8 @@ export function ModuloPosInteractive({
   }, [carta]);
   const [montoRecibido, setMontoRecibido] = useState<string>("");
   const [numeroComprobante, setNumeroComprobante] = useState("");
+  /** La propina aceptada en este cobro. Arranca en 0: es voluntaria. */
+  const [propinaCop, setPropinaCop] = useState(0);
   const [procesandoAccion, setProcesandoAccion] = useState(false);
   const [errorGlobal, setErrorGlobal] = useState<string | null>(null);
   const [mensajeExito, setMensajeExito] = useState<{
@@ -449,9 +461,14 @@ export function ModuloPosInteractive({
   const subtotalCart = cart.reduce((acc, item) => acc + precioUnitario(item) * item.quantity, 0);
   const totalCart = subtotalCart;
 
+  // La propina se sugiere sobre el consumo completo —lo que el cliente ve— y no
+  // lleva impuesto: entra al pedido aparte de los renglones.
+  const propinaSugeridaCop = computeSuggestedTip(totalCart, settings.tipSuggestionRateBp);
+  const totalConPropina = totalCart + propinaCop;
+
   // Cálculo devuelta / cambio para pago en efectivo
   const numRecibido = parseFloat(montoRecibido) || 0;
-  const cambioDevuelta = Math.max(0, numRecibido - totalCart);
+  const cambioDevuelta = Math.max(0, numRecibido - totalConPropina);
 
   // ── Manejo de Carrito ──────────────────────────────────────────────────────
 
@@ -682,7 +699,8 @@ export function ModuloPosInteractive({
         ? {
             pago: {
               method: metodoPago,
-              amountCop: totalCart,
+              amountCop: totalConPropina,
+              tipCop: propinaCop,
               tenderedCop: metodoPago === "EFECTIVO" && numRecibido > 0 ? numRecibido : undefined,
               reference: numeroComprobante.trim() || undefined,
             },
@@ -1515,9 +1533,24 @@ export function ModuloPosInteractive({
                   <div className="text-center p-3 rounded-2xl bg-brand/5 border border-brand/20 space-y-0.5">
                     <span className="text-rotulo font-semibold text-muted-foreground uppercase">Total del Pedido</span>
                     <p className="numeral text-3xl font-extrabold text-brand">
-                      {formatCop(totalCart)}
+                      {formatCop(totalConPropina)}
                     </p>
+                    {propinaCop > 0 && (
+                      <p className="text-rotulo text-muted-foreground">
+                        Consumo {formatCop(totalCart)} + propina{" "}
+                        <span className="numeral">{formatCop(propinaCop)}</span>
+                      </p>
+                    )}
                   </div>
+
+                  <SelectorDePropina
+                    habilitado={settings.tipSuggestionEnabled}
+                    sugeridaCop={propinaSugeridaCop}
+                    rateBp={settings.tipSuggestionRateBp}
+                    valorCop={propinaCop}
+                    onCambiar={setPropinaCop}
+                    id="pos"
+                  />
 
                   {/* Nombre Cliente en Modal */}
                   <div className="space-y-1 bg-muted/30 p-2.5 rounded-xl border border-border">
