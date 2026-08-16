@@ -70,6 +70,7 @@ export default async function PedidoPage({
         pedidoInicial={pedido}
         puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}
         settings={{
+          inventoryEnabled: settings.inventoryEnabled,
           deliveryEnabled: settings.deliveryEnabled,
           requireOpenCashSession: settings.requireOpenCashSession,
           cashRoundingCop: settings.cashRoundingCop,
@@ -321,7 +322,12 @@ export default async function PedidoPage({
       >
         <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
           <section aria-label="Carta">
-            <Carta orderId={pedido.id} categorias={carta} editable={editable} />
+            <Carta
+              orderId={pedido.id}
+              categorias={carta}
+              editable={editable}
+              inventoryEnabled={settings.inventoryEnabled}
+            />
           </section>
 
           {/* Oculto en celular: ahí la cuenta vive en la hoja de CuentaMovil.

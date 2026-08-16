@@ -50,7 +50,12 @@ export interface ProductoStockCalculo {
  * vende perfecto con carne. La cuenta exacta se hace dentro del modal, donde ya
  * se sabe qué se eligió, y la definitiva la hace el servidor al descontar.
  */
-export function calcularStockDisponibleProducto(prod: ProductoStockCalculo): number | null {
+export function calcularStockDisponibleProducto(
+  prod: ProductoStockCalculo,
+  inventoryEnabled: boolean = true,
+): number | null {
+  if (!inventoryEnabled) return null;
+
   const recetaBase = componerRecetaEfectiva(prod, []);
 
   let porcionesReceta = porcionesSegunReceta(recetaBase);
@@ -98,7 +103,10 @@ export function calcularStockDisponibleProducto(prod: ProductoStockCalculo): num
 export function calcularStockDisponibleCombinacion(
   prod: ProductoStockCalculo,
   opcionesElegidas: OpcionConInsumos[],
+  inventoryEnabled: boolean = true,
 ): number | null {
+  if (!inventoryEnabled) return null;
+
   const porcionesReceta = porcionesSegunReceta(componerRecetaEfectiva(prod, opcionesElegidas));
   const porcionesProducto =
     prod.trackStock && typeof prod.stockQty === "number" ? Math.max(0, prod.stockQty) : null;

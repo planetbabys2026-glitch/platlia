@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       cabeceraFirma: request.headers.get("x-signature"),
       requestId: request.headers.get("x-request-id"),
       dataId,
-      secreto: env.MP_WEBHOOK_SECRET ?? "",
+      secreto: env.MP_WEBHOOK_SECRET_TEST || env.MP_WEBHOOK_SECRET || "",
     });
 
     if (!resultado.valida) {

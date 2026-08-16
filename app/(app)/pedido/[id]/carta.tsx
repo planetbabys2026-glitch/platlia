@@ -53,7 +53,15 @@ function normalizar(texto: string): string {
     .toLowerCase();
 }
 
-function TarjetaProducto({ orderId, producto }: { orderId: string; producto: ProductoDeCarta }) {
+function TarjetaProducto({
+  orderId,
+  producto,
+  inventoryEnabled = true,
+}: {
+  orderId: string;
+  producto: ProductoDeCarta;
+  inventoryEnabled?: boolean;
+}) {
   const cuenta = useCuenta();
   const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -150,6 +158,7 @@ function TarjetaProducto({ orderId, producto }: { orderId: string; producto: Pro
           producto={producto}
           abierto={modalAbierto}
           onCerrar={() => setModalAbierto(false)}
+          inventoryEnabled={inventoryEnabled}
           onConfirmar={({ opcionIds, quantity, notes }) => {
             setElegidas(opcionIds);
             setCantidad(quantity);
@@ -221,10 +230,12 @@ export function Carta({
   orderId,
   categorias,
   editable,
+  inventoryEnabled = true,
 }: {
   orderId: string;
   categorias: CategoriaDeCarta[];
   editable: boolean;
+  inventoryEnabled?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
@@ -297,7 +308,12 @@ export function Carta({
         resultados && resultados.length > 0 ? (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {resultados.map((producto) => (
-              <TarjetaProducto key={producto.id} orderId={orderId} producto={producto} />
+              <TarjetaProducto
+                key={producto.id}
+                orderId={orderId}
+                producto={producto}
+                inventoryEnabled={inventoryEnabled}
+              />
             ))}
           </ul>
         ) : (
@@ -313,7 +329,12 @@ export function Carta({
               // tiene que medir en vez de partirse en dos columnas fijas.
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
                 {categoria.products.map((producto) => (
-                  <TarjetaProducto key={producto.id} orderId={orderId} producto={producto} />
+                  <TarjetaProducto
+                    key={producto.id}
+                    orderId={orderId}
+                    producto={producto}
+                    inventoryEnabled={inventoryEnabled}
+                  />
                 ))}
               </ul>
             );

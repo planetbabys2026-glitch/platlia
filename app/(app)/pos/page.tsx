@@ -35,6 +35,7 @@ export default async function PosPage({
       pedidoInicial={pedidoInicial}
       puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}
       settings={{
+        inventoryEnabled: settings.inventoryEnabled,
         deliveryEnabled: settings.deliveryEnabled,
         requireOpenCashSession: settings.requireOpenCashSession,
         cashRoundingCop: settings.cashRoundingCop,

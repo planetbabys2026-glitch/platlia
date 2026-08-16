@@ -180,7 +180,11 @@ export default async function FacturacionPage() {
           )}
 
           {suscripcion.status !== "CANCELADA" && (
-            <BotonPagar cotizaciones={cotizaciones} vencimientos={vencimientos} sedes={sedes} />
+            <BotonPagar
+              cotizaciones={cotizaciones}
+              vencimientos={vencimientos}
+              sedes={sedes}
+            />
           )}
 
           {(cobroActivo || suscripcion.status === "ACTIVA") && (

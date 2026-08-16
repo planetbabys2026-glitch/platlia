@@ -191,6 +191,10 @@ describe("calcularStockDisponibleProducto con modificadores", () => {
     };
     expect(calcularStockDisponibleProducto(conTermino)).toBe(50);
   });
+
+  it("retorna null si inventoryEnabled es false (venta libre sin control de stock)", () => {
+    expect(calcularStockDisponibleProducto(conGrupos, false)).toBeNull();
+  });
 });
 
 describe("calcularStockDisponibleCombinacion", () => {
@@ -205,6 +209,14 @@ describe("calcularStockDisponibleCombinacion", () => {
     };
     expect(calcularStockDisponibleCombinacion(menuDelDia, [sinPechuga])).toBe(0);
     expect(calcularStockDisponibleCombinacion(menuDelDia, [opcionCarne])).toBe(13);
+  });
+
+  it("retorna null si inventoryEnabled es false", () => {
+    const sinPechuga = {
+      ...opcionPollo,
+      supplies: [{ quantityRequired: 150, inventoryItem: insumo("pechuga", 0) }],
+    };
+    expect(calcularStockDisponibleCombinacion(menuDelDia, [sinPechuga], false)).toBeNull();
   });
 });
 
@@ -363,5 +375,20 @@ describe("verificarYDescontarStockReceta con modificadores", () => {
       where: { id: "arroz" },
       data: { stockCurrent: { decrement: 150 } },
     });
+  });
+
+  it("no descuenta ni bloquea si inventoryEnabled es false", async () => {
+    const tx = mockTx(
+      { id: "menu", name: "Menú del día", trackStock: false, stockQty: 0, ...menuDelDia },
+      [{ ...opcionCarne, supplies: [{ quantityRequired: 150, inventoryItem: insumo("res", 0) }] }],
+    );
+
+    await verificarYDescontarStockReceta(tx, "biz-1", "menu", 10, {
+      inventoryEnabled: false,
+      modifierOptionIds: ["carne"],
+    });
+
+    expect(tx.inventoryItem.update).not.toHaveBeenCalled();
+    expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
   });
 });

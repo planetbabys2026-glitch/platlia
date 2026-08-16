@@ -114,7 +114,11 @@ export function construirNavegacion({
   comandasVivas,
   domiciliosActivos,
   cuentasPorCobrar,
-}: Contexto): { grupos: GrupoNav[]; administracion: ItemNav[] } {
+}: Contexto): {
+  grupos: GrupoNav[];
+  administracion: ItemNav[];
+  configuracion: ItemNav | null;
+} {
   const operacion: ItemNav[] = [
     // Salón y POS son excluyentes: un negocio que no sienta mesas entra por el
     // mostrador, y /salon le responde 404.
@@ -178,35 +182,24 @@ export function construirNavegacion({
         { titulo: "Alertas de inventario", vista: "inventario" },
       ],
     },
-    /**
-     * Configuración sale de Administración y queda al mismo nivel.
-     *
-     * Adentro tiene siete pantallas: dejarla como sub-ítem de un acordeón habría
-     * obligado a anidar un acordeón dentro de otro, tres niveles en una barra de
-     * 240px. Al mismo nivel, todo el menú tiene una sola profundidad.
-     */
-    ...(esPropietario
-      ? [
-          {
-            titulo: "Configuración",
-            href: "/administracion/configuracion",
-            icono: SlidersHorizontal,
-            secciones: [
-              { titulo: "Datos del negocio", vista: "" },
-              { titulo: "Módulos", vista: "modulos" },
-              { titulo: "Turnero TV", vista: "turnero" },
-              { titulo: "Menú digital QR", vista: "qr" },
-              { titulo: "Operación y recibos", vista: "operacion" },
-              { titulo: "Facturación DIAN", vista: "factus" },
-              // La licencia vive acá y no suelta en el menú: es un parámetro del
-              // negocio, no una pantalla de trabajo, y se busca donde se busca
-              // todo lo demás que se configura una vez.
-              ...(puedeFacturar ? [{ titulo: "Licencia y sucursales", vista: "licencia" }] : []),
-            ],
-          },
-        ]
-      : []),
   ];
+
+  const configuracion: ItemNav | null = esPropietario
+    ? {
+        titulo: "Configuración",
+        href: "/administracion/configuracion",
+        icono: SlidersHorizontal,
+        secciones: [
+          { titulo: "Datos del negocio", vista: "" },
+          { titulo: "Módulos", vista: "modulos" },
+          { titulo: "Turnero TV", vista: "turnero" },
+          { titulo: "Menú digital QR", vista: "qr" },
+          { titulo: "Operación y recibos", vista: "operacion" },
+          { titulo: "Facturación DIAN", vista: "factus" },
+          ...(puedeFacturar ? [{ titulo: "Licencia y sucursales", vista: "licencia" }] : []),
+        ],
+      }
+    : null;
 
   const administracion: ItemNav[] = [
     { titulo: "Carta", href: "/administracion/carta", icono: BookOpen },
@@ -233,6 +226,7 @@ export function construirNavegacion({
       { titulo: "Gestión", items: gestion, conAdministracion: true },
     ],
     administracion,
+    configuracion,
   };
 }
 

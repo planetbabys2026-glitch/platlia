@@ -168,6 +168,7 @@ type ModuloPosInteractiveProps = {
   pedidosAbiertos: PosPedidoAbierto[];
   pedidoInicial?: PosPedidoDetalle | null;
   settings: {
+    inventoryEnabled: boolean;
     deliveryEnabled: boolean;
     requireOpenCashSession: boolean;
     cashRoundingCop: number;
@@ -378,6 +379,8 @@ export function ModuloPosInteractive({
 
   // ── Alertas de Stock Bajo (Insumos de Receta y Productos Terminados) ───────
   const alertasStockPos = useMemo(() => {
+    if (!settings.inventoryEnabled) return [];
+
     const lista: Array<{
       id: string;
       nombre: string;
@@ -444,7 +447,7 @@ export function ModuloPosInteractive({
     }
 
     return lista;
-  }, [carta]);
+  }, [carta, settings.inventoryEnabled]);
   const [montoRecibido, setMontoRecibido] = useState<string>("");
   const [numeroComprobante, setNumeroComprobante] = useState("");
   /** La propina aceptada en este cobro. Arranca en 0: es voluntaria. */
@@ -513,7 +516,7 @@ export function ModuloPosInteractive({
     quantity: number,
     notes: string,
   ) => {
-    const disp = calcularStockDisponibleProducto(producto);
+    const disp = calcularStockDisponibleProducto(producto, settings.inventoryEnabled);
     const cantActual = enCarritoDelProducto(producto.id);
 
     if (disp !== null && cantActual + quantity > disp) {
@@ -576,7 +579,7 @@ export function ModuloPosInteractive({
       }
 
       if (prodObj) {
-        const disp = calcularStockDisponibleProducto(prodObj);
+        const disp = calcularStockDisponibleProducto(prodObj, settings.inventoryEnabled);
         const cantActual = enCarritoDelProducto(item.productId);
 
         if (disp !== null && cantActual + delta > disp) {
@@ -642,7 +645,7 @@ export function ModuloPosInteractive({
       return;
     }
 
-    const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta);
+    const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta, settings.inventoryEnabled);
     if (errorStock) {
       setErrorGlobal(errorStock);
       return;
@@ -966,29 +969,31 @@ export function ModuloPosInteractive({
                   )}
                 </div>
 
-                {/* Pill Modesto de Alertas de Stock */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setModalAlertasStockAbierto(true)}
-                  className={cn(
-                    "h-10 text-xs font-bold rounded-xl gap-1.5 shrink-0 transition-all",
-                    alertasStockPos.length > 0
-                      ? "border-warning/40 bg-warning/10 text-warning-soft hover:bg-warning/20"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <AlertTriangle className="size-4 text-warning-soft" />
-                  <span className="hidden sm:inline">
-                    {alertasStockPos.length > 0 ? `${alertasStockPos.length} Stock Crítico` : "Stock OK"}
-                  </span>
-                  {alertasStockPos.length > 0 && (
-                    <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
-                      {alertasStockPos.length}
-                    </Badge>
-                  )}
-                </Button>
+                {/* Pill Modesto de Alertas de Stock (solo visible si el inventario está activado) */}
+                {settings.inventoryEnabled && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalAlertasStockAbierto(true)}
+                    className={cn(
+                      "h-10 text-xs font-bold rounded-xl gap-1.5 shrink-0 transition-all",
+                      alertasStockPos.length > 0
+                        ? "border-warning/40 bg-warning/10 text-warning-soft hover:bg-warning/20"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <AlertTriangle className="size-4 text-warning-soft" />
+                    <span className="hidden sm:inline">
+                      {alertasStockPos.length > 0 ? `${alertasStockPos.length} Stock Crítico` : "Stock OK"}
+                    </span>
+                    {alertasStockPos.length > 0 && (
+                      <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
+                        {alertasStockPos.length}
+                      </Badge>
+                    )}
+                  </Button>
+                )}
               </div>
 
               {/* Pills de Categorías con Scroll Horizontal */}
@@ -1122,7 +1127,7 @@ export function ModuloPosInteractive({
 
                                 {/* Indicador de porciones preparables con insumos de la receta */}
                                 {(() => {
-                                  const disp = calcularStockDisponibleProducto(prod);
+                                  const disp = calcularStockDisponibleProducto(prod, settings.inventoryEnabled);
                                   if (disp === null) return null;
 
                                   const esSinStock = disp <= 0;
@@ -1479,7 +1484,7 @@ export function ModuloPosInteractive({
                             document.getElementById("customerName")?.focus();
                             return;
                           }
-                          const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta);
+                          const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta, settings.inventoryEnabled);
                           if (errorStock) {
                             setErrorGlobal(errorStock);
                             return;
@@ -1881,6 +1886,7 @@ export function ModuloPosInteractive({
           setProductoAElegir(null);
         }}
         yaEnCarrito={productoAElegir ? enCarritoDelProducto(productoAElegir.id) : 0}
+        inventoryEnabled={settings.inventoryEnabled}
       />
     </div>
   );

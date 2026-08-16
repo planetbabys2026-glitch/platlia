@@ -55,12 +55,33 @@ const schema = z.object({
   CLOUDINARY_API_SECRET: opcional(z.string().min(1)),
 
   // ─── Pagos (MercadoPago) ──────────────────────────────────────────────────
-  MP_ACCESS_TOKEN: opcional(z.string().min(1)),
-  MP_WEBHOOK_SECRET: opcional(z.string().min(1)),
+  MP_ACCESS_TOKEN: opcional(z.string().min(1)).default(
+    () => process.env.MP_ACCESS_TOKEN || process.env.MERCADOPAGO_ACCESS_TOKEN || "",
+  ),
+  MERCADOPAGO_ACCESS_TOKEN: opcional(z.string().min(1)),
+  MP_PUBLIC_KEY: opcional(z.string().min(1)).default(
+    () =>
+      process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ||
+      process.env.MP_PUBLIC_KEY ||
+      process.env.MERCADOPAGO_PUBLIC_KEY ||
+      "",
+  ),
+  MERCADOPAGO_PUBLIC_KEY: opcional(z.string().min(1)),
+  NEXT_PUBLIC_MP_PUBLIC_KEY: opcional(z.string().min(1)),
+  MP_WEBHOOK_SECRET: opcional(z.string().min(1)).default(
+    () => process.env.MP_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET_TEST || "",
+  ),
+  MP_WEBHOOK_SECRET_TEST: opcional(z.string().min(1)),
   MP_BACK_URL: opcional(z.url()),
   // Solo se apaga en staging, para capturar un payload real y escribir el test
   // de firma. En producción va siempre en true.
   MP_SIGNATURE_ENFORCE: booleanDeEntorno("true"),
+
+  // ─── Variables de Usuario de Prueba Mercado Pago ──────────────────────────
+  MP_USER_ID: opcional(z.string().min(1)),
+  MP_USER: opcional(z.string().min(1)),
+  MP_USER_PASSWORD: opcional(z.string().min(1)),
+  MP_USER_VERIFICATION_CODE: opcional(z.string().min(1)),
 
   // ─── Redis (Turnero SSE Pub/Sub) ──────────────────────────────────────────
   REDIS_URL: opcional(z.string().min(1)),

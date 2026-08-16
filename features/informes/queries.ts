@@ -1,6 +1,7 @@
 import "server-only";
 import { tenantDb } from "@/lib/db/tenant";
 import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
+import { getSettings } from "@/features/negocio/queries";
 
 /**
  * Informe de una jornada.
@@ -174,6 +175,9 @@ export interface AlertaInventarioItem {
  * que estén agotados o por debajo del stock mínimo.
  */
 export async function getAlertasInventario(businessId: string): Promise<AlertaInventarioItem[]> {
+  const settings = await getSettings(businessId);
+  if (!settings.inventoryEnabled) return [];
+
   const db = tenantDb(businessId);
 
   const [insumos, productos] = await Promise.all([

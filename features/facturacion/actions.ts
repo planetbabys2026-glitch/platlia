@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { Role } from "@/generated/prisma/enums";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 // eslint-disable-next-line no-restricted-imports -- La licencia es de la cuenta, no de una sede: se escribe sobre la sede principal, que puede no ser la activa.
@@ -15,6 +14,7 @@ import { cotizar, listaParaNegocio, NOMBRE_PERIODICIDAD } from "@/lib/billing/pr
 import { prorratearSedeNueva } from "@/lib/billing/prorrateo";
 import {
   activarCobroAutomaticoSchema,
+  esquemaVacio,
   pagarSuscripcionSchema,
   solicitarSedeAdicionalSchema,
 } from "./schemas";
@@ -68,6 +68,8 @@ export const pagarSuscripcion = defineAction({
       meses: cotizacion.mesesOtorgados,
       sedes: cotizacion.sedes,
       detallePlan: `${NOMBRE_PERIODICIDAD[input.periodicidad]} · ${sedes} ${sedes === 1 ? "sede" : "sedes"}`,
+      payerEmail: ctx.user.email,
+      payerName: ctx.user.name,
     });
 
     // El intento queda anotado ANTES de salir del sitio. Sin esto, un pago que no
@@ -139,7 +141,7 @@ export const solicitarSedeAdicional = defineAction({
  * licencia ya vale lo que vale con la sede nueva.
  */
 export const comprarSedeAdicional = defineAction({
-  schema: z.object({}),
+  schema: esquemaVacio,
   roles: [Role.PROPIETARIO],
   permitirSinLicencia: true,
   async handler({ ctx }) {
@@ -187,6 +189,8 @@ export const comprarSedeAdicional = defineAction({
       sedes: cuenta.sedes + 1,
       detallePlan: `Sede adicional · ${prorrateo.diasRestantes} días restantes`,
       tipo: "SEDE_ADICIONAL",
+      payerEmail: ctx.user.email,
+      payerName: ctx.user.name,
     });
 
     await rootDb.subscriptionPayment.create({
@@ -269,7 +273,7 @@ export const activarCobroAutomatico = defineAction({
  * al botón de cancelar.
  */
 export const cancelarCobroAutomatico = defineAction({
-  schema: z.object({}),
+  schema: esquemaVacio,
   roles: [Role.ADMINISTRADOR],
   permitirSinLicencia: true,
   async handler({ ctx }) {

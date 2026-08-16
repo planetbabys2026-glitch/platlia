@@ -9,21 +9,18 @@ import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import type { Cotizacion, Periodicidad } from "@/lib/billing/precios";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { ExternalLink } from "lucide-react";
 
 /**
- * Elegir cuánto tiempo se compra.
- *
- * Antes era un botón único que decía "Pagar $50.000" y siempre cobraba un mes: los
- * planes de 6 y 12 existían como texto en la portada y en un formulario que solo
- * escribía una fila de auditoría. Acá se elige, se ve el total, cuánto se ahorra y
- * —lo que en realidad se está preguntando— **hasta cuándo queda la licencia**.
+ * Elegir cuánto tiempo se compra (1 mes, 6 meses o 12 meses) y pagar vía Mercado Pago Pro.
  */
 
 function Enviar({ cotizacion }: { cotizacion: Cotizacion }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" size="lg" disabled={pending} className="w-full">
-      {pending ? "Llevándote a MercadoPago…" : `Pagar ${formatCop(cotizacion.totalCop)}`}
+    <Button type="submit" size="lg" disabled={pending} className="w-full font-bold shadow-md shadow-brand/20">
+      <ExternalLink className="mr-2 size-4" />
+      {pending ? "Llevándote a Mercado Pago…" : `Pagar en Mercado Pago (${formatCop(cotizacion.totalCop)})`}
     </Button>
   );
 }
@@ -102,22 +99,17 @@ export function BotonPagar({
   const elegida = cotizaciones.find((c) => c.periodicidad === periodicidad) ?? cotizaciones[0];
 
   return (
-    <form action={accion} className="space-y-3">
-      <input type="hidden" name="periodicidad" value={periodicidad} />
-
-      {!estado.ok && estado.error && (
-        <Alert variant="destructive" role="alert">
-          <AlertDescription>{estado.error}</AlertDescription>
-        </Alert>
-      )}
-
+    <div className="space-y-4">
+      {/* Selector de periodicidad */}
       <div className="space-y-2">
         {cotizaciones.map((c) => (
           <Opcion
             key={c.periodicidad}
             cotizacion={c}
             elegida={c.periodicidad === periodicidad}
-            onElegir={() => setPeriodicidad(c.periodicidad)}
+            onElegir={() => {
+              setPeriodicidad(c.periodicidad);
+            }}
             hasta={vencimientos[c.periodicidad]}
           />
         ))}
@@ -129,11 +121,21 @@ export function BotonPagar({
         </p>
       )}
 
-      <Enviar cotizacion={elegida} />
+      <form action={accion} className="space-y-3">
+        <input type="hidden" name="periodicidad" value={periodicidad} />
 
-      <p className="text-center text-xs text-muted-foreground">
-        El pago se hace en MercadoPago. Platlia nunca ve ni guarda los datos de tu tarjeta.
-      </p>
-    </form>
+        {!estado.ok && estado.error && (
+          <Alert variant="destructive" role="alert">
+            <AlertDescription>{estado.error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Enviar cotizacion={elegida} />
+
+        <p className="text-center text-xs text-muted-foreground">
+          Al hacer clic, serás redirigido a Mercado Pago para completar tu pago de forma 100% segura.
+        </p>
+      </form>
+    </div>
   );
 }

@@ -208,7 +208,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
     });
 
     // Reducción de cantidad: de 5 a 3 (-2 porciones devueltas)
-    mockTx.product.findFirst.mockResolvedValueOnce({
+    (mockTx.product.findFirst as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       id: "prod-1",
       name: "Hamburguesa Especial",
       trackStock: false,

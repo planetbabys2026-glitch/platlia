@@ -1,12 +1,13 @@
 import { MercadoPagoConfig, PreApproval } from "mercadopago";
-import { env, requireEnv } from "@/lib/env";
+import { env } from "@/lib/env";
+import { ErrorDeUsuario } from "@/lib/actions/estado";
 
 /**
  * Cobro automático: la suscripción recurrente de MercadoPago (`preapproval`).
  *
- * Es otra API que Checkout Pro. En vez de crear una preferencia por cada pago, se
- * crea una autorización de débito: el cliente la aprueba una vez y MercadoPago
- * cobra solo cada mes o cada año. Nosotros nunca vemos la tarjeta, igual que antes.
+ * Se cobra con otra API de MercadoPago —no Checkout Pro— que guarda el permiso de
+ * débito y cobra solo cada mes o cada año. Nunca vemos ni guardamos los datos de
+ * la tarjeta.
  *
  * Lo que llega por webhook son dos avisos nuevos: `subscription_preapproval`
  * cuando la autorización cambia de estado, y `subscription_authorized_payment`
@@ -14,10 +15,35 @@ import { env, requireEnv } from "@/lib/env";
  */
 
 function cliente(paraQue: string) {
+  const token = env.MERCADOPAGO_ACCESS_TOKEN || env.MP_ACCESS_TOKEN;
+  if (!token) {
+    throw new ErrorDeUsuario(`Falta la variable MERCADOPAGO_ACCESS_TOKEN en el entorno, necesaria para ${paraQue}.`);
+  }
   return new MercadoPagoConfig({
-    accessToken: requireEnv("MP_ACCESS_TOKEN", paraQue),
+    accessToken: token,
     options: { timeout: 10_000 },
   });
+}
+
+function parsearErrorMercadoPago(err: unknown, accion: string): never {
+  const errorObj = err as { status?: number; message?: string; code?: string };
+  const mensajeStr = typeof errorObj?.message === "string" ? errorObj.message : "";
+  const codeStr = typeof errorObj?.code === "string" ? errorObj.code : "";
+
+  if (
+    errorObj?.status === 403 ||
+    errorObj?.status === 401 ||
+    codeStr === "unauthorized" ||
+    codeStr === "PA_UNAUTHORIZED_RESULT_FROM_POLICIES" ||
+    mensajeStr.toLowerCase().includes("unauthorized") ||
+    mensajeStr.toLowerCase().includes("authorization value not present")
+  ) {
+    throw new ErrorDeUsuario(
+      "Credenciales de Mercado Pago inválidas o no autorizadas. La variable MERCADOPAGO_ACCESS_TOKEN en tu .env tiene formato de Public Key (~41 caracteres). Debe ser el Access Token de prueba completo (de ~75 a 80 caracteres comenzando con TEST-).",
+    );
+  }
+  const msg = err instanceof Error ? err.message : typeof err === "object" ? JSON.stringify(err) : String(err);
+  throw new ErrorDeUsuario(`No se pudo ${accion} con Mercado Pago: ${msg}`);
 }
 
 export type Frecuencia = "MENSUAL" | "ANUAL";
@@ -50,32 +76,40 @@ export async function crearAutorizacionDeCobro(args: {
   const config = cliente("activar el cobro automático");
   const volverA = env.MP_BACK_URL ?? `${env.APP_URL}/facturacion`;
 
-  const respuesta = await new PreApproval(config).create({
-    body: {
-      reason: `Platlia · ${args.nombreNegocio}`,
-      // La misma referencia que usa Checkout Pro: es lo que permite que el pago
-      // recurrente encuentre su suscripción cuando vuelve por el webhook.
-      external_reference: args.subscriptionId,
-      payer_email: args.correoDelPagador,
-      back_url: volverA,
-      auto_recurring: {
-        ...RECURRENCIA[args.frecuencia],
-        transaction_amount: args.montoCop,
-        currency_id: "COP",
-        // La API la quiere en ISO. Si la fecha ya pasó, MercadoPago cobra al
-        // autorizar, que es lo correcto para una licencia vencida.
-        start_date: args.primerCobro.toISOString(),
+  const buyerEmail = process.env.MP_BUYER_EMAIL;
+  const payerEmail = buyerEmail || args.correoDelPagador;
+
+  try {
+    const respuesta = await new PreApproval(config).create({
+      body: {
+        reason: `Platlia · ${args.nombreNegocio}`,
+        // La misma referencia que usa Checkout Pro: es lo que permite que el pago
+        // recurrente encuentre su suscripción cuando vuelve por el webhook.
+        external_reference: args.subscriptionId,
+        payer_email: payerEmail,
+        back_url: volverA,
+        auto_recurring: {
+          ...RECURRENCIA[args.frecuencia],
+          transaction_amount: args.montoCop,
+          currency_id: "COP",
+          // La API la quiere en ISO. Si la fecha ya pasó, MercadoPago cobra al
+          // autorizar, que es lo correcto para una licencia vencida.
+          start_date: args.primerCobro.toISOString(),
+        },
+        status: "pending",
       },
-      status: "pending",
-    },
-  });
+    });
 
-  const url = respuesta.init_point;
-  if (!respuesta.id || !url) {
-    throw new Error("MercadoPago no devolvió un enlace para autorizar el cobro automático.");
+    const url = respuesta.init_point;
+    if (!respuesta.id || !url) {
+      throw new ErrorDeUsuario("MercadoPago no devolvió un enlace para autorizar el cobro automático.");
+    }
+
+    return { id: respuesta.id, urlDeAutorizacion: url };
+  } catch (err) {
+    if (err instanceof ErrorDeUsuario) throw err;
+    parsearErrorMercadoPago(err, "crear la autorización de cobro automático");
   }
-
-  return { id: respuesta.id, urlDeAutorizacion: url };
 }
 
 export type EstadoAutorizacion = {

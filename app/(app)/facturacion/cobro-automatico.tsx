@@ -11,9 +11,10 @@ import { Button } from "@/components/ui/button";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { ExternalLink } from "lucide-react";
 
 /**
- * Cobro automático: encenderlo y apagarlo.
+ * Cobro automático: encenderlo y apagarlo vía Mercado Pago Pro (`preapproval`).
  *
  * Lo que hace que alguien se anime a activarlo es saber cómo se sale, así que el
  * botón de cancelar está a la vista desde el primer momento y dice exactamente
@@ -23,11 +24,12 @@ import { cn } from "@/lib/utils";
 
 type Frecuencia = "MENSUAL" | "ANUAL";
 
-function Enviar({ children, variant }: { children: string; variant?: "outline" }) {
+function Enviar({ children }: { children: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant={variant} disabled={pending} className="w-full">
-      {pending ? "Un momento…" : children}
+    <Button type="submit" disabled={pending} className="w-full font-bold shadow-md shadow-brand/20">
+      <ExternalLink className="mr-2 size-4" />
+      {pending ? "Llevándote a Mercado Pago…" : children}
     </Button>
   );
 }
@@ -71,7 +73,9 @@ function Activo({
             <span className="numeral text-foreground">{proximoCobro}</span>, que es
             hasta donde ya pagaste. Después la renovás cuando quieras.
           </p>
-          <Enviar variant="outline">Sí, dejar de cobrar</Enviar>
+          <Button type="submit" variant="destructive" className="w-full">
+            Sí, dejar de cobrar
+          </Button>
           <Button type="button" variant="ghost" className="w-full" onClick={() => setConfirmando(false)}>
             Seguir con el cobro automático
           </Button>
@@ -109,18 +113,13 @@ function Apagado({
   }
 
   return (
-    <form
-      action={accion}
-      className="space-y-3 rounded-lg border border-[var(--linea-16)] bg-[var(--panel-2)] p-4"
-    >
-      <input type="hidden" name="frecuencia" value={frecuencia} />
-
+    <div className="space-y-4 rounded-lg border border-[var(--linea-16)] bg-[var(--panel-2)] p-4">
       <div>
         <h3 className="font-display text-lg font-black uppercase tracking-tight text-foreground">
           Que se cobre solo
         </h3>
         <p className="text-xs text-muted-foreground">
-          Autorizás el débito una vez y no tenés que volver a entrar a pagar. Lo
+          Autorizás el débito una vez en Mercado Pago y no tenés que volver a entrar a pagar. Lo
           cancelás cuando quieras, desde acá mismo.
         </p>
       </div>
@@ -165,11 +164,15 @@ function Apagado({
         cuando se termina lo que ya pagaste. No se cobra nada hoy.
       </p>
 
-      <Enviar>Autorizar en MercadoPago</Enviar>
-      <Button type="button" variant="ghost" className="w-full" onClick={() => setAbierto(false)}>
+      <form action={accion} className="space-y-2 pt-1">
+        <input type="hidden" name="frecuencia" value={frecuencia} />
+        <Enviar>Autorizar débito en Mercado Pago</Enviar>
+      </form>
+
+      <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => setAbierto(false)}>
         Ahora no
       </Button>
-    </form>
+    </div>
   );
 }
 
@@ -181,6 +184,9 @@ export function CobroAutomatico(props: {
   return props.activo ? (
     <Activo {...props.activo} />
   ) : (
-    <Apagado opciones={props.opciones} desdeCuando={props.desdeCuando} />
+    <Apagado
+      opciones={props.opciones}
+      desdeCuando={props.desdeCuando}
+    />
   );
 }

@@ -21,3 +21,5 @@ export const pagarSuscripcionSchema = z.object({
 export const activarCobroAutomaticoSchema = z.object({
   frecuencia: z.enum(["MENSUAL", "ANUAL"]).default("MENSUAL"),
 });
+
+export const esquemaVacio = z.object({});

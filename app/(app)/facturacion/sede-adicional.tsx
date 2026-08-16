@@ -7,9 +7,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
+import { ExternalLink } from "lucide-react";
 
 /**
- * Comprar una sede más.
+ * Comprar una sede más vía Mercado Pago Pro.
  *
  * Lo único que hay que entender antes de pagar es qué se lleva y qué va a pagar
  * el mes que viene, así que eso es lo que dice, con los dos números al lado. El
@@ -20,8 +21,9 @@ import { formatCop } from "@/lib/money";
 function Enviar({ montoCop }: { montoCop: number }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full">
-      {pending ? "Llevándote a MercadoPago…" : `Pagar ${formatCop(montoCop)} y habilitar la sede`}
+    <Button type="submit" disabled={pending} className="w-full font-bold shadow-md shadow-brand/20">
+      <ExternalLink className="mr-2 size-4" />
+      {pending ? "Llevándote a Mercado Pago…" : `Pagar en Mercado Pago (${formatCop(montoCop)}) y habilitar sede`}
     </Button>
   );
 }
@@ -67,7 +69,7 @@ export function SedeAdicional({
   }
 
   return (
-    <form action={accion} className="space-y-3 rounded-lg border border-[var(--linea-16)] bg-[var(--panel-2)] p-4">
+    <div className="space-y-3 rounded-lg border border-[var(--linea-16)] bg-[var(--panel-2)] p-4">
       <div>
         <h3 className="font-display text-lg font-black uppercase tracking-tight text-foreground">
           Agregar otra sede
@@ -110,12 +112,15 @@ export function SedeAdicional({
         Pagás solo lo que falta de este período, no el mes completo.
       </p>
 
-      <div className="flex flex-col gap-2">
-        <Enviar montoCop={montoCop} />
-        <Button type="button" variant="ghost" onClick={() => setAbierto(false)}>
+      <div className="flex flex-col gap-2 pt-1">
+        <form action={accion}>
+          <Enviar montoCop={montoCop} />
+        </form>
+
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAbierto(false)}>
           Ahora no
         </Button>
       </div>
-    </form>
+    </div>
   );
 }

@@ -96,103 +96,112 @@ function EnlaceNav({
   // para el rótulo más corto.
   const secciones = colapsado ? undefined : item.secciones;
 
-  const fila = (
-    <div
-      className={cn(
-        "group relative flex items-center rounded-lg transition-colors",
-        activo ? "bg-brand/15" : "hover:bg-[var(--panel-2)]",
-      )}
-    >
-      {/* El riel del export: 3px de Brasa contra el borde izquierdo. Marca la
-          posición sin depender del color del texto, que es lo que se pierde de
-          reojo, y del lado por donde se leen los ítems. */}
-      {activo ? (
-        <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-brand" />
-      ) : null}
-
+  if (!secciones) {
+    return (
       <Link
         href={item.href}
         onClick={onNavegar}
         title={colapsado ? item.titulo : undefined}
         aria-current={activo ? "page" : undefined}
         className={cn(
-          "flex min-w-0 flex-1 items-center font-medium transition-colors",
+          "group relative flex items-center rounded-lg font-medium transition-colors",
           denso ? "gap-3 px-3 py-2.5 text-sm" : "min-h-11 gap-3.5 px-3.5 py-2.5 text-base",
           colapsado && "justify-center px-0",
-          activo ? "font-bold text-brand" : "text-muted-foreground group-hover:text-foreground",
+          activo
+            ? "bg-brand/15 font-bold text-brand"
+            : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
         )}
       >
+        {activo ? (
+          <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-brand" />
+        ) : null}
         <Icono
           className={cn("size-[18px] shrink-0", activo ? "text-brand" : "text-muted-foreground")}
         />
         {!colapsado && <span className="truncate">{item.titulo}</span>}
         {item.insignia !== undefined && <Insignia valor={item.insignia} comoPunto={colapsado} />}
       </Link>
-
-      {/* La flecha es un botón aparte y no parte del enlace: un `<button>` dentro
-          de un `<a>` es HTML inválido, y además plegar no es navegar. */}
-      {secciones && (
-        <button
-          type="button"
-          onClick={onAlternar}
-          aria-expanded={abierta}
-          aria-controls={idPanel}
-          aria-label={`${abierta ? "Plegar" : "Desplegar"} ${item.titulo}`}
-          className={cn(
-            "flex shrink-0 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-            denso ? "px-2 py-2.5" : "min-h-11 px-3",
-          )}
-        >
-          <ChevronDown
-            aria-hidden
-            className={cn("size-4 transition-transform duration-200", abierta && "rotate-180")}
-          />
-        </button>
-      )}
-    </div>
-  );
-
-  if (!secciones) return fila;
+    );
+  }
 
   return (
-    <div>
-      {fila}
-      <div
-        id={idPanel}
-        // `inert` y no `hidden`: `display:none` cortaría la animación en seco.
-        inert={!abierta}
-        aria-hidden={!abierta}
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={onAlternar}
+        title={colapsado ? item.titulo : undefined}
+        aria-expanded={abierta}
+        aria-controls={idPanel}
+        aria-label={`${abierta ? "Plegar" : "Desplegar"} ${item.titulo}`}
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          abierta ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          "group relative flex w-full items-center justify-between rounded-lg font-medium transition-colors",
+          denso ? "gap-3 px-3 py-2.5 text-sm" : "min-h-11 gap-3.5 px-3.5 py-2.5 text-base",
+          colapsado && "justify-center px-0",
+          activo
+            ? "bg-brand/15 font-bold text-brand"
+            : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
         )}
       >
-        {/* `min-h-0` es lo que deja que la fila del grid llegue a 0fr. */}
-        <div className="min-h-0 overflow-hidden">
-          <div className="ml-4 mt-1 space-y-0.5 border-l border-dashed border-[var(--linea-30)] pl-3">
-            {secciones.map((seccion) => {
-              const activaSeccion = activo && (vistaActual ?? "") === seccion.vista;
-              return (
-                <Link
-                  key={seccion.vista || "principal"}
-                  href={hrefDeSeccion(item, seccion)}
-                  onClick={onNavegar}
-                  aria-current={activaSeccion ? "page" : undefined}
-                  className={cn(
-                    "flex items-center rounded-md font-medium transition-colors",
-                    denso ? "px-3 py-2 text-xs" : "min-h-11 px-3 py-2 text-sm",
-                    activaSeccion
-                      ? "bg-brand font-bold text-brand-foreground"
-                      : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
-                  )}
-                >
-                  <span className="truncate">{seccion.titulo}</span>
-                </Link>
-              );
-            })}
+        {activo ? (
+          <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-brand" />
+        ) : null}
+
+        <span className="flex min-w-0 items-center gap-3 truncate">
+          <Icono
+            className={cn("size-[18px] shrink-0", activo ? "text-brand" : "text-muted-foreground")}
+          />
+          {!colapsado && <span className="truncate">{item.titulo}</span>}
+          {item.insignia !== undefined && <Insignia valor={item.insignia} comoPunto={colapsado} />}
+        </span>
+
+        {!colapsado && (
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "size-4 shrink-0 transition-transform duration-200",
+              activo ? "text-brand" : "text-muted-foreground",
+              abierta && "rotate-180",
+            )}
+          />
+        )}
+      </button>
+
+      {!colapsado && (
+        <div
+          id={idPanel}
+          inert={!abierta}
+          aria-hidden={!abierta}
+          className={cn(
+            "grid transition-[grid-template-rows] duration-200 ease-out",
+            abierta ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="ml-4 space-y-0.5 border-l border-dashed border-[var(--linea-30)] pl-3 pt-1">
+              {secciones.map((seccion) => {
+                const activaSeccion = activo && (vistaActual ?? "") === seccion.vista;
+                return (
+                  <Link
+                    key={seccion.vista || "principal"}
+                    href={hrefDeSeccion(item, seccion)}
+                    onClick={onNavegar}
+                    aria-current={activaSeccion ? "page" : undefined}
+                    className={cn(
+                      "flex items-center rounded-md font-medium transition-colors",
+                      denso ? "px-3 py-2 text-xs" : "min-h-11 px-3 py-2 text-sm",
+                      activaSeccion
+                        ? "bg-brand font-bold text-brand-foreground"
+                        : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
+                    )}
+                  >
+                    <span className="truncate">{seccion.titulo}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -227,7 +236,21 @@ function Shell({
   const vistaActual = searchParams.get("vista") ?? "";
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(pathname.startsWith("/administracion"));
+  const { grupos, administracion, configuracion } = construirNavegacion({
+    usaMesas,
+    usaCocina,
+    usaDomicilios,
+    puedeVerInventario,
+    usaRecetas,
+    puedeFacturar,
+    esPropietario,
+    comandasVivas,
+    domiciliosActivos,
+    cuentasPorCobrar,
+  });
+  const barraInferior = itemsDeBarraInferior(grupos);
+  const esAdminActivo = administracion.some((sub) => esRutaActiva(pathname, sub.href));
+  const [adminOpen, setAdminOpen] = useState(false);
   /**
    * Qué módulos tienen las secciones desplegadas, por `href`. Solo guarda lo que
    * la persona tocó a mano; sin entrada, manda el valor por defecto, que es
@@ -240,9 +263,13 @@ function Shell({
    */
   const [seccionesAbiertas, setSeccionesAbiertas] = useState<Record<string, boolean>>({});
 
-  const alternarSecciones = useCallback((href: string, abiertaAhora: boolean) => {
-    setSeccionesAbiertas((previo) => ({ ...previo, [href]: !abiertaAhora }));
-  }, []);
+  const alternarSecciones = useCallback(
+    (href: string, abiertaAhora: boolean) => {
+      if (collapsed) setCollapsed(false);
+      setSeccionesAbiertas((previo) => ({ ...previo, [href]: !abiertaAhora }));
+    },
+    [collapsed],
+  );
 
   // Cargar estado colapsado guardado en localStorage
   useEffect(() => {
@@ -258,10 +285,10 @@ function Shell({
 
   // Abrir acordeón automáticamente si la ruta activa es de administración
   useEffect(() => {
-    if (pathname.startsWith("/administracion")) {
+    if (administracion.some((sub) => esRutaActiva(pathname, sub.href))) {
       setAdminOpen(true);
     }
-  }, [pathname]);
+  }, [pathname, administracion]);
 
   const toggleCollapsed = () => {
     const nuevo = !collapsed;
@@ -297,23 +324,8 @@ function Shell({
     return () => window.removeEventListener("keydown", alTeclear);
   }, [mobileOpen]);
 
-  const { grupos, administracion } = construirNavegacion({
-    usaMesas,
-    usaCocina,
-    usaDomicilios,
-    puedeVerInventario,
-    usaRecetas,
-    puedeFacturar,
-    esPropietario,
-    comandasVivas,
-    domiciliosActivos,
-    cuentasPorCobrar,
-  });
-  const barraInferior = itemsDeBarraInferior(grupos);
-  const esAdminActivo = pathname.startsWith("/administracion");
-
   const acordeonAdmin = (denso: boolean) => (
-    <div className="space-y-1 pt-1">
+    <div className="space-y-1">
       <button
         type="button"
         onClick={() => {
@@ -326,12 +338,17 @@ function Shell({
         className={cn(
           "group relative flex w-full items-center justify-between rounded-lg font-medium transition-colors",
           denso ? "gap-3 px-3 py-2.5 text-sm" : "min-h-11 gap-3.5 px-3.5 py-2.5 text-base",
+          collapsed && denso && "justify-center px-0",
           esAdminActivo
             ? "bg-brand/15 font-bold text-brand"
             : "text-muted-foreground hover:bg-[var(--panel-2)] hover:text-foreground",
         )}
       >
-        <span className="flex items-center gap-3 truncate">
+        {esAdminActivo ? (
+          <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-brand" />
+        ) : null}
+
+        <span className="flex min-w-0 items-center gap-3 truncate">
           <Settings
             className={cn(
               "size-[18px] shrink-0",
@@ -342,8 +359,10 @@ function Shell({
         </span>
         {!(collapsed && denso) && (
           <ChevronDown
+            aria-hidden
             className={cn(
-              "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              "size-4 shrink-0 transition-transform duration-200",
+              esAdminActivo ? "text-brand" : "text-muted-foreground",
               adminOpen && "rotate-180",
             )}
           />
@@ -364,7 +383,7 @@ function Shell({
           )}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="ml-4 space-y-1 border-l border-dashed border-[var(--linea-30)] pl-3 pt-1">
+            <div className="ml-4 space-y-0.5 border-l border-dashed border-[var(--linea-30)] pl-3 pt-1">
               {administracion.map((sub) => {
                 const SubIcono = sub.icono;
                 const activo = pathname === sub.href;
@@ -384,7 +403,7 @@ function Shell({
                     )}
                   >
                     <SubIcono className="size-4 shrink-0" />
-                    <span>{sub.titulo}</span>
+                    <span className="truncate">{sub.titulo}</span>
                   </Link>
                 );
               })}
@@ -465,7 +484,32 @@ function Shell({
                   />
                 );
               })}
-              {grupo.conAdministracion ? acordeonAdmin(true) : null}
+              {grupo.conAdministracion ? (
+                <>
+                  {acordeonAdmin(true)}
+                  {configuracion && (
+                    <EnlaceNav
+                      key={configuracion.href}
+                      item={configuracion}
+                      activo={esRutaActiva(pathname, configuracion.href)}
+                      colapsado={collapsed}
+                      denso
+                      vistaActual={vistaActual}
+                      abierta={
+                        seccionesAbiertas[configuracion.href] ??
+                        esRutaActiva(pathname, configuracion.href)
+                      }
+                      onAlternar={() =>
+                        alternarSecciones(
+                          configuracion.href,
+                          seccionesAbiertas[configuracion.href] ??
+                            esRutaActiva(pathname, configuracion.href),
+                        )
+                      }
+                    />
+                  )}
+                </>
+              ) : null}
             </div>
           ))}
         </nav>
@@ -628,7 +672,31 @@ function Shell({
                         />
                       );
                     })}
-                    {grupo.conAdministracion ? acordeonAdmin(false) : null}
+                    {grupo.conAdministracion ? (
+                      <>
+                        {acordeonAdmin(false)}
+                        {configuracion && (
+                          <EnlaceNav
+                            key={configuracion.href}
+                            item={configuracion}
+                            activo={esRutaActiva(pathname, configuracion.href)}
+                            onNavegar={() => setMobileOpen(false)}
+                            vistaActual={vistaActual}
+                            abierta={
+                              seccionesAbiertas[configuracion.href] ??
+                              esRutaActiva(pathname, configuracion.href)
+                            }
+                            onAlternar={() =>
+                              alternarSecciones(
+                                configuracion.href,
+                                seccionesAbiertas[configuracion.href] ??
+                                  esRutaActiva(pathname, configuracion.href),
+                              )
+                            }
+                          />
+                        )}
+                      </>
+                    ) : null}
                   </div>
                 ))}
               </nav>

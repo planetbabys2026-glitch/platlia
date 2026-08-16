@@ -100,6 +100,7 @@ export function SelectorModificadores({
   yaEnCarrito = 0,
   permitirCantidad = true,
   permitirNota = true,
+  inventoryEnabled = true,
 }: {
   producto: ProductoConModificadores | null;
   abierto: boolean;
@@ -113,6 +114,7 @@ export function SelectorModificadores({
   yaEnCarrito?: number;
   permitirCantidad?: boolean;
   permitirNota?: boolean;
+  inventoryEnabled?: boolean;
 }) {
   const grupos = useMemo(() => (producto ? gruposDeProducto(producto) : []), [producto]);
 
@@ -129,6 +131,7 @@ export function SelectorModificadores({
             yaEnCarrito={yaEnCarrito}
             permitirCantidad={permitirCantidad}
             permitirNota={permitirNota}
+            inventoryEnabled={inventoryEnabled}
             onConfirmar={onConfirmar}
           />
         )}
@@ -143,6 +146,7 @@ function CuerpoSelector({
   yaEnCarrito,
   permitirCantidad,
   permitirNota,
+  inventoryEnabled = true,
   onConfirmar,
 }: {
   producto: ProductoConModificadores;
@@ -150,6 +154,7 @@ function CuerpoSelector({
   yaEnCarrito: number;
   permitirCantidad: boolean;
   permitirNota: boolean;
+  inventoryEnabled?: boolean;
   onConfirmar: (seleccion: {
     opcionIds: string[];
     quantity: number;
@@ -169,6 +174,7 @@ function CuerpoSelector({
   const disponibles = calcularStockDisponibleCombinacion(
     producto,
     opcionesConInsumos(producto, elegidas),
+    inventoryEnabled,
   );
   const techo = disponibles === null ? Infinity : Math.max(0, disponibles - yaEnCarrito);
   const sinStock = cantidad > techo;
@@ -228,6 +234,7 @@ function CuerpoSelector({
                   const conEsta = calcularStockDisponibleCombinacion(
                     producto,
                     opcionesConInsumos(producto, alternarOpcion(grupo, elegidas, opcion.id)),
+                    inventoryEnabled,
                   );
                   const agotada = !activa && conEsta !== null && conEsta - yaEnCarrito <= 0;
 

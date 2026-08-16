@@ -1,5 +1,6 @@
 import { Invoice, MercadoPagoConfig, Payment, Preference } from "mercadopago";
-import { env, requireEnv } from "@/lib/env";
+import { env } from "@/lib/env";
+import { ErrorDeUsuario } from "@/lib/actions/estado";
 
 /**
  * Cliente de MercadoPago.
@@ -14,10 +15,35 @@ import { env, requireEnv } from "@/lib/env";
  */
 
 function cliente(paraQue: string) {
+  const token = env.MERCADOPAGO_ACCESS_TOKEN || env.MP_ACCESS_TOKEN;
+  if (!token) {
+    throw new ErrorDeUsuario(`Falta la variable MERCADOPAGO_ACCESS_TOKEN en el entorno, necesaria para ${paraQue}.`);
+  }
   return new MercadoPagoConfig({
-    accessToken: requireEnv("MP_ACCESS_TOKEN", paraQue),
+    accessToken: token,
     options: { timeout: 10_000 },
   });
+}
+
+function parsearErrorMercadoPago(err: unknown, accion: string): never {
+  const errorObj = err as { status?: number; message?: string; code?: string };
+  const mensajeStr = typeof errorObj?.message === "string" ? errorObj.message : "";
+  const codeStr = typeof errorObj?.code === "string" ? errorObj.code : "";
+
+  if (
+    errorObj?.status === 403 ||
+    errorObj?.status === 401 ||
+    codeStr === "unauthorized" ||
+    codeStr === "PA_UNAUTHORIZED_RESULT_FROM_POLICIES" ||
+    mensajeStr.toLowerCase().includes("unauthorized") ||
+    mensajeStr.toLowerCase().includes("authorization value not present")
+  ) {
+    throw new ErrorDeUsuario(
+      "Credenciales de Mercado Pago inválidas o no autorizadas. La variable MERCADOPAGO_ACCESS_TOKEN en tu .env tiene formato de Public Key (~41 caracteres). Debe ser el Access Token de prueba completo (de ~75 a 80 caracteres comenzando con TEST-).",
+    );
+  }
+  const msg = err instanceof Error ? err.message : typeof err === "object" ? JSON.stringify(err) : String(err);
+  throw new ErrorDeUsuario(`No se pudo ${accion} con Mercado Pago: ${msg}`);
 }
 
 export type PreferenciaCreada = {
@@ -25,6 +51,18 @@ export type PreferenciaCreada = {
   /** A dónde mandar al usuario para que pague. */
   urlDePago: string;
 };
+
+function resolverDatosComprador(args: { payerEmail?: string; payerName?: string }) {
+  const buyerEmail = process.env.MP_BUYER_EMAIL;
+  const email = buyerEmail || args.payerEmail;
+  if (!email) return undefined;
+
+  return {
+    name: args.payerName || "Usuario",
+    surname: "Platlia",
+    email,
+  };
+}
 
 export async function crearPreferenciaDePago(args: {
   businessId: string;
@@ -39,61 +77,70 @@ export async function crearPreferenciaDePago(args: {
   detallePlan: string;
   /** Qué se está comprando. Por defecto, tiempo de licencia. */
   tipo?: "LICENCIA" | "SEDE_ADICIONAL";
+  payerEmail?: string;
+  payerName?: string;
 }): Promise<PreferenciaCreada> {
   const config = cliente("cobrar la suscripción");
   const volverA = env.MP_BACK_URL ?? `${env.APP_URL}/facturacion`;
+  const payer = resolverDatosComprador(args);
 
-  const preferencia = await new Preference(config).create({
-    body: {
-      items: [
-        {
-          id: args.subscriptionId,
-          title: `Platlia · ${args.nombreNegocio}`,
-          description: args.detallePlan,
-          // `quantity: 1` a propósito: el ítem es "el plan", no "un mes". Si los
-          // meses fueran la cantidad, MercadoPago mostraría el precio unitario y
-          // el cliente vería el mensual donde espera el total.
-          quantity: 1,
-          currency_id: "COP",
-          unit_price: args.precioCop,
+  try {
+    const preferencia = await new Preference(config).create({
+      body: {
+        items: [
+          {
+            id: args.subscriptionId,
+            title: `Platlia · ${args.nombreNegocio}`,
+            description: args.detallePlan,
+            // `quantity: 1` a propósito: el ítem es "el plan", no "un mes". Si los
+            // meses fueran la cantidad, MercadoPago mostraría el precio unitario y
+            // el cliente vería el mensual donde espera el total.
+            quantity: 1,
+            currency_id: "COP",
+            unit_price: args.precioCop,
+          },
+        ],
+        ...(payer ? { payer } : {}),
+        // Con qué se relaciona el pago cuando vuelva por el webhook. Se manda por
+        // los dos caminos porque MercadoPago no garantiza `metadata` en todos los
+        // eventos, y sin esto un pago aprobado no se sabe de quién es.
+        external_reference: args.subscriptionId,
+        metadata: {
+          business_id: args.businessId,
+          subscription_id: args.subscriptionId,
+          // Cuántos meses se compraron. Lo escribe el servidor al crear la
+          // preferencia, así que el cliente no puede pedir doce y pagar uno.
+          meses: args.meses,
+          sedes: args.sedes,
+          // Qué se compró. Un prorrateo de sede no suma tiempo de licencia: habilita
+          // un cupo. Sin esto el webhook trataría los dos pagos igual.
+          tipo: args.tipo ?? "LICENCIA",
         },
-      ],
-      // Con qué se relaciona el pago cuando vuelva por el webhook. Se manda por
-      // los dos caminos porque MercadoPago no garantiza `metadata` en todos los
-      // eventos, y sin esto un pago aprobado no se sabe de quién es.
-      external_reference: args.subscriptionId,
-      metadata: {
-        business_id: args.businessId,
-        subscription_id: args.subscriptionId,
-        // Cuántos meses se compraron. Lo escribe el servidor al crear la
-        // preferencia, así que el cliente no puede pedir doce y pagar uno.
-        meses: args.meses,
-        sedes: args.sedes,
-        // Qué se compró. Un prorrateo de sede no suma tiempo de licencia: habilita
-        // un cupo. Sin esto el webhook trataría los dos pagos igual.
-        tipo: args.tipo ?? "LICENCIA",
+        back_urls: {
+          success: volverA,
+          failure: volverA,
+          pending: volverA,
+        },
+        auto_return: "approved",
+        notification_url: `${env.APP_URL}/api/webhooks/mercadopago`,
+        statement_descriptor: "PLATLIA",
       },
-      back_urls: {
-        success: volverA,
-        failure: volverA,
-        pending: volverA,
-      },
-      auto_return: "approved",
-      notification_url: `${env.APP_URL}/api/webhooks/mercadopago`,
-      statement_descriptor: "PLATLIA",
-    },
-  });
+    });
 
-  // Cuál de las dos URLs sirve lo decide la CREDENCIAL, no el NODE_ENV: con un
-  // token de producción no existe sandbox_init_point, y elegir por entorno dejaba
-  // el checkout sin enlace al probar en local con credenciales reales.
-  const urlDePago = preferencia.init_point ?? preferencia.sandbox_init_point;
+    // Cuál de las dos URLs sirve lo decide la CREDENCIAL, no el NODE_ENV: con un
+    // token de producción no existe sandbox_init_point, y elegir por entorno dejaba
+    // el checkout sin enlace al probar en local con credenciales reales.
+    const urlDePago = preferencia.init_point ?? preferencia.sandbox_init_point;
 
-  if (!preferencia.id || !urlDePago) {
-    throw new Error("MercadoPago no devolvió un enlace de pago utilizable.");
+    if (!preferencia.id || !urlDePago) {
+      throw new ErrorDeUsuario("MercadoPago no devolvió un enlace de pago utilizable.");
+    }
+
+    return { id: preferencia.id, urlDePago };
+  } catch (err) {
+    if (err instanceof ErrorDeUsuario) throw err;
+    parsearErrorMercadoPago(err, "crear el portal de pago");
   }
-
-  return { id: preferencia.id, urlDePago };
 }
 
 export type PagoDeMercadoPago = {

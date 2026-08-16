@@ -164,6 +164,7 @@ export default async function MenuQrPublicPage({
     <ClienteMenuQr
       business={business}
       settings={{
+        inventoryEnabled: settings.inventoryEnabled,
         qrMenuEnabled: settings.qrMenuEnabled,
         qrMenuBgMode: settings.qrMenuBgMode,
         qrMenuBgColor: settings.qrMenuBgColor,

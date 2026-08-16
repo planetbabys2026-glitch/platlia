@@ -2,6 +2,7 @@
 
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
+import Link from "next/link";
 import { ReceiptWidth } from "@/generated/prisma/enums";
 import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { pagarSuscripcion, solicitarSedeAdicional } from "@/features/facturacion/actions";
+import { solicitarSedeAdicional } from "@/features/facturacion/actions";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { enlaceWhatsapp } from "@/lib/soporte";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
@@ -539,7 +540,6 @@ export type FormularioLicenciaProps = {
 
 export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicenciaProps) {
   const [openModal, setOpenModal] = useState(false);
-  const [estadoPago, accionPago] = useActionState(pagarSuscripcion, ESTADO_INICIAL);
   const [estadoSolicitud, accionSolicitud] = useActionState(solicitarSedeAdicional, ESTADO_INICIAL);
 
   const ESTADO_MAP: Record<string, { texto: string; variante: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -556,7 +556,6 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
 
   return (
     <div className="space-y-6">
-      <Resultado estado={estadoPago} />
       <Resultado estado={estadoSolicitud} />
 
       {/* Tarjeta resumen de la licencia del negocio */}
@@ -602,11 +601,11 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
         )}
 
         <div className="flex flex-wrap items-center gap-3 pt-2">
-          <form action={accionPago} className="flex-1 sm:flex-none">
-            <Button type="submit" size="sm" className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold">
-              💳 Pagar / Renovar Licencia con MercadoPago
-            </Button>
-          </form>
+          <Button asChild size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold">
+            <Link href="/facturacion">
+              💳 Pagar / Adelantar Meses con Descuento
+            </Link>
+          </Button>
 
           <Dialog open={openModal} onOpenChange={setOpenModal}>
             <DialogTrigger asChild>

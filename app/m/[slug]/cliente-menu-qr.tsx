@@ -74,6 +74,7 @@ type ClienteMenuQrProps = {
     phone: string | null;
   };
   settings: {
+    inventoryEnabled: boolean;
     qrMenuEnabled: boolean;
     qrMenuBgMode: string;
     qrMenuBgColor: string;
@@ -1204,6 +1205,7 @@ export function ClienteMenuQr({
         producto={productoAElegir}
         abierto={productoAElegir !== null}
         onCerrar={() => setProductoAElegir(null)}
+        inventoryEnabled={settings.inventoryEnabled}
         onConfirmar={({ opcionIds, quantity, notes }) => {
           if (!productoAElegir) return;
 
