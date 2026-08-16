@@ -8,6 +8,21 @@ import { tenantDb } from "@/lib/db/tenant";
 export async function getFacturacion(businessId: string) {
   const db = tenantDb(businessId);
 
+  // Todo intento de pago pendiente con más de 15 minutos sin confirmarse
+  // pasa automáticamente a RECHAZADO por seguridad y orden operativo.
+  const hace15Min = new Date(Date.now() - 15 * 60 * 1000);
+  await db.subscriptionPayment.updateMany({
+    where: {
+      businessId,
+      status: "PENDIENTE",
+      createdAt: { lt: hace15Min },
+    },
+    data: {
+      status: "RECHAZADO",
+      mpStatusDetail: "expirado_por_tiempo",
+    },
+  });
+
   const [suscripcion, pagos] = await Promise.all([
     db.subscription.findFirst({
       select: {

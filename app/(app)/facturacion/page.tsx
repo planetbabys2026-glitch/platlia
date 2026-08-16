@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { getFacturacion } from "@/features/facturacion/queries";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireBusiness } from "@/lib/auth/dal";
+import { aplicarPagoDeMercadoPago } from "@/lib/billing/aplicar-pago";
 import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { listaVigenteDeLaBase } from "@/lib/billing/lista";
 import { prorratearSedeNueva } from "@/lib/billing/prorrateo";
@@ -11,8 +13,8 @@ import { aplicarPagoAprobado, diasParaElCorte } from "@/lib/billing/suscripcion"
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
 import { BotonPagar } from "./boton-pagar";
-import { CobroAutomatico } from "./cobro-automatico";
 import { SedeAdicional } from "./sede-adicional";
+import { AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 
 export const metadata: Metadata = { title: "Facturación" };
 export const dynamic = "force-dynamic";
@@ -33,7 +35,49 @@ const ESTADO_PAGO: Record<string, string> = {
   CONTRACARGO: "Contracargo",
 };
 
-export default async function FacturacionPage() {
+export default async function FacturacionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    payment_id?: string;
+    collection_id?: string;
+    status?: string;
+    collection_status?: string;
+  }>;
+}) {
+  const params = await searchParams;
+  const paymentId = params.payment_id || params.collection_id;
+  const statusParam = params.status || params.collection_status;
+
+  let avisoRetorno: {
+    tipo: "exito" | "pendiente" | "error";
+    mensaje: string;
+  } | null = null;
+
+  if (paymentId && statusParam) {
+    if (statusParam === "approved") {
+      try {
+        await aplicarPagoDeMercadoPago(paymentId);
+        avisoRetorno = {
+          tipo: "exito",
+          mensaje: "¡Pago aprobado con éxito! Tu licencia ha sido actualizada.",
+        };
+      } catch (err) {
+        console.error("Error aplicando pago en retorno:", err);
+      }
+    } else if (statusParam === "in_process" || statusParam === "pending") {
+      avisoRetorno = {
+        tipo: "pendiente",
+        mensaje: "Tu pago está en proceso de acreditación. Te notificaremos en cuanto se complete.",
+      };
+    } else {
+      avisoRetorno = {
+        tipo: "error",
+        mensaje: "El pago no fue completado o fue cancelado en Mercado Pago.",
+      };
+    }
+  }
+
   // requireBusiness y no requireActiveLicense: si esta página exigiera licencia
   // vigente, un negocio vencido no podría entrar a pagar para dejar de estarlo.
   const ctx = await requireBusiness();
@@ -91,40 +135,6 @@ export default async function FacturacionPage() {
       cuenta.currentPeriodEnd &&
       cuenta.currentPeriodEnd > ahora,
   );
-  /**
-   * El cobro automático. Solo se ofrece con la licencia viva: autorizar un débito
-   * estando vencido cobraría en el momento, y quien está vencido primero quiere
-   * ver cuánto le van a cobrar hoy, no comprometerse a un débito recurrente.
-   */
-  const cobroActivo = cuenta?.cobroAutomatico
-    ? {
-        frecuencia: cuenta.cobroAutomatico,
-        montoCop: cotizaciones.find(
-          (c) => c.periodicidad === (cuenta.cobroAutomatico === "ANUAL" ? "ANUAL" : "MENSUAL"),
-        )!.totalCop,
-        proximoCobro: cuenta.currentPeriodEnd
-          ? formatDayInTimeZone(cuenta.currentPeriodEnd, zona)
-          : "—",
-      }
-    : null;
-
-  const mensual = cotizaciones.find((c) => c.periodicidad === "MENSUAL")!;
-  const anual = cotizaciones.find((c) => c.periodicidad === "ANUAL")!;
-  const opcionesDeCobro = [
-    {
-      frecuencia: "MENSUAL" as const,
-      etiqueta: "Todos los meses",
-      montoCop: mensual.totalCop,
-      ahorroCop: 0,
-    },
-    {
-      frecuencia: "ANUAL" as const,
-      etiqueta: "Una vez al año",
-      montoCop: anual.totalCop,
-      ahorroCop: anual.ahorroCop,
-    },
-  ];
-
   const prorrateo =
     cuenta && puedeSumarSede
       ? prorratearSedeNueva({
@@ -144,6 +154,24 @@ export default async function FacturacionPage() {
           {ctx.business.name} · {formatCop(suscripcion.priceCop)} al mes
         </p>
       </div>
+
+      {avisoRetorno && (
+        <Alert
+          variant={avisoRetorno.tipo === "error" ? "destructive" : "default"}
+          className={
+            avisoRetorno.tipo === "exito"
+              ? "border-success/40 bg-success/10 text-success-soft"
+              : undefined
+          }
+        >
+          <div className="flex items-center gap-2">
+            {avisoRetorno.tipo === "exito" && <CheckCircle2 className="size-4 text-success-soft shrink-0" />}
+            {avisoRetorno.tipo === "pendiente" && <Clock className="size-4 text-warning shrink-0" />}
+            {avisoRetorno.tipo === "error" && <AlertTriangle className="size-4 text-destructive shrink-0" />}
+            <AlertDescription className="font-medium text-foreground">{avisoRetorno.mensaje}</AlertDescription>
+          </div>
+        </Alert>
+      )}
 
       <Card>
         <CardContent className="space-y-4">
@@ -184,16 +212,6 @@ export default async function FacturacionPage() {
               cotizaciones={cotizaciones}
               vencimientos={vencimientos}
               sedes={sedes}
-            />
-          )}
-
-          {(cobroActivo || suscripcion.status === "ACTIVA") && (
-            <CobroAutomatico
-              activo={cobroActivo}
-              opciones={opcionesDeCobro}
-              desdeCuando={
-                cuenta?.currentPeriodEnd ? formatDayInTimeZone(cuenta.currentPeriodEnd, zona) : "—"
-              }
             />
           )}
 

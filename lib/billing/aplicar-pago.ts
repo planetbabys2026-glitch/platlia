@@ -109,6 +109,17 @@ export async function aplicarPagoDeMercadoPago(
       };
     }
 
+    // Buscar si ya existía un intento registrado al redirigir al checkout
+    const intentoPrevio = await tx.subscriptionPayment.findFirst({
+      where: {
+        subscriptionId: suscripcion.id,
+        status: "PENDIENTE",
+        ...(pago.tipo === "SEDE_ADICIONAL" ? { periodicidad: "SEDE_ADICIONAL" } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+
     /**
      * Un prorrateo de sede no compra tiempo: compra un CUPO.
      *
@@ -118,21 +129,38 @@ export async function aplicarPagoDeMercadoPago(
      * con un pago aprobado.
      */
     if (pago.tipo === "SEDE_ADICIONAL") {
-      await tx.subscriptionPayment.create({
-        data: {
-          businessId: suscripcion.businessId,
-          subscriptionId: suscripcion.id,
-          amountCop: pago.amountCop,
-          status: estado,
-          mesesOtorgados: 0,
-          periodicidad: "SEDE_ADICIONAL",
-          sedes: pago.sedes ?? 1,
-          mpPaymentId: pago.id,
-          mpStatusDetail: pago.statusDetail,
-          method: pago.method,
-          paidAt: pago.aprobadoEn,
-        },
-      });
+      if (intentoPrevio) {
+        await tx.subscriptionPayment.update({
+          where: { id: intentoPrevio.id },
+          data: {
+            amountCop: pago.amountCop,
+            status: estado,
+            mesesOtorgados: 0,
+            periodicidad: "SEDE_ADICIONAL",
+            sedes: pago.sedes ?? 1,
+            mpPaymentId: pago.id,
+            mpStatusDetail: pago.statusDetail,
+            method: pago.method,
+            paidAt: pago.aprobadoEn,
+          },
+        });
+      } else {
+        await tx.subscriptionPayment.create({
+          data: {
+            businessId: suscripcion.businessId,
+            subscriptionId: suscripcion.id,
+            amountCop: pago.amountCop,
+            status: estado,
+            mesesOtorgados: 0,
+            periodicidad: "SEDE_ADICIONAL",
+            sedes: pago.sedes ?? 1,
+            mpPaymentId: pago.id,
+            mpStatusDetail: pago.statusDetail,
+            method: pago.method,
+            paidAt: pago.aprobadoEn,
+          },
+        });
+      }
 
       if (estado !== "APROBADO") {
         return {
@@ -176,23 +204,42 @@ export async function aplicarPagoDeMercadoPago(
         ? aplicarPagoAprobado(suscripcion, pago.aprobadoEn ?? new Date(), meses)
         : null;
 
-    await tx.subscriptionPayment.create({
-      data: {
-        businessId: suscripcion.businessId,
-        subscriptionId: suscripcion.id,
-        amountCop: pago.amountCop,
-        status: estado,
-        mesesOtorgados: meses,
-        periodicidad,
-        sedes: pago.sedes ?? 1,
-        mpPaymentId: pago.id,
-        mpStatusDetail: pago.statusDetail,
-        method: pago.method,
-        paidAt: pago.aprobadoEn,
-        periodStart: periodo?.currentPeriodStart ?? null,
-        periodEnd: periodo?.currentPeriodEnd ?? null,
-      },
-    });
+    if (intentoPrevio) {
+      await tx.subscriptionPayment.update({
+        where: { id: intentoPrevio.id },
+        data: {
+          amountCop: pago.amountCop,
+          status: estado,
+          mesesOtorgados: meses,
+          periodicidad,
+          sedes: pago.sedes ?? 1,
+          mpPaymentId: pago.id,
+          mpStatusDetail: pago.statusDetail,
+          method: pago.method,
+          paidAt: pago.aprobadoEn,
+          periodStart: periodo?.currentPeriodStart ?? null,
+          periodEnd: periodo?.currentPeriodEnd ?? null,
+        },
+      });
+    } else {
+      await tx.subscriptionPayment.create({
+        data: {
+          businessId: suscripcion.businessId,
+          subscriptionId: suscripcion.id,
+          amountCop: pago.amountCop,
+          status: estado,
+          mesesOtorgados: meses,
+          periodicidad,
+          sedes: pago.sedes ?? 1,
+          mpPaymentId: pago.id,
+          mpStatusDetail: pago.statusDetail,
+          method: pago.method,
+          paidAt: pago.aprobadoEn,
+          periodStart: periodo?.currentPeriodStart ?? null,
+          periodEnd: periodo?.currentPeriodEnd ?? null,
+        },
+      });
+    }
 
     if (!periodo) {
       return {

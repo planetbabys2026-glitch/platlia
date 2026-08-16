@@ -108,8 +108,20 @@ async function main() {
     avisados.push(`${sub.business.slug}: faltan ${aviso.diasRestantes} días (umbral ${aviso.umbral})`);
   }
 
+  // ── Barrido de intentos de pago pendientes abandonados (> 15 minutos) ───────
+  const expirados = await rootDb.subscriptionPayment.updateMany({
+    where: {
+      status: "PENDIENTE",
+      createdAt: { lt: new Date(ahora.getTime() - 15 * 60 * 1000) },
+    },
+    data: {
+      status: "RECHAZADO",
+      mpStatusDetail: "expirado_por_tiempo",
+    },
+  });
+
   console.log(
-    `Revisadas ${suscripciones.length} suscripciones. ${cambios.length} cambiaron de estado, ${avisados.length} avisadas.`,
+    `Revisadas ${suscripciones.length} suscripciones. ${cambios.length} cambiaron de estado, ${avisados.length} avisadas, ${expirados.count} pagos pendientes expirados.`,
   );
   for (const cambio of cambios) console.log(`  · ${cambio}`);
   for (const aviso of avisados) console.log(`  ✉ ${aviso}`);
