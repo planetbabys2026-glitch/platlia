@@ -79,7 +79,18 @@ export default async function TiquetePage({
     push(centrar(`*** TURNO ${turnoFmt} ***`, ancho));
   }
   if (pedido.table) push(`Mesa ${pedido.table.name}`);
-  if (pedido.customerName) push(...envolver(`Cliente: ${pedido.customerName}`, ancho));
+  // En una mesa con cuentas separadas, esto es lo único que dice a quién se le
+  // está cobrando: sin el nombre, tres tiquetes de la mesa 12 son idénticos y no
+  // hay forma de entregarle el suyo a cada uno.
+  if (pedido.customerName) {
+    push(...envolver(`${pedido.table ? "Cuenta" : "Cliente"}: ${pedido.customerName}`, ancho));
+  }
+  // Los datos fiscales solo aparecen cuando de verdad hay a quién facturar. Sin
+  // documento la venta va a consumidor final y no hay nada que imprimir.
+  if (pedido.docNumber) {
+    push(`${pedido.docType ?? "CC"} ${pedido.docNumber}`);
+    if (pedido.customerEmail) push(...envolver(pedido.customerEmail, ancho));
+  }
   if (pedido.type === "DOMICILIO") {
     push(centrar("*** PEDIDO A DOMICILIO ***", ancho));
     if (pedido.customerPhone) push(`Tel: ${pedido.customerPhone}`);

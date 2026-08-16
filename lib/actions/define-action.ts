@@ -55,6 +55,28 @@ function desdeFormData(formData: FormData): Record<string, unknown> {
 }
 
 /**
+ * El mensaje que se muestra arriba del formulario cuando zod rechaza el envío.
+ *
+ * Si hay un error de nivel formulario manda ese. Si no, manda **el primer error
+ * de campo** en vez de un "revisá los datos" que no dice nada: un campo que el
+ * esquema exige y el formulario no dibuja deja su error colgado de un input que
+ * no existe, y entonces la pantalla repite "revisá los datos" sin que haya nada
+ * visible que revisar. Pasó con el registro —el esquema pedía confirmar la
+ * contraseña y el formulario había perdido ese campo— y no se podía crear una
+ * empresa sin leer el código para enterarse.
+ */
+function primerMensaje(
+  formErrors: readonly string[],
+  fieldErrors: Record<string, string[] | undefined>,
+): string {
+  if (formErrors[0]) return formErrors[0];
+  for (const mensajes of Object.values(fieldErrors)) {
+    if (mensajes?.[0]) return mensajes[0];
+  }
+  return "Revisá los datos del formulario.";
+}
+
+/**
  * `redirect()` y `notFound()` funcionan lanzando una excepción con `digest`, que
  * Next necesita ver. Si se la tragara el catch de abajo, un redirect adentro de
  * una acción se convertiría en un mensaje de error genérico.
@@ -100,7 +122,7 @@ export function defineAction<TSchema extends z.ZodType, TOut>(config: Config<TSc
         const { fieldErrors, formErrors } = z.flattenError(parseado.error);
         return {
           ok: false,
-          error: formErrors[0] ?? "Revisá los datos del formulario.",
+          error: primerMensaje(formErrors, fieldErrors),
           campos: fieldErrors as Record<string, string[]>,
         };
       }
@@ -152,7 +174,7 @@ export function definePublicAction<TSchema extends z.ZodType, TOut>(config: {
         const { fieldErrors, formErrors } = z.flattenError(parseado.error);
         return {
           ok: false,
-          error: formErrors[0] ?? "Revisá los datos del formulario.",
+          error: primerMensaje(formErrors, fieldErrors),
           campos: fieldErrors as Record<string, string[]>,
         };
       }

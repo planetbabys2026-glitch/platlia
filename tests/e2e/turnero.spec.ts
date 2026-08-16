@@ -15,8 +15,10 @@ test("un pedido para llevar recorre cocina, turnero y entrega", async ({ page })
   await abrirCaja(page);
 
   // ── Se abre un pedido sin mesa: eso es lo que le da número de turno ───────
+  // El salón ya no pide nada acá: era el mismo dato que la pantalla del pedido
+  // volvía a preguntar dos segundos después. El nombre y el tipo de consumo se
+  // eligen adentro, con el pedido ya abierto.
   await page.goto("/salon");
-  await page.getByLabel("Nombre del cliente").fill("Camila");
   await page.getByRole("button", { name: /nuevo pedido/i }).click();
   await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
 
@@ -26,7 +28,7 @@ test("un pedido para llevar recorre cocina, turnero y entrega", async ({ page })
   expect(turno).not.toBe("");
 
   await page.getByRole("button", { name: /bandeja paisa/i }).click();
-  await expect(page.getByRole("complementary")).toContainText("Bandeja paisa");
+  await expect(page.getByRole("complementary", { name: "La cuenta" })).toContainText("Bandeja paisa");
 
   // ── En el televisor está "en preparación", no listo ──────────────────────
   await page.goto("/turnero");

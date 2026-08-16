@@ -164,8 +164,16 @@ export async function getCuentasPorCobrar(businessId: string, businessDate: Date
       taxCop: true,
       tipCop: true,
       customerName: true,
+      // Para precargar el bloque fiscal cuando alguien ya había pedido factura.
+      docType: true,
+      docNumber: true,
+      customerEmail: true,
       billRequestedAt: true,
       openedAt: true,
+      // La pantalla agrupa por mesa: tres cuentas separadas de la mesa 12 son
+      // tres cobros distintos, pero el cajero tiene que verlas juntas o le va a
+      // cobrar a una persona la cuenta de otra.
+      tableId: true,
       table: { select: { id: true, name: true } },
       openedBy: { select: { name: true } },
       items: {

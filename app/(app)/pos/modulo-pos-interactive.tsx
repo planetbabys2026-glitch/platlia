@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -39,6 +40,12 @@ import {
   calcularStockDisponibleProducto,
   type ProductoStockCalculo,
 } from "@/lib/inventory/stock";
+import {
+  DatosFiscales,
+  valorFiscalInicial,
+  type DatosFiscalesValor,
+} from "@/features/pedidos/components/datos-fiscales";
+import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consumo";
 import { claveDeLinea } from "@/lib/modificadores";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -88,7 +95,12 @@ export type PosPedidoDetalle = {
   customerName: string | null;
   customerPhone: string | null;
   deliveryAddress: string | null;
+  docType: string | null;
+  docNumber: string | null;
+  customerEmail: string | null;
   notes: string | null;
+  /** Renglones no anulados: en cero, el pedido se puede cerrar sin cobrar. */
+  renglones?: number;
   items: {
     id: string;
     productId: string;
@@ -153,6 +165,11 @@ type ModuloPosInteractiveProps = {
     cashRoundingCop: number;
     pricesIncludeTax: boolean;
   };
+  /**
+   * Si el negocio está en condiciones de emitir factura electrónica. Llega
+   * calculado del servidor: las credenciales de Factus no bajan al navegador.
+   */
+  puedeFacturar: boolean;
 };
 
 type CartItem = {
@@ -174,6 +191,87 @@ type CartItem = {
 };
 
 /** Lo que cuesta una unidad de este renglón, ya con sus modificadores. */
+/**
+ * El rótulo de cada paso del panel.
+ *
+ * La pantalla tenía todo suelto y a la misma jerarquía —tipo de consumo, nombre,
+ * carrito, tres botones— sin decir en qué orden se hace ni por qué. Numerar los
+ * tres momentos es lo más barato que convierte una lista de campos en algo que
+ * se puede seguir sin que nadie te lo explique.
+ */
+function Paso({
+  numero,
+  titulo,
+  ayuda,
+}: {
+  numero: number;
+  titulo: string;
+  ayuda?: string;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="numeral mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--brasa)] text-[11px] font-bold text-[var(--tinta)]">
+        {numero}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-bold leading-none text-foreground">{titulo}</p>
+        {ayuda && <p className="text-muted-foreground mt-1 text-[11px] leading-snug">{ayuda}</p>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Una de las tres salidas del pedido, con su nombre y qué pasa después.
+ *
+ * El texto de abajo no es decoración: la diferencia entre mandar a cocina y
+ * dejar en espera no se deduce de ningún nombre corto, y equivocarse significa
+ * que la comida no se empieza a hacer o que se hace de más.
+ */
+function AccionDelPedido({
+  titulo,
+  explicacion,
+  icono,
+  onClick,
+  deshabilitado,
+  destacada = false,
+}: {
+  titulo: string;
+  explicacion: string;
+  icono: React.ReactNode;
+  onClick: () => void;
+  deshabilitado?: boolean;
+  destacada?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={deshabilitado}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all",
+        "disabled:pointer-events-none disabled:opacity-40",
+        destacada
+          ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+          : "border-border bg-card hover:border-brand hover:bg-brand/5",
+      )}
+    >
+      <span className={cn("mt-0.5 shrink-0", destacada ? "text-white" : "text-brand")}>{icono}</span>
+      <span className="min-w-0">
+        <span className="block text-sm font-bold leading-tight">{titulo}</span>
+        <span
+          className={cn(
+            "mt-0.5 block text-[11px] leading-snug",
+            destacada ? "text-white/80" : "text-muted-foreground",
+          )}
+        >
+          {explicacion}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function precioUnitario(item: CartItem): number {
   return item.priceCop + item.recargoCop;
 }
@@ -184,6 +282,7 @@ export function ModuloPosInteractive({
   pedidosAbiertos,
   pedidoInicial,
   settings,
+  puedeFacturar,
 }: ModuloPosInteractiveProps) {
   const router = useRouter();
 
@@ -210,6 +309,18 @@ export function ModuloPosInteractive({
         ? "EN_SITIO"
         : "LLEVAR"
   );
+  const [fiscal, setFiscal] = useState<DatosFiscalesValor>(() =>
+    valorFiscalInicial(pedidoInicial ?? {}),
+  );
+  /**
+   * El pedido cargado no tiene nada, ni en la base ni en el carrito.
+   *
+   * Se miran los dos: el pedido guardado está vacío desde que se abrió, pero si
+   * la persona ya empezó a cantar productos, ofrecerle "cerrar sin consumo" al
+   * lado sería una forma cómoda de perder el carrito de un clic.
+   */
+  const pedidoGuardadoVacio =
+    !!pedidoInicial && pedidoInicial.items.filter((i) => i.status !== "ANULADO").length === 0;
   const [customerName, setCustomerName] = useState(pedidoInicial?.customerName ?? "");
   const [customerPhone, setCustomerPhone] = useState(pedidoInicial?.customerPhone ?? "");
   const [deliveryAddress, setDeliveryAddress] = useState(pedidoInicial?.deliveryAddress ?? "");
@@ -236,6 +347,7 @@ export function ModuloPosInteractive({
             ? "EN_SITIO"
             : "LLEVAR"
       );
+      setFiscal(valorFiscalInicial(pedidoInicial));
       setCustomerName(pedidoInicial.customerName ?? "");
       setCustomerPhone(pedidoInicial.customerPhone ?? "");
       setDeliveryAddress(pedidoInicial.deliveryAddress ?? "");
@@ -502,12 +614,12 @@ export function ModuloPosInteractive({
     accion: "PAGAR_DIRECTO" | "ENVIAR_COCINA" | "PARQUEAR"
   ) => {
     if (cart.length === 0) {
-      setErrorGlobal("El carrito está vacío. Agregá productos antes de continuar.");
+      setErrorGlobal("El pedido está vacío. Tocá un producto para agregarlo.");
       return;
     }
 
     if (!customerName.trim()) {
-      setErrorGlobal("El nombre del cliente es obligatorio para facturar e imprimir la venta.");
+      setErrorGlobal("Falta el nombre: es lo que se canta al entregar y lo que sale en el tiquete.");
       document.getElementById("customerName")?.focus();
       return;
     }
@@ -552,6 +664,12 @@ export function ModuloPosInteractive({
       customerPhone: customerPhone.trim() || undefined,
       deliveryAddress: deliveryAddress.trim() || undefined,
       notes: notasFormateadas || undefined,
+      facturaElectronica: fiscal.facturaElectronica,
+      docType: fiscal.facturaElectronica ? fiscal.docType : undefined,
+      docNumber: fiscal.facturaElectronica ? fiscal.docNumber.trim() || undefined : undefined,
+      customerEmail: fiscal.facturaElectronica
+        ? fiscal.customerEmail.trim() || undefined
+        : undefined,
       items: cart.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -587,7 +705,7 @@ export function ModuloPosInteractive({
 
       if (accion === "PAGAR_DIRECTO") {
         setMensajeExito({
-          titulo: "¡Venta Realizada con Éxito!",
+          titulo: "Venta cobrada",
           detalle: `Pedido #${data.code} pagado (${formatCop(totalCart)})${
             cambioDevuelta > 0 ? ` · Devuelta: ${formatCop(cambioDevuelta)}` : ""
           }`,
@@ -600,14 +718,14 @@ export function ModuloPosInteractive({
         }
       } else if (accion === "ENVIAR_COCINA") {
         setMensajeExito({
-          titulo: "¡Comanda Enviada a Cocina!",
-          detalle: `Pedido #${data.code} asignado al Turno #${data.turnNumber ?? data.code}.`,
+          titulo: "Comanda enviada a cocina",
+          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Se cobra cuando esté listo.`,
           orderId: data.orderId,
         });
       } else {
         setMensajeExito({
-          titulo: "¡Pedido Parqueado en Espera!",
-          detalle: `Pedido #${data.code} guardado para cobrar luego.`,
+          titulo: "Pedido guardado en espera",
+          detalle: `Pedido ${data.code} guardado. Se retoma desde "En espera".`,
           orderId: data.orderId,
         });
       }
@@ -706,13 +824,14 @@ export function ModuloPosInteractive({
               </div>
               <div>
                 <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                  POS Mostrador
+                  Pedido sin mesa
                   <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-                    🟢 Caja Abierta
+                    Caja abierta
                   </Badge>
                 </h1>
                 <p className="text-xs text-muted-foreground">
-                  Venta rápida interactiva, comandas a cocina y parqueo de pedidos en espera.
+                  Para llevar, para comer acá o a domicilio. Armá el pedido y decidí al final qué
+                  hacer con él.
                 </p>
               </div>
             </div>
@@ -720,8 +839,12 @@ export function ModuloPosInteractive({
             <div className="flex items-center gap-2">
               {activeOrderId ? (
                 <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 p-1.5 px-3 rounded-xl">
+                  {/* Antes decía "Editando Pedido #5 (Turno #3)": dos números con
+                      numeral y sin decir cuál es cuál. El consecutivo es contable
+                      y el turno es el que se canta. */}
                   <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                    📌 Editando Pedido #{orderCode} {turnNumber !== null ? `(Turno #${turnNumber})` : ""}
+                    Pedido {orderCode}
+                    {turnNumber !== null ? ` · Turno ${turnNumber}` : ""}
                   </span>
                   <Button
                     type="button"
@@ -730,8 +853,19 @@ export function ModuloPosInteractive({
                     onClick={nuevoPedido}
                     className="h-7 text-xs font-bold gap-1 rounded-lg border-amber-500/40"
                   >
-                    ➕ Nuevo Pedido
+                    Empezar otro
                   </Button>
+                  {/* Un pedido abierto que quedó sin productos no se puede cobrar
+                      —el total es cero— ni aparece en caja, así que sin este
+                      botón se quedaba abierto para siempre y terminaba trancando
+                      el cierre del turno. */}
+                  {pedidoGuardadoVacio && cart.length === 0 && (
+                    <CerrarSinConsumo
+                      orderId={activeOrderId}
+                      texto="Cerrar sin consumo"
+                      redirigirA="/pos"
+                    />
+                  )}
                 </div>
               ) : null}
 
@@ -743,7 +877,9 @@ export function ModuloPosInteractive({
                 className="relative text-xs font-semibold rounded-xl h-9 gap-1.5 border-brand/30 hover:bg-brand/5 text-foreground"
               >
                 <PauseCircle className="size-4 text-amber-500" />
-                <span>Pedidos Parqueados</span>
+                {/* "Parqueados" es de autos. Lo que son es pedidos empezados que
+                    todavía no se cobraron. */}
+                <span>En espera</span>
                 {pedidosAbiertos.length > 0 && (
                   <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 h-4 min-w-4 rounded-full">
                     {pedidosAbiertos.length}
@@ -873,7 +1009,21 @@ export function ModuloPosInteractive({
 
               {/* Grid de Tarjetas de Productos */}
               <div className="space-y-6">
-                {categoriasFiltradas.length === 0 ? (
+                {/* Un negocio recién creado llega acá con la carta vacía y veía
+                    "no se encontraron productos: probá con otro nombre", que lo
+                    manda a buscar algo que no existe. No es lo mismo no encontrar
+                    que no haber cargado nada todavía. */}
+                {todosLosProductosCount === 0 ? (
+                  <div className="p-8 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
+                    <p className="text-sm font-semibold">Todavía no hay carta</p>
+                    <p className="text-xs text-muted-foreground">
+                      Para tomar pedidos hay que cargar los productos con su precio.
+                    </p>
+                    <Button asChild size="sm" className="rounded-xl">
+                      <Link href="/administracion/carta">Cargar la carta</Link>
+                    </Button>
+                  </div>
+                ) : categoriasFiltradas.length === 0 ? (
                   <div className="p-8 text-center bg-card rounded-2xl border border-border space-y-2">
                     <p className="text-sm font-semibold">No se encontraron productos</p>
                     <p className="text-xs text-muted-foreground">
@@ -918,25 +1068,30 @@ export function ModuloPosInteractive({
                                 </Badge>
                               )}
 
-                              {/* Imagen o Placeholder */}
-                              <div className="aspect-video w-full rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex items-center justify-center relative">
-                                {prod.imageUrl ? (
+                              {/* Solo hay recuadro si hay foto. Sin ella se pintaba
+                                  un bloque gris azulado con las dos primeras
+                                  letras del nombre —"CE", "CE", "CE" para las tres
+                                  cervezas—: no distinguía nada, se comía la mitad
+                                  de la tarjeta y le quitaba peso justo a lo que se
+                                  lee para elegir rápido, que es el nombre y el
+                                  precio. */}
+                              {prod.imageUrl && (
+                                <div className="aspect-video w-full rounded-xl bg-[var(--panel-2)] overflow-hidden flex items-center justify-center relative">
                                   <img
                                     src={prod.imageUrl}
                                     alt={prod.name}
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                   />
-                                ) : (
-                                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                                    {prod.name.slice(0, 2)}
-                                  </div>
-                                )}
-                                {!prod.isAvailable && (
-                                  <span className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex items-center justify-center text-[11px] font-bold text-destructive">
-                                    Agotado
-                                  </span>
-                                )}
-                              </div>
+                                  {!prod.isAvailable && (
+                                    <span className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex items-center justify-center text-[11px] font-bold text-destructive">
+                                      Agotado
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {!prod.imageUrl && !prod.isAvailable && (
+                                <span className="text-destructive text-[11px] font-bold">Agotado</span>
+                              )}
 
                               {/* Info del Producto */}
                               <div className="space-y-1">
@@ -1014,10 +1169,10 @@ export function ModuloPosInteractive({
             <div className="lg:col-span-5 space-y-4 sticky top-4">
               <Card className="border-border bg-card shadow-lg rounded-2xl overflow-hidden space-y-0">
                 {/* Header del Carrito */}
-                <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShoppingCart className="size-4 text-brand dark:text-[#3E9EA2]" />
-                    <span className="font-bold text-sm text-foreground">Detalle del Pedido</span>
+                    <span className="font-bold text-sm text-foreground">El pedido</span>
                   </div>
                   {cart.length > 0 && (
                     <Button
@@ -1033,147 +1188,27 @@ export function ModuloPosInteractive({
                 </div>
 
                 <div className="p-4 space-y-4">
-                  {/* Selector de Tipo de Consumo */}
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Tipo de Consumo
-                    </Label>
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-muted rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => setTipoConsumo("LLEVAR")}
-                        className={cn(
-                          "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
-                          tipoConsumo === "LLEVAR"
-                            ? "bg-background text-foreground shadow-sm font-bold"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <ShoppingBag className="size-3.5" /> Llevar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTipoConsumo("EN_SITIO")}
-                        className={cn(
-                          "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
-                          tipoConsumo === "EN_SITIO"
-                            ? "bg-background text-foreground shadow-sm font-bold"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <Utensils className="size-3.5" /> En Sitio
-                      </button>
-                      {settings.deliveryEnabled && (
-                        <button
-                          type="button"
-                          onClick={() => setTipoConsumo("DOMICILIO")}
-                          className={cn(
-                            "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
-                            tipoConsumo === "DOMICILIO"
-                              ? "bg-brand text-brand-foreground shadow-sm font-bold"
-                              : "text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          <Bike className="size-3.5" /> Domicilio
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Datos del Cliente */}
-                  <div className="space-y-2 pt-1 border-t border-border/60">
-                    <div className="space-y-1">
-                      <Label htmlFor="customerName" className="text-xs font-medium flex items-center justify-between">
-                        <span>Nombre Cliente *</span>
-                        <span className="text-[10px] font-semibold text-rose-500">(Obligatorio para facturar)</span>
-                      </Label>
-                      <Input
-                        id="customerName"
-                        value={customerName}
-                        onChange={(e) => {
-                          setCustomerName(e.target.value);
-                          if (errorGlobal && e.target.value.trim()) setErrorGlobal(null);
-                        }}
-                        placeholder="Ej. Carlos / Cliente Mostrador"
-                        className={cn(
-                          "h-9 text-xs rounded-xl transition-all",
-                          cart.length > 0 && !customerName.trim()
-                            ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5 placeholder:text-rose-400 font-semibold text-foreground"
-                            : "bg-background border-input"
-                        )}
-                      />
-                      {cart.length > 0 && !customerName.trim() && (
-                        <p className="text-[10px] text-rose-500 font-medium pt-0.5">
-                          ⚠️ Obligatorio: escribí el nombre para poder facturar e imprimir.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Campos obligatorios si es Domicilio */}
-                    {tipoConsumo === "DOMICILIO" && (
-                      <div className="space-y-2 p-3 rounded-xl bg-brand/5 border border-brand/20">
-                        <span className="text-xs font-bold text-brand dark:text-[#3E9EA2] block flex items-center gap-1">
-                          <Bike className="size-3.5" /> Datos Requeridos para Domicilio
-                        </span>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="customerPhone" className="text-[11px] font-semibold">
-                            Celular / Teléfono *
-                          </Label>
-                          <Input
-                            id="customerPhone"
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(e.target.value)}
-                            placeholder="Ej. 3001234567"
-                            className="h-9 text-xs rounded-xl bg-background"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="deliveryAddress" className="text-[11px] font-semibold">
-                            Dirección de Entrega *
-                          </Label>
-                          <Input
-                            id="deliveryAddress"
-                            value={deliveryAddress}
-                            onChange={(e) => setDeliveryAddress(e.target.value)}
-                            placeholder="Ej. Calle 45 # 12-34 Apto 201"
-                            className="h-9 text-xs rounded-xl bg-background"
-                            required
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Notas generales del pedido */}
-                    <div className="space-y-1">
-                      <Label htmlFor="orderNotes" className="text-xs font-medium text-muted-foreground">
-                        Notas generales del pedido
-                      </Label>
-                      <Input
-                        id="orderNotes"
-                        value={orderNotes}
-                        onChange={(e) => setOrderNotes(e.target.value)}
-                        placeholder="Ej. Empacar con servilletas extra, salsa picante..."
-                        className="h-8 text-xs rounded-xl text-muted-foreground"
-                      />
-                    </div>
-                  </div>
-
+                  {/* El orden es el de la mano: primero se toca la carta y se ve caer
+                      lo pedido, después se dice de quién es, y recién al final se
+                      decide qué hacer con el pedido. Antes empezaba pidiendo el tipo
+                      de consumo y el nombre de alguien que todavía no había pedido
+                      nada. */}
+                  <Paso numero={1} titulo="Lo que lleva" ayuda="Tocá los productos del catálogo." />
                   {/* Lista de Ítems en el Carrito */}
-                  <div className="space-y-2 pt-2 border-t border-border max-h-60 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-1">
                     {cart.length === 0 ? (
                       <div className="p-6 text-center text-muted-foreground space-y-1">
                         <ShoppingBag className="size-8 mx-auto opacity-30" />
-                        <p className="text-xs font-medium">El carrito está vacío</p>
+                        <p className="text-xs font-medium">Todavía no hay nada</p>
                         <p className="text-[11px] opacity-75">
-                          Tocá un producto del catálogo para agregarlo.
+                          Tocá un producto de la izquierda y aparece acá.
                         </p>
                       </div>
                     ) : (
                       cart.map((item) => (
                         <div
                           key={item.lineKey}
-                          className="p-2.5 rounded-xl bg-muted/40 border border-border space-y-1.5"
+                          className="p-2.5 rounded-xl bg-[var(--panel-2)] border border-border space-y-1.5"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="space-y-0.5 flex-1 min-w-0">
@@ -1243,8 +1278,156 @@ export function ModuloPosInteractive({
                     )}
                   </div>
 
-                  {/* Resumen Total y Errores */}
-                  <div className="space-y-3 pt-3 border-t border-border">
+
+                  <Paso
+                    numero={2}
+                    titulo="Para quién es"
+                    ayuda="El nombre se canta al entregar y queda en el tiquete."
+                  />
+                  {/* Selector de Tipo de Consumo */}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                      ¿Cómo se lo lleva?
+                    </Label>
+                    {/* `bg-muted` acá era el beige de la paleta —un token de
+                        texto, no de superficie— y los botones inactivos usan
+                        `text-muted-foreground`, que es ese mismo beige: "En
+                        Sitio" y "Domicilio" quedaban invisibles y parecía que el
+                        único tipo posible era "Llevar". Va sobre el panel oscuro
+                        y el elegido se marca con la brasa. */}
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--panel-2)] rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setTipoConsumo("LLEVAR")}
+                        className={cn(
+                          "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                          tipoConsumo === "LLEVAR"
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
+                            : "text-[var(--muted)] hover:text-[var(--papel)]"
+                        )}
+                      >
+                        <ShoppingBag className="size-3.5" /> Llevar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipoConsumo("EN_SITIO")}
+                        className={cn(
+                          "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                          tipoConsumo === "EN_SITIO"
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
+                            : "text-[var(--muted)] hover:text-[var(--papel)]"
+                        )}
+                      >
+                        <Utensils className="size-3.5" /> En sitio
+                      </button>
+                      {settings.deliveryEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => setTipoConsumo("DOMICILIO")}
+                          className={cn(
+                            "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                            tipoConsumo === "DOMICILIO"
+                              ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
+                              : "text-[var(--muted)] hover:text-[var(--papel)]"
+                          )}
+                        >
+                          <Bike className="size-3.5" /> Domicilio
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Datos del Cliente */}
+                  <div className="space-y-2 pt-1 border-t border-border/60">
+                    <div className="space-y-1">
+                      <Label htmlFor="customerName" className="text-xs font-medium flex items-center justify-between">
+                        <span>¿A nombre de quién?</span>
+                        <span className="text-[10px] font-semibold text-rose-500">Obligatorio</span>
+                      </Label>
+                      <Input
+                        id="customerName"
+                        value={customerName}
+                        onChange={(e) => {
+                          setCustomerName(e.target.value);
+                          if (errorGlobal && e.target.value.trim()) setErrorGlobal(null);
+                        }}
+                        placeholder="Ej. Carlos, o Cliente mostrador"
+                        className={cn(
+                          "h-9 text-xs rounded-xl transition-all",
+                          cart.length > 0 && !customerName.trim()
+                            ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5 placeholder:text-rose-400 font-semibold text-foreground"
+                            : "bg-background border-input"
+                        )}
+                      />
+                      {cart.length > 0 && !customerName.trim() && (
+                        <p className="text-[10px] text-rose-500 font-medium pt-0.5">
+                          Sin nombre no se puede entregar ni imprimir: es lo que se canta y lo que sale en el tiquete.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Campos obligatorios si es Domicilio */}
+                    {tipoConsumo === "DOMICILIO" && (
+                      <div className="space-y-2 p-3 rounded-xl bg-brand/5 border border-brand/20">
+                        <span className="text-xs font-bold text-brand dark:text-[#3E9EA2] block flex items-center gap-1">
+                          <Bike className="size-3.5" /> Datos Requeridos para Domicilio
+                        </span>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="customerPhone" className="text-[11px] font-semibold">
+                            Celular / Teléfono *
+                          </Label>
+                          <Input
+                            id="customerPhone"
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(e.target.value)}
+                            placeholder="Ej. 3001234567"
+                            className="h-9 text-xs rounded-xl bg-background"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="deliveryAddress" className="text-[11px] font-semibold">
+                            Dirección de Entrega *
+                          </Label>
+                          <Input
+                            id="deliveryAddress"
+                            value={deliveryAddress}
+                            onChange={(e) => setDeliveryAddress(e.target.value)}
+                            placeholder="Ej. Calle 45 # 12-34 Apto 201"
+                            className="h-9 text-xs rounded-xl bg-background"
+                            required
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notas generales del pedido */}
+                    <div className="space-y-1">
+                      <Label htmlFor="orderNotes" className="text-xs font-medium text-muted-foreground">
+                        Notas generales del pedido
+                      </Label>
+                      <Input
+                        id="orderNotes"
+                        value={orderNotes}
+                        onChange={(e) => setOrderNotes(e.target.value)}
+                        placeholder="Ej. Empacar con servilletas extra, salsa picante..."
+                        className="h-8 text-xs rounded-xl text-muted-foreground"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Total y qué hacer con el pedido */}
+                  <div className="space-y-3 pt-4 border-t border-border">
+                    <Paso
+                      numero={3}
+                      titulo="Qué hacemos con el pedido"
+                      ayuda={
+                        cart.length === 0
+                          ? "Se habilita en cuanto agregues el primer producto."
+                          : "Las tres salidas son distintas. Elegí la que corresponda."
+                      }
+                    />
+
                     {errorGlobal && (
                       <Alert variant="destructive" role="alert" className="py-2 text-xs">
                         <AlertDescription>{errorGlobal}</AlertDescription>
@@ -1253,21 +1436,28 @@ export function ModuloPosInteractive({
 
                     <div className="flex items-center justify-between p-3 rounded-xl bg-brand/5 border border-brand/20">
                       <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-                        Total Pagar
+                        Total
                       </span>
                       <span className="numeral text-2xl font-extrabold text-brand dark:text-[#3E9EA2]">
                         {formatCop(totalCart)}
                       </span>
                     </div>
 
-                    {/* Acciones de Venta (4 Botones) */}
+                    {/* Cada botón dice lo que hace y qué pasa después. Antes eran
+                        "Venta Rápida / Cobrar Ahora", "Cocina + Turno" y
+                        "Parquear Pedido": tres nombres de los que solo el primero
+                        se entendía a medias, y nada que explicara en qué se
+                        diferencian ni cuál dejaba el pedido abierto. */}
                     <div className="grid grid-cols-1 gap-2 pt-1">
-                      <Button
-                        type="button"
-                        disabled={cart.length === 0 || procesandoAccion}
+                      <AccionDelPedido
+                        titulo="Cobrar y entregar"
+                        explicacion="Paga ahora y se lo lleva. Cierra el pedido e imprime el tiquete."
+                        icono={<DollarSign className="size-4" />}
+                        deshabilitado={cart.length === 0 || procesandoAccion}
+                        destacada
                         onClick={() => {
                           if (!customerName.trim()) {
-                            setErrorGlobal("Ingresá el nombre del cliente antes de pasar a la pantalla de cobro o facturar.");
+                            setErrorGlobal("Escribí el nombre del cliente antes de cobrar.");
                             document.getElementById("customerName")?.focus();
                             return;
                           }
@@ -1278,33 +1468,23 @@ export function ModuloPosInteractive({
                           }
                           setModalPagoAbierto(true);
                         }}
-                        className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md gap-2"
-                      >
-                        <DollarSign className="size-4" />
-                        <span>Venta Rápida / Cobrar Ahora</span>
-                      </Button>
+                      />
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={cart.length === 0 || procesandoAccion}
-                          onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                          className="h-10 text-xs font-bold rounded-xl gap-1.5 border-amber-500/40 text-amber-900 dark:text-amber-300 hover:bg-amber-500/10"
-                        >
-                          <ChefHat className="size-4" /> Cocina + Turno
-                        </Button>
+                      <AccionDelPedido
+                        titulo="Mandar a cocina"
+                        explicacion="Se prepara ya y se cobra cuando esté. Le asigna número de turno."
+                        icono={<ChefHat className="size-4" />}
+                        deshabilitado={cart.length === 0 || procesandoAccion}
+                        onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
+                      />
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={cart.length === 0 || procesandoAccion}
-                          onClick={() => ejecutarProcesarPos("PARQUEAR")}
-                          className="h-10 text-xs font-bold rounded-xl gap-1.5 border-brand/40 text-brand dark:text-[#3E9EA2] hover:bg-brand/10"
-                        >
-                          <PauseCircle className="size-4" /> Parquear Pedido
-                        </Button>
-                      </div>
+                      <AccionDelPedido
+                        titulo="Dejar en espera"
+                        explicacion="Queda guardado sin ir a cocina ni cobrarse. Se retoma desde “En espera”."
+                        icono={<PauseCircle className="size-4" />}
+                        deshabilitado={cart.length === 0 || procesandoAccion}
+                        onClick={() => ejecutarProcesarPos("PARQUEAR")}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1316,10 +1496,10 @@ export function ModuloPosInteractive({
           {modalPagoAbierto && (
             <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <Card className="w-full max-w-md bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <DollarSign className="size-5 text-emerald-600 dark:text-emerald-400" />
-                    <h3 className="font-bold text-base text-foreground">Cobro Directo en Caja</h3>
+                    <h3 className="font-bold text-base text-foreground">Cobrar el pedido</h3>
                   </div>
                   <button
                     type="button"
@@ -1448,6 +1628,16 @@ export function ModuloPosInteractive({
                     </div>
                   )}
 
+                  {/* Solo en negocios que de verdad pueden emitir: en el resto el
+                      cobro no muestra nada fiscal y la venta va a consumidor
+                      final, que es lo normal en un bar. */}
+                  <DatosFiscales
+                    puedeFacturar={puedeFacturar}
+                    orderId={activeOrderId ?? "nuevo"}
+                    valor={fiscal}
+                    onChange={setFiscal}
+                  />
+
                   <div className="pt-2">
                     <Button
                       type="button"
@@ -1467,11 +1657,11 @@ export function ModuloPosInteractive({
           {modalParqueadosAbierto && (
             <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <Card className="w-full max-w-lg bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <PauseCircle className="size-5 text-amber-500" />
                     <h3 className="font-bold text-base text-foreground">
-                      Pedidos Parqueados / En Espera ({pedidosAbiertos.length})
+                      Pedidos en espera ({pedidosAbiertos.length})
                     </h3>
                   </div>
                   <button
@@ -1487,9 +1677,9 @@ export function ModuloPosInteractive({
                   {pedidosAbiertos.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground space-y-1">
                       <PauseCircle className="size-10 mx-auto opacity-30" />
-                      <p className="text-sm font-semibold">No hay pedidos parqueados</p>
+                      <p className="text-sm font-semibold">No hay pedidos en espera</p>
                       <p className="text-xs opacity-75">
-                        Los pedidos que guardes con la opción &quot;Parquear Pedido&quot; aparecerán acá.
+                        Los que dejes con &quot;Dejar en espera&quot; aparecen acá para retomarlos.
                       </p>
                     </div>
                   ) : (
@@ -1548,7 +1738,7 @@ export function ModuloPosInteractive({
           {modalAlertasStockAbierto && (
             <div className="fixed inset-0 bg-background/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
               <Card className="w-full max-w-lg bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="size-5 text-amber-500" />
                     <h3 className="font-bold text-base text-foreground">

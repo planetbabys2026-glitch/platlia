@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import type { Aviso } from "@/lib/avisos";
 import { env } from "@/lib/env";
 
 declare global {
@@ -87,5 +88,27 @@ export async function publishDomiciliosUpdate(businessId: string): Promise<void>
     await pub.publish(channel, JSON.stringify({ type: "update", timestamp: Date.now() }));
   } catch {
     // Falla tolerante: si Redis Pub/Sub no responde, la app sigue funcionando.
+  }
+}
+
+/**
+ * Publica un aviso —un pedido que ACABA de llegar a cocina o a domicilios— para
+ * que salte en cualquier pantalla de la sucursal, no solo en la que le
+ * corresponde.
+ *
+ * Va por un canal aparte de los tres de arriba a propósito. Esos se publican
+ * también cuando cocina marca un plato listo, cuando se renombra una cuenta o
+ * cuando se cobra: mueven contadores, no son noticias. Este solo se emite en los
+ * tres momentos en que entra un pedido, y por eso puede levantar un toast sin
+ * mentir.
+ */
+export async function publicarAviso(businessId: string, aviso: Aviso): Promise<void> {
+  const pub = getRedisPublisher();
+  if (!pub) return;
+
+  try {
+    await pub.publish(`avisos:${businessId}`, JSON.stringify(aviso));
+  } catch {
+    // Falla tolerante: sin Redis no hay aviso, pero el pedido ya quedó tomado.
   }
 }

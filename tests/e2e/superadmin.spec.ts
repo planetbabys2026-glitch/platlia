@@ -78,10 +78,13 @@ test("un correo que no es superadministrador recibe el mismo mensaje", async ({ 
   await expect(alerta).toHaveText("Credenciales incorrectas.");
 });
 
-test("el bootstrap se cierra solo cuando ya hay superadministrador", async ({ request }) => {
-  // El seed ya creó super@platlia.com, así que la puerta debe estar cerrada
-  // aunque SUPERADMIN_BOOTSTRAP_TOKEN siga en el entorno. Y responde 404, no
-  // "no autorizado": no confirma que la puerta exista.
-  const respuesta = await request.get("/pl-bootstrap");
-  expect(respuesta.status()).toBe(404);
+test("el bootstrap avisa que reemplaza al superadministrador que ya existe", async ({ page }) => {
+  // La puerta ya no se cierra sola al existir uno: cerrarse era justamente lo
+  // que impedía recuperar el acceso cuando nadie podía entrar. Lo que sí tiene
+  // que hacer es decir en la cara que reemplaza, porque el seed ya creó
+  // super@platlia.com y quien llegue acá va a dejarlo afuera.
+  await page.goto("/pl-bootstrap");
+
+  await expect(page.getByRole("heading", { name: /rehacer el superadministrador/i })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(/pierde el acceso/i);
 });

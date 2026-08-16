@@ -1,5 +1,5 @@
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { EsqueletoPantalla } from "@/components/ui/esqueleto-pantalla";
 
 export default function Loading() {
-  return <PantallaCargando mensaje="Cargando Platlia..." />;
+  return <EsqueletoPantalla />;
 }

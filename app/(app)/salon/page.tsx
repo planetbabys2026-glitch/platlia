@@ -6,11 +6,9 @@ import { AbrirPedidoSinMesa } from "@/features/pedidos/components/abrir-sin-mesa
 import { ListaSinMesa } from "@/features/pedidos/components/lista-sin-mesa";
 import { getPedidosAbiertos } from "@/features/pedidos/queries";
 import { getSalon } from "@/features/salon/queries";
-import { getSettings } from "@/features/negocio/queries";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { requireModule } from "@/lib/auth/dal";
-import { Mesa } from "./mesa";
+import { Mesa } from "./tarjeta-mesa";
 
 export const metadata: Metadata = { title: "Salón en Vivo · Platlia" };
 export const dynamic = "force-dynamic";
@@ -19,15 +17,25 @@ export default async function SalonPage() {
   // La página verifica por su cuenta: sesión, empresa, licencia y módulo.
   const ctx = await requireModule(AppModule.MESAS);
 
-  const [areas, caja, pedidos, settings] = await Promise.all([
+  const [areas, caja, pedidos] = await Promise.all([
     getSalon(ctx.business.id),
     getCajaAbierta(ctx.business.id),
     getPedidosAbiertos(ctx.business.id),
-    getSettings(ctx.business.id),
   ]);
 
   const paraLlevar = pedidos.filter((p) => p.type !== "MESA");
   const pedidosConCuenta = pedidos.filter((p) => p.status === "CUENTA_PEDIDA");
+  // Mesas y cuentas se cuentan aparte: una mesa con tres cuentas separadas es una
+  // mesa ocupada, no tres. El contador viejo sumaba pedidos y decía "3 ocupadas"
+  // con una sola mesa llena.
+  const mesasOcupadas = areas.reduce(
+    (total, area) => total + area.mesas.filter((mesa) => mesa.cuentas.length > 0).length,
+    0,
+  );
+  const cuentasAbiertas = areas.reduce(
+    (total, area) => total + area.mesas.reduce((suma, mesa) => suma + mesa.cuentas.length, 0),
+    0,
+  );
 
   return (
     <div className="space-y-8 max-w-7xl">
@@ -44,23 +52,23 @@ export default async function SalonPage() {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="chip is-hot">
-            {pedidos.length} {pedidos.length === 1 ? "OCUPADA" : "OCUPADAS"}
+            {mesasOcupadas} {mesasOcupadas === 1 ? "OCUPADA" : "OCUPADAS"}
           </span>
+          {cuentasAbiertas > mesasOcupadas && (
+            <span className="chip">{cuentasAbiertas} CUENTAS</span>
+          )}
           {pedidosConCuenta.length > 0 && (
             <span className="chip border-brand text-brand">
               {pedidosConCuenta.length} PIDIERON CUENTA
             </span>
           )}
 
-          <AbrirPedidoSinMesa deliveryEnabled={settings.deliveryEnabled} />
-          <Button asChild variant="outline" className="border-border/80 hover:bg-card">
-            <Link href="/turnero" target="_blank" rel="noopener">
-              Turnero TV →
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="border-border/80 hover:bg-card">
-            <Link href="/caja">Cobrar en Caja</Link>
-          </Button>
+          {/* Solo lo que se hace desde acá. El salón es tomar pedidos, mandar
+              comandas y cerrar cuentas para que lleguen a la caja; el turnero es
+              un televisor que se abre una vez por turno y la caja tiene su
+              propio ítem en el menú, siempre a la vista. Repetirlos acá era
+              ruido en la barra que más se toca del sistema. */}
+          <AbrirPedidoSinMesa />
         </div>
       </div>
 

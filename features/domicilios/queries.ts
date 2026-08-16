@@ -4,6 +4,21 @@ import { tenantDb } from "@/lib/db/tenant";
 import { currentBusinessDate } from "@/lib/time";
 import { getSettings } from "@/features/negocio/queries";
 
+/**
+ * Qué es un domicilio, para todas las consultas de acá.
+ *
+ * Son dos cosas a la vez: los que alguien tomó por teléfono o por el POS
+ * (`type: "DOMICILIO"`) y los que entraron solos por el menú QR
+ * (`channel: "DOMICILIO_QR"`). Sin este OR no se puede filtrar por
+ * `deliveryStatus`: esa columna es un `String` con default `"PENDIENTE"`, así
+ * que **todo** pedido del bar la tiene puesta y contarlos por ahí daría el día
+ * entero.
+ */
+const ES_DOMICILIO = [{ type: "DOMICILIO" as const }, { channel: "DOMICILIO_QR" as const }];
+
+/** Los que todavía no llegaron a destino: lo que la insignia del menú anuncia. */
+export const DOMICILIOS_EN_CURSO = ["PENDIENTE", "EN_PREPARACION", "EN_CAMINO"];
+
 export type DomicilioItem = {
   id: string;
   nameSnapshot: string;
@@ -44,10 +59,7 @@ export async function getDomicilios(businessId: string): Promise<DomicilioPedido
   const orders = await db.order.findMany({
     where: {
       businessId,
-      OR: [
-        { type: "DOMICILIO" },
-        { channel: "DOMICILIO_QR" },
-      ],
+      OR: ES_DOMICILIO,
       businessDate,
     },
     orderBy: { openedAt: "desc" },
@@ -87,4 +99,25 @@ export async function getDomicilios(businessId: string): Promise<DomicilioPedido
   });
 
   return orders;
+}
+
+/**
+ * Cuántos domicilios del día siguen en curso: lo que muestra la insignia del
+ * menú y el chip de la pantalla.
+ *
+ * Se cuenta en la base y no filtrando la lista en memoria porque el shell lo
+ * pide desde cualquier pantalla, y traerse los pedidos enteros con sus renglones
+ * para contarlos sería pagar la consulta grande por un número.
+ */
+export async function contarDomiciliosActivos(businessId: string): Promise<number> {
+  const settings = await getSettings(businessId);
+
+  return tenantDb(businessId).order.count({
+    where: {
+      OR: ES_DOMICILIO,
+      businessDate: currentBusinessDate(settings),
+      deliveryStatus: { in: DOMICILIOS_EN_CURSO },
+      status: { not: "ANULADA" },
+    },
+  });
 }

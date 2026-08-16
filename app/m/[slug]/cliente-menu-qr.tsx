@@ -311,7 +311,15 @@ export function ClienteMenuQr({
     if (cartList.length === 0) return;
     setErrorEnvio(null);
 
-    if (!esMesa) {
+    if (esMesa) {
+      // Cada envío desde la mesa abre su propia cuenta, así que en una mesa de
+      // seis pueden convivir seis pedidos. Sin el nombre, a la cocina le llegan
+      // seis comandas que dicen lo mismo y nadie sabe qué plato es de quién.
+      if (!customerName.trim()) {
+        setErrorEnvio("Escribí tu nombre para que sepamos de quién es el pedido.");
+        return;
+      }
+    } else {
       if (!customerPhone.trim()) {
         setErrorEnvio("Ingresá tu número de celular para despachar tu pedido.");
         return;
@@ -838,6 +846,35 @@ export function ClienteMenuQr({
                   {errorEnvio && (
                     <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-xs font-semibold">
                       {errorEnvio}
+                    </div>
+                  )}
+
+                  {/* En la mesa, el nombre es lo que hace identificable el pedido:
+                      cada envío abre su propia cuenta, así que varias personas
+                      sentadas juntas pueden pedir cada una lo suyo y pagar por
+                      separado. Sin nombre, a la cocina le llegan comandas
+                      idénticas de la misma mesa. */}
+                  {esMesa && (
+                    <div className="space-y-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                      <label
+                        htmlFor="nombre-cuenta-qr"
+                        className="block font-bold text-slate-200 text-xs uppercase tracking-wider"
+                      >
+                        ¿A nombre de quién?
+                      </label>
+                      <Input
+                        id="nombre-cuenta-qr"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Tu nombre *"
+                        required
+                        maxLength={120}
+                        className="h-10 bg-white/10 border-white/15 text-white text-sm"
+                      />
+                      <p className="text-[11px] text-slate-400 leading-snug">
+                        Tu pedido va a la cocina a tu nombre y se cobra aparte.
+                        Cada quien en la mesa puede pedir lo suyo desde su celular.
+                      </p>
                     </div>
                   )}
 

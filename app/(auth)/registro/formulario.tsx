@@ -78,6 +78,18 @@ export function FormularioRegistro() {
         ayuda="Mínimo 8 caracteres."
         errores={campos?.password}
       />
+      {/* `registroSchema` compara este campo con el anterior. Faltaba, así que
+          llegaba `undefined`, zod rechazaba el envío y el error quedaba colgado
+          de un campo que nadie dibujaba: el formulario solo decía "revisá los
+          datos" y no había forma de registrarse. Una clave mal tipeada acá deja
+          afuera al dueño de un negocio recién creado, así que se confirma. */}
+      <CampoContrasena
+        label="Repetir contraseña"
+        name="confirmarPassword"
+        autoComplete="new-password"
+        required
+        errores={campos?.confirmarPassword}
+      />
 
       <Enviar />
     </form>

@@ -3,7 +3,7 @@
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ReceiptWidth } from "@/generated/prisma/enums";
-import { guardarConfiguracionFactus, guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
+import { guardarConfiguracionFactus, guardarDatosNegocio, probarConexionFactus, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1960,15 +1960,61 @@ export type FactusSettings = {
   legalOrganizationCode?: string | null;
   tributeCode?: string | null;
   responsibilities?: string | null;
+  /**
+   * Si cada credencial está cargada. Booleanos y no los valores: son secretos y
+   * no tienen por qué cruzar del servidor al navegador para pintar un formulario.
+   */
+  tieneClientId: boolean;
+  tieneClientSecret: boolean;
+  tieneUsername: boolean;
+  tienePassword: boolean;
+  /** Lo que falta para poder facturar, calculado en el servidor. */
+  faltantes: string[];
 };
+
+/** Campo de credencial: vacío significa "no la cambies". */
+function CampoSecreto({
+  id,
+  label,
+  cargada,
+  tipo = "password",
+}: {
+  id: string;
+  label: string;
+  cargada: boolean;
+  tipo?: "text" | "password";
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs font-semibold">
+        {label} {!cargada && <span className="text-destructive">*</span>}
+      </Label>
+      <Input
+        id={id}
+        name={id}
+        type={tipo}
+        autoComplete="off"
+        placeholder={cargada ? "•••••••• (guardada)" : "Pegá el valor de Factus"}
+        className="h-10 text-xs rounded-xl font-mono"
+      />
+      <span className="text-[11px] text-muted-foreground block">
+        {cargada
+          ? "Ya está guardada. Dejalo vacío para conservarla."
+          : "Todavía no está cargada."}
+      </span>
+    </div>
+  );
+}
 
 export function FormularioFactus({ settings }: { settings: FactusSettings }) {
   const [estado, accion] = useActionState(guardarConfiguracionFactus, ESTADO_INICIAL);
+  const [prueba, probar, probando] = useActionState(probarConexionFactus, ESTADO_INICIAL);
 
   const habilitado = settings.facturacionElectronicaHabilitada;
   const disponibles = settings.paquetesDocumentosDisponibles ?? 0;
   const consumidos = settings.documentosEmitidosConsumidos ?? 0;
   const remanentes = Math.max(0, disponibles - consumidos);
+  const listo = settings.faltantes.length === 0;
 
   return (
     <div className="space-y-6">
@@ -2009,6 +2055,73 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
               <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 uppercase">Remanentes</span>
               <p className="numeral text-2xl font-bold text-emerald-700 dark:text-emerald-400">{remanentes} <span className="text-xs font-normal">docs</span></p>
+            </div>
+          </div>
+
+          {/* Estado: la única forma de que el dueño sepa por qué el cobro no le
+              ofrece facturar. Antes no había ninguna: la opción simplemente no
+              aparecía y no había nada que mirar. */}
+          <div
+            className={cn(
+              "p-4 rounded-xl border space-y-2",
+              listo
+                ? "bg-emerald-500/10 border-emerald-500/30"
+                : "bg-amber-500/10 border-amber-500/30",
+            )}
+          >
+            {listo ? (
+              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                ✅ Listo para facturar · {remanentes} documentos disponibles
+              </p>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                  Falta configurar para poder facturar
+                </p>
+                <ul className="list-disc space-y-0.5 pl-5 text-xs text-amber-800 dark:text-amber-200">
+                  {settings.faltantes.map((falta) => (
+                    <li key={falta}>{falta}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p className="text-[11px] text-muted-foreground">
+              Mientras esto no esté completo, el cobro en Caja y en el POS no pide
+              datos del cliente y toda venta se factura a consumidor final.
+            </p>
+          </div>
+
+          {/* Credenciales de la API */}
+          <div className="space-y-4 pt-2">
+            <h3 className="font-semibold text-sm text-foreground">Credenciales de Factus</h3>
+            <p className="text-xs text-muted-foreground">
+              Las entrega Factus al activar tu cuenta. Se guardan en este negocio y
+              no se vuelven a mostrar.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <CampoSecreto
+                id="factusClientId"
+                label="Client ID"
+                cargada={settings.tieneClientId}
+                tipo="text"
+              />
+              <CampoSecreto
+                id="factusClientSecret"
+                label="Client Secret"
+                cargada={settings.tieneClientSecret}
+              />
+              <CampoSecreto
+                id="factusUsername"
+                label="Usuario"
+                cargada={settings.tieneUsername}
+                tipo="text"
+              />
+              <CampoSecreto
+                id="factusPassword"
+                label="Contraseña"
+                cargada={settings.tienePassword}
+              />
             </div>
           </div>
 
@@ -2109,6 +2222,26 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
           <div className="pt-2">
             <Enviar>Guardar Parámetros DIAN</Enviar>
           </div>
+        </form>
+      )}
+
+      {/* Fuera del <form> de guardar: son dos envíos distintos y anidar
+          formularios no es válido en HTML. */}
+      {habilitado && (
+        <form action={probar} className="space-y-2 border-t border-border pt-4">
+          <Button type="submit" variant="outline" disabled={probando} className="h-10 text-xs">
+            {probando ? "Probando…" : "Probar conexión con Factus"}
+          </Button>
+          {!prueba.ok && prueba.error && (
+            <Alert variant="destructive" role="alert">
+              <AlertDescription>{prueba.error}</AlertDescription>
+            </Alert>
+          )}
+          {prueba.ok && prueba.data && (
+            <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              <AlertDescription>{prueba.data.mensaje}</AlertDescription>
+            </Alert>
+          )}
         </form>
       )}
     </div>

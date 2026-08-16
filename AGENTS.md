@@ -128,10 +128,24 @@ Puerta aparte: cookie `pl_sa` con path `/superadmin`, sesión de tipo `SUPERADMI
 `requireSuperAdmin()`. **Una sesión del producto no abre esta puerta** por más que el usuario
 tenga `isSuperAdmin`: quien da soporte entra a propósito, no por arrastre.
 
-`/pl-bootstrap` crea el superadministrador maestro una sola vez. Responde **404** —no "no
-autorizado"— cuando falta `SUPERADMIN_BOOTSTRAP_TOKEN` o cuando ya existe uno: así es
+`/pl-bootstrap` **rehace** el superadministrador maestro: es la puerta de recuperación para cuando
+nadie puede entrar a `/superadmin`. Borra los superadministradores que haya y deja solo el que se
+escriba ahí. A quien además tenga membresía en un negocio no se le borra la cuenta —eso se llevaría
+por cascada las membresías y dejaría a un negocio sin su dueño—: se le quita la marca y se le
+revocan las sesiones de soporte. A las cuentas que solo existían para dar soporte no les queda nada
+que conservar y se borran.
+
+Responde **404** —no "no autorizado"— cuando falta `SUPERADMIN_BOOTSTRAP_TOKEN`: así es
 indistinguible de una ruta inexistente y no confirma que la puerta exista. El token se compara en
-tiempo constante.
+tiempo constante y los intentos con token incorrecto quedan en `AuditLog`.
+
+**Mientras la variable esté en el entorno la puerta está abierta.** Antes también se cerraba sola al
+existir el primer superadministrador, lo que servía de red para el olvido de borrarla; esa red ya no
+está, porque cerrarse sola es justamente lo que impedía recuperar un acceso perdido. El token pasó a
+ser una llave permanente: sacarlo del entorno apenas se usa dejó de ser una recomendación.
+
+Sumar gente al equipo de soporte **no** se hace por acá sino en `/superadmin/equipo`, que exige
+estar adentro. Esta puerta reemplaza, no suma.
 
 La consola muestra **cuentas, no contenido**: cuántas mesas y cuántos pedidos, nunca qué
 vendieron. Dar soporte no requiere leerle la operación a nadie. Toda acción sobre un negocio

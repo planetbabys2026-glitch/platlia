@@ -104,11 +104,20 @@ export function Comanda({ comanda }: { comanda: ComandaOrden }) {
     MINUTOS_POR_DEFECTO,
   );
 
-  const tituloMesaOOrder = comanda.mesa
-    ? `Mesa ${comanda.mesa}${comanda.turno !== null ? ` · ${formatTurno(comanda.turno, 99, true)}` : ""}`
+  // Dónde va el plato. La mesa manda; sin mesa, el turno que se canta.
+  const destino = comanda.mesa
+    ? `Mesa ${comanda.mesa}`
     : comanda.turno !== null
       ? `Turno ${formatTurno(comanda.turno, 99, false)}`
       : `Pedido #${comanda.code}`;
+
+  // De quién es. Una mesa puede tener tres cuentas abiertas a la vez y cada una
+  // llega como su propia comanda: sin el nombre, al cocinero le aparecen tres
+  // tarjetas que dicen "Mesa 12" y no sabe cuál plato va para quién.
+  const cuenta = comanda.cuenta?.trim() || null;
+
+  const turnoDeMesa =
+    comanda.mesa && comanda.turno !== null ? formatTurno(comanda.turno, 99, true) : null;
 
   return (
     <article
@@ -118,16 +127,24 @@ export function Comanda({ comanda }: { comanda: ComandaOrden }) {
         comanda.items.every((i) => i.status === "LISTO") && "border-emerald-500/40 bg-emerald-500/5 opacity-80",
       )}
     >
-      {/* Header de la Comanda por Mesa / Pedido */}
-      <div className="border-border/80 flex items-center justify-between border-b pb-2.5">
-        <div className="flex items-center gap-2">
-          <span className="text-foreground text-sm font-bold tracking-tight">
-            {tituloMesaOOrder}
-          </span>
-          {comanda.items.every((i) => i.status === "LISTO") && (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-              ✔ LISTO
-            </span>
+      {/* Header de la Comanda: a dónde va y de quién es */}
+      <div className="border-border/80 flex items-start justify-between gap-2 border-b pb-2.5">
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-foreground text-sm font-bold tracking-tight">{destino}</span>
+            {cuenta && (
+              <span className="border-brand/40 bg-brand/10 text-brand max-w-full truncate rounded-md border px-1.5 py-0.5 text-xs font-bold dark:text-[#FF7A4D]">
+                {cuenta}
+              </span>
+            )}
+            {comanda.items.every((i) => i.status === "LISTO") && (
+              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                ✔ LISTO
+              </span>
+            )}
+          </div>
+          {turnoDeMesa && (
+            <span className="numeral text-muted-foreground text-[11px]">{turnoDeMesa}</span>
           )}
         </div>
         <span className="flex items-center gap-1.5">

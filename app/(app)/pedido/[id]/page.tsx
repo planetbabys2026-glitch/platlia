@@ -4,24 +4,24 @@ import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
 import { getCajaAbierta } from "@/features/caja/queries";
 import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
+import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consumo";
 import { getSettings } from "@/features/negocio/queries";
 import { ModuloPosInteractive } from "@/app/(app)/pos/modulo-pos-interactive";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { requireModule, tieneRol } from "@/lib/auth/dal";
-import { formatCop, formatRateBp } from "@/lib/money";
+import { formatCop } from "@/lib/money";
 import { formatTurno } from "@/lib/turns";
 import { Carta } from "./carta";
+import { CuentaMovil } from "./cuenta-movil";
 import {
-  AnularPedido,
-  AnularRenglon,
-  Cobrar,
-  ConfirmarPedido,
-  ControlCantidad,
-  NotaRenglon,
-  PedirCuenta,
-  QuitarRenglon,
-} from "./acciones";
+  CuentaEnVivo,
+  ListaDeRenglones,
+  SegunConsumo,
+  TotalesEnVivo,
+} from "./cuenta-en-vivo";
+import { AnularPedido, Cobrar, ConfirmarPedido, PedirCuenta } from "./acciones";
 
 export const metadata: Metadata = { title: "Pedido" };
 export const dynamic = "force-dynamic";
@@ -42,9 +42,10 @@ export default async function PedidoPage({
   const { id } = await params;
   const ctx = await requireModule(AppModule.PEDIDOS);
 
-  const [pedido, carta] = await Promise.all([
+  const [pedido, carta, settings] = await Promise.all([
     getPedido(ctx.business.id, id),
     getCarta(ctx.business.id),
+    getSettings(ctx.business.id),
   ]);
 
   // El pedido se busca con el cliente acotado a la empresa, así que un id de otro
@@ -54,10 +55,9 @@ export default async function PedidoPage({
   const usaMesas = ctx.modules.has(AppModule.MESAS);
 
   if (pedido.type !== "MESA" || !usaMesas) {
-    const [caja, pedidos, settings] = await Promise.all([
+    const [caja, pedidos] = await Promise.all([
       getCajaAbierta(ctx.business.id),
       getPedidosAbiertos(ctx.business.id),
-      getSettings(ctx.business.id),
     ]);
 
     return (
@@ -66,6 +66,7 @@ export default async function PedidoPage({
         caja={caja}
         pedidosAbiertos={pedidos}
         pedidoInicial={pedido}
+        puedeFacturar={puedeFacturarElectronicamente(settings)}
         settings={{
           deliveryEnabled: settings.deliveryEnabled,
           requireOpenCashSession: settings.requireOpenCashSession,
@@ -79,19 +80,152 @@ export default async function PedidoPage({
   const editable = pedido.status === "ABIERTA" || pedido.status === "CUENTA_PEDIDA";
   const renglones = pedido.items.filter((i) => i.status !== "ANULADO");
   const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);
+  const nombreDeCuenta = pedido.customerName?.trim() || null;
   // El mesero canta y ajusta la mesa, pero no factura: anularItem, anularPedido
   // y registrarPago ya lo exigen en el servidor. Ofrecerle acá el botón sería
   // una trampa que siempre falla.
   const puedeCobrar = tieneRol(ctx.role, [Role.CAJERO, Role.ADMINISTRADOR]);
 
+  // El mismo panel se pinta en la columna lateral (pantalla grande) y dentro
+  // de la hoja que se abre desde la barra de abajo (celular). Se declara una
+  // sola vez: dos copias divergen al primer cambio.
+  const panelCuenta = (
+    <>
+      {/* Estas tarjetas dependen de si hay consumo, y con la cuenta en vivo eso
+          cambia con el toque y no con la vuelta del servidor: la decisión la toma
+          el cliente contando también el renglón que se acaba de anticipar. */}
+      {editable && (
+        <SegunConsumo
+          conConsumo={
+            <ConfirmarPedido
+              orderId={pedido.id}
+              turnNumber={pedido.turnNumber}
+              isMesa={pedido.type === "MESA"}
+            />
+          }
+        />
+      )}
+      <Card>
+        <CardContent className="space-y-4">
+          <h2 className="font-medium">La cuenta</h2>
+          <ListaDeRenglones editable={editable} puedeCobrar={puedeCobrar} />
+          <TotalesEnVivo />
+        </CardContent>
+      </Card>
+
+      {/* Botón para imprimir ticket con el turno asignado */}
+      <a
+        href={`/imprimir/pedido/${pedido.id}`}
+        target="_blank"
+        rel="noopener"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-all shadow-sm"
+      >
+        🖨️ Imprimir ticket {pedido.turnNumber !== null ? `(Turno ${formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")})` : ""}
+      </a>
+
+      {pedido.status === "ABIERTA" && pedido.type === "MESA" && (
+        <SegunConsumo conConsumo={<PedirCuenta orderId={pedido.id} esMesa={true} />} />
+      )}
+
+      {/* En modo POS (pedido rápido), se permite facturar/cobrar directamente sin enviar a caja */}
+      {editable && pedido.type !== "MESA" && (
+        <SegunConsumo
+          conConsumo={
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="pt-4 space-y-3">
+                <h2 className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">
+                  💳 Facturar y cobrar pedido (POS)
+                </h2>
+                <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
+              </CardContent>
+            </Card>
+          }
+        />
+      )}
+
+      {editable && (
+        <SegunConsumo
+          conConsumo={
+            puedeCobrar ? (
+              <Card>
+                <CardContent>
+                  <AnularPedido orderId={pedido.id} vacio={false} esMesa={pedido.type === "MESA"} />
+                </CardContent>
+              </Card>
+            ) : null
+          }
+          // Una cuenta sin nada pedido no se cobra ni se anula con motivo: se
+          // cierra. Lo puede hacer quien la abrió —el mesero incluido—, porque si
+          // no, una mesa abierta por error se queda abierta hasta que aparezca un
+          // cajero, y termina trancando el cierre del turno.
+          sinConsumo={
+            <Card className="border-dashed">
+              <CardContent className="space-y-3">
+                <p className="text-muted-foreground text-xs">
+                  {pedido.type === "MESA"
+                    ? "Nadie pidió nada en esta cuenta."
+                    : "Este pedido quedó sin productos."}
+                </p>
+                <CerrarSinConsumo orderId={pedido.id} />
+              </CardContent>
+            </Card>
+          }
+        />
+      )}
+
+
+
+      {pedido.payments.length > 0 && (
+        <Card>
+          <CardContent className="space-y-2">
+            <h2 className="font-medium">Pagos</h2>
+            <ul className="space-y-2 text-sm">
+              {pedido.payments.map((pago) => (
+                <li key={pago.id} className="space-y-0.5">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{pago.method}</span>
+                    <span className="numeral">{formatCop(pago.amountCop)}</span>
+                  </div>
+                  {/* El vuelto se pinta desde el pago guardado y no solo en el
+                      aviso de la acción: al cobrarse, el pedido se cierra y la
+                      tarjeta de cobro desaparece con su mensaje adentro. El
+                      cajero se quedaba sin saber cuánto devolver. */}
+                  {pago.changeCop !== null && pago.changeCop > 0 && (
+                    <div className="text-muted-foreground flex justify-between gap-2 text-xs">
+                      <span>
+                        Recibí{" "}
+                        <span className="numeral">{formatCop(pago.tenderedCop ?? 0)}</span> ·
+                        vuelto
+                      </span>
+                      <span className="numeral text-foreground font-medium">
+                        {formatCop(pago.changeCop)}
+                      </span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight">
               {pedido.table ? `Mesa ${pedido.table.name}` : `Pedido ${pedido.code}`}
             </h1>
+            {/* De quién es esta cuenta. Una mesa puede tener varias abiertas a la
+                vez, así que sin el nombre no se sabe cuál se está mirando. */}
+            {nombreDeCuenta && (
+              <span className="text-muted-foreground text-xl font-medium">
+                · {nombreDeCuenta}
+              </span>
+            )}
             <Badge variant={pedido.status === "PAGADA" ? "secondary" : "default"}>
               {ESTADO[pedido.status]}
             </Badge>
@@ -118,11 +252,17 @@ export default async function PedidoPage({
           >
             Imprimir cuenta
           </a>
+          {/* Se vuelve a la mesa, no al salón: es donde están las otras cuentas
+              del mismo grupo y desde donde se abre una más. */}
           <Link
-            href={usaMesas ? "/salon" : "/pos"}
+            href={pedido.table ? `/salon/mesa/${pedido.table.id}` : usaMesas ? "/salon" : "/pos"}
             className="text-primary text-sm font-medium hover:underline"
           >
-            {usaMesas ? "← Volver al salón" : "← Volver al POS"}
+            {pedido.table
+              ? `← Mesa ${pedido.table.name}`
+              : usaMesas
+                ? "← Volver al salón"
+                : "← Volver al POS"}
           </Link>
         </div>
       </div>
@@ -135,185 +275,46 @@ export default async function PedidoPage({
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <section aria-label="Carta">
-          <Carta orderId={pedido.id} categorias={carta} editable={editable} />
-        </section>
+      {/* La carta y la cuenta comparten estado: tocar un producto tiene que
+          verse en la cuenta con el dedo todavía en la pantalla, sin esperar a
+          que el servidor vuelva a armar la página entera. */}
+      <CuentaEnVivo
+        renglones={renglones}
+        totales={{
+          subtotalCop: pedido.subtotalCop,
+          taxCop: pedido.taxCop,
+          tipCop: pedido.tipCop,
+          totalCop: pedido.totalCop,
+          paidCop: pedido.paidCop,
+        }}
+        pricesIncludeTax={settings.pricesIncludeTax}
+      >
+        <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+          <section aria-label="Carta">
+            <Carta orderId={pedido.id} categorias={carta} editable={editable} />
+          </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          {editable && renglones.length > 0 && (
-            <ConfirmarPedido
-              orderId={pedido.id}
-              hasItems={renglones.length > 0}
-              turnNumber={pedido.turnNumber}
-              isMesa={pedido.type === "MESA"}
-            />
-          )}
-          <Card>
-            <CardContent className="space-y-4">
-              <h2 className="font-medium">La cuenta</h2>
-
-              {renglones.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Todavía no hay nada. Tocá un producto de la carta.
-                </p>
-              ) : (
-                <ul className="divide-border divide-y">
-                  {renglones.map((item) => (
-                    <li key={item.id} className="space-y-1 py-2 first:pt-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm leading-tight">{item.nameSnapshot}</span>
-                        <span className="numeral text-sm font-medium whitespace-nowrap">
-                          {formatCop(item.lineTotalCop)}
-                        </span>
-                      </div>
-                      {item.modifiers.length > 0 && (
-                        <ul className="text-muted-foreground space-y-0.5 pl-3 text-xs">
-                          {item.modifiers.map((mod) => (
-                            <li key={mod.id} className="flex justify-between gap-2">
-                              <span>+ {mod.optionNameSnapshot}</span>
-                              {mod.priceDeltaCopSnapshot > 0 && (
-                                <span className="numeral whitespace-nowrap">
-                                  {formatCop(mod.priceDeltaCopSnapshot)}
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div className="flex items-center justify-between gap-2">
-                        <ControlCantidad
-                          itemId={item.id}
-                          quantity={item.quantity}
-                          editable={editable}
-                        />
-                        <span className="text-muted-foreground text-xs">
-                          {formatCop(item.unitPriceCop)} c/u ·{" "}
-                          {formatRateBp(item.taxRateBpSnapshot)}
-                        </span>
-                      </div>
-                      {editable ? (
-                        <NotaRenglon itemId={item.id} notes={item.notes} />
-                      ) : (
-                        item.notes && (
-                          <p className="text-muted-foreground text-xs italic">{item.notes}</p>
-                        )
-                      )}
-                      {editable &&
-                        (item.status === "PENDIENTE" ? (
-                          <QuitarRenglon itemId={item.id} />
-                        ) : (
-                          puedeCobrar && <AnularRenglon itemId={item.id} />
-                        ))}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <dl className="border-border space-y-1 border-t pt-3 text-sm">
-                <Fila termino="Base gravable" valor={pedido.subtotalCop} />
-                <Fila termino="Impuesto" valor={pedido.taxCop} />
-                {pedido.tipCop > 0 && <Fila termino="Propina" valor={pedido.tipCop} />}
-                <div className="flex items-baseline justify-between pt-1">
-                  <dt className="font-medium">Total</dt>
-                  <dd className="numeral text-2xl font-semibold">
-                    {formatCop(pedido.totalCop)}
-                  </dd>
-                </div>
-                {pedido.paidCop > 0 && (
-                  <>
-                    <Fila termino="Pagado" valor={pedido.paidCop} />
-                    {faltanteCop > 0 && <Fila termino="Falta" valor={faltanteCop} />}
-                  </>
-                )}
-              </dl>
-            </CardContent>
-          </Card>
-
-          {/* Botón para imprimir ticket con el turno asignado */}
-          <a
-            href={`/imprimir/pedido/${pedido.id}`}
-            target="_blank"
-            rel="noopener"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent transition-all shadow-sm"
+          {/* Oculto en celular: ahí la cuenta vive en la hoja de CuentaMovil.
+              Se oculta con CSS y no con una condición de JS porque el servidor
+              no sabe el ancho de la pantalla. */}
+          <aside
+            aria-label="La cuenta"
+            className="hidden space-y-4 lg:block lg:sticky lg:top-20 lg:self-start"
           >
-            🖨️ Imprimir ticket {pedido.turnNumber !== null ? `(Turno ${formatTurno(pedido.turnNumber, 99, pedido.type === "MESA")})` : ""}
-          </a>
+            {panelCuenta}
+          </aside>
+        </div>
 
-          {pedido.status === "ABIERTA" && renglones.length > 0 && pedido.type === "MESA" && (
-            <PedirCuenta orderId={pedido.id} esMesa={true} />
-          )}
-
-          {/* En modo POS (pedido rápido), se permite facturar/cobrar directamente sin enviar a caja */}
-          {editable && renglones.length > 0 && pedido.type !== "MESA" && (
-            <Card className="border-emerald-500/30 bg-emerald-500/5">
-              <CardContent className="pt-4 space-y-3">
-                <h2 className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">
-                  💳 Facturar y cobrar pedido (POS)
-                </h2>
-                <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
-              </CardContent>
-            </Card>
-          )}
-
-          {editable && puedeCobrar && (
-            <Card>
-              <CardContent>
-                <AnularPedido
-                  orderId={pedido.id}
-                  vacio={renglones.length === 0}
-                  esMesa={pedido.type === "MESA"}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-
-
-          {pedido.payments.length > 0 && (
-            <Card>
-              <CardContent className="space-y-2">
-                <h2 className="font-medium">Pagos</h2>
-                <ul className="space-y-2 text-sm">
-                  {pedido.payments.map((pago) => (
-                    <li key={pago.id} className="space-y-0.5">
-                      <div className="flex justify-between gap-2">
-                        <span className="text-muted-foreground">{pago.method}</span>
-                        <span className="numeral">{formatCop(pago.amountCop)}</span>
-                      </div>
-                      {/* El vuelto se pinta desde el pago guardado y no solo en el
-                          aviso de la acción: al cobrarse, el pedido se cierra y la
-                          tarjeta de cobro desaparece con su mensaje adentro. El
-                          cajero se quedaba sin saber cuánto devolver. */}
-                      {pago.changeCop !== null && pago.changeCop > 0 && (
-                        <div className="text-muted-foreground flex justify-between gap-2 text-xs">
-                          <span>
-                            Recibí{" "}
-                            <span className="numeral">{formatCop(pago.tenderedCop ?? 0)}</span> ·
-                            vuelto
-                          </span>
-                          <span className="numeral text-foreground font-medium">
-                            {formatCop(pago.changeCop)}
-                          </span>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-function Fila({ termino, valor }: { termino: string; valor: number }) {
-  return (
-    <div className="text-muted-foreground flex justify-between gap-2">
-      <dt>{termino}</dt>
-      <dd className="numeral">{formatCop(valor)}</dd>
+        <CuentaMovil
+          titulo={
+            pedido.table
+              ? `Mesa ${pedido.table.name}${nombreDeCuenta ? ` · ${nombreDeCuenta}` : ""}`
+              : `Pedido ${pedido.code}`
+          }
+        >
+          {panelCuenta}
+        </CuentaMovil>
+      </CuentaEnVivo>
     </div>
   );
 }

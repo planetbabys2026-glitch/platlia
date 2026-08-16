@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { agregarItem } from "@/features/pedidos/actions";
 import { ImagenProducto } from "@/features/pedidos/components/imagen-producto";
@@ -10,9 +10,9 @@ import {
   type ProductoConModificadores,
 } from "@/features/carta/components/selector-modificadores";
 import { Input } from "@/components/ui/input";
-import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { useCuenta } from "./cuenta-en-vivo";
 
 /**
  * La carta, para tocar rápido.
@@ -35,6 +35,7 @@ export type ProductoDeCarta = ProductoConModificadores & {
   priceCop: number;
   isAvailable: boolean;
   imageUrl: string | null;
+  taxRate: { rateBp: number };
 };
 
 export type CategoriaDeCarta = {
@@ -52,7 +53,8 @@ function normalizar(texto: string): string {
 }
 
 function TarjetaProducto({ orderId, producto }: { orderId: string; producto: ProductoDeCarta }) {
-  const [estado, accion, isPending] = useActionState(agregarItem, ESTADO_INICIAL);
+  const cuenta = useCuenta();
+  const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -66,9 +68,45 @@ function TarjetaProducto({ orderId, producto }: { orderId: string; producto: Pro
   const [cantidad, setCantidad] = useState(1);
   const [nota, setNota] = useState("");
 
+  /** Nombre y precio de cada opción elegida, para el renglón que se anticipa. */
+  const detalleDeElegidas = () =>
+    (producto.modifierGroups ?? [])
+      .flatMap((a) => a.group.options)
+      .filter((o) => elegidas.includes(o.id))
+      .map((o) => ({ nombre: o.name, precioCop: o.priceDeltaCop }));
+
+  /**
+   * Se llama la acción directo en vez de pasar por `useActionState`, y se la
+   * espera. Es lo que mantiene abierta la transición del formulario mientras el
+   * servidor trabaja, y por lo tanto lo que mantiene visible el renglón
+   * optimista: con `useActionState` la transición se cerraba antes y el renglón
+   * anticipado desaparecía justo en el hueco que se quería tapar.
+   */
+  const enviar = async (formData: FormData) => {
+    setError(null);
+    cuenta?.agregarOptimista({
+      nombre: producto.name,
+      precioUnitarioCop: producto.priceCop,
+      taxRateBp: producto.taxRate.rateBp,
+      cantidad,
+      modificadores: detalleDeElegidas(),
+    });
+
+    try {
+      const resultado = await agregarItem(undefined, formData);
+      if (!resultado.ok) setError(resultado.error ?? "No se pudo agregar.");
+    } catch {
+      // Si la acción no llega a contestar —red caída, servidor reiniciándose—
+      // el renglón optimista se desvanece solo y hay que decir por qué. Sin este
+      // catch el error sube al límite de error y se lleva la pantalla entera por
+      // una cerveza que no entró.
+      setError("No se pudo agregar. Tocá de nuevo.");
+    }
+  };
+
   return (
     <li className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card transition-all duration-300 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10 hover:-translate-y-1 active:scale-[0.98]">
-      <form action={accion} ref={formRef} className="contents">
+      <form action={enviar} ref={formRef} className="contents">
         <input type="hidden" name="orderId" value={orderId} />
         <input type="hidden" name="productId" value={producto.id} />
         <input type="hidden" name="quantity" value={cantidad} />
@@ -88,7 +126,6 @@ function TarjetaProducto({ orderId, producto }: { orderId: string; producto: Pro
           nombre={producto.name}
           precio={producto.priceCop}
           disponible={producto.isAvailable}
-          isPending={isPending}
           conModificadores={conModificadores}
           onElegir={
             conModificadores
@@ -117,9 +154,7 @@ function TarjetaProducto({ orderId, producto }: { orderId: string; producto: Pro
         />
       )}
 
-      {!estado.ok && estado.error && (
-        <p className="text-destructive px-2 pb-2 text-xs">{estado.error}</p>
-      )}
+      {error && <p className="text-destructive px-2 pb-2 text-xs">{error}</p>}
     </li>
   );
 }
@@ -128,19 +163,16 @@ function Boton({
   nombre,
   precio,
   disponible,
-  isPending,
   conModificadores,
   onElegir,
 }: {
   nombre: string;
   precio: number;
   disponible: boolean;
-  isPending?: boolean;
   conModificadores?: boolean;
   onElegir?: () => void;
 }) {
   const { pending } = useFormStatus();
-  const cargando = pending || isPending;
 
   return (
     <button
@@ -148,7 +180,13 @@ function Boton({
       // dispara el modal al confirmar.
       type={conModificadores ? "button" : "submit"}
       onClick={onElegir}
-      disabled={cargando || !disponible}
+      // A propósito NO se deshabilita mientras el envío está en curso. Antes sí,
+      // y era peor de lo que parece: el bloqueo duraba lo que tardaba la acción,
+      // pero el renglón recién aparecía cuando volvía la pantalla entera, así que
+      // el botón se soltaba antes de que se viera nada. Ahora el renglón entra al
+      // instante y dos toques seguidos son dos cervezas, que es lo que se quiso
+      // pedir.
+      disabled={!disponible}
       className={cn(
         "flex w-full flex-col gap-0.5 p-2.5 text-left transition-colors duration-200",
         "group-hover:bg-accent/70 focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
@@ -165,7 +203,7 @@ function Boton({
         )}
       </span>
       <span className="sr-only">
-        {cargando ? "Agregando" : conModificadores ? "Elegir opciones" : "Agregar al pedido"}
+        {pending ? "Agregando" : conModificadores ? "Elegir opciones" : "Agregar al pedido"}
       </span>
     </button>
   );

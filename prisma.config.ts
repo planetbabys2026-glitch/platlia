@@ -31,7 +31,19 @@ const url = process.env.DATABASE_URL ?? "postgresql://falta-DATABASE_URL";
 export default defineConfig({
   schema: "prisma/schema.prisma",
 
-  datasource: { url },
+  datasource: {
+    url,
+
+    /**
+     * Sin esto Prisma se crea una base sombra temporal por su cuenta, que es lo
+     * que queremos casi siempre. Se declara igual porque `prisma migrate diff
+     * --from-migrations` la exige explícita —en Prisma 7 ya no acepta la bandera
+     * `--shadow-database-url`— y esa es la única forma de comparar "lo que dicen
+     * las migraciones" contra "lo que hay en la base". Cuando la variable no
+     * está, el comportamiento es exactamente el de siempre.
+     */
+    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL,
+  },
 
   migrations: {
     path: "prisma/migrations",

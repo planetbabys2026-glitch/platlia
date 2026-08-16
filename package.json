@@ -23,6 +23,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "seed": "tsx --env-file=.env prisma/seed.ts",
+    "db:reset-operacion": "tsx --env-file=.env scripts/reset-operacion.ts",
     "cron:subs": "tsx --env-file=.env scripts/cron/sweep-subscriptions.ts"
   },
   "dependencies": {

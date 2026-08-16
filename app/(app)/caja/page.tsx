@@ -9,6 +9,7 @@ import {
 } from "@/features/caja/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { requireModule } from "@/lib/auth/dal";
+import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { tenantDb } from "@/lib/db/tenant";
 import { currentBusinessDate, formatDateTimeInTimeZone } from "@/lib/time";
 import { PanelCaja } from "./panel-caja";
@@ -22,6 +23,9 @@ export default async function CajaPage() {
   const businessDate = currentBusinessDate(settings);
   const caja = await getCajaAbierta(ctx.business.id);
   const usaMesas = ctx.modules.has(AppModule.MESAS);
+  // Un booleano, no la configuración: las credenciales de Factus viven en
+  // BusinessSettings y no tienen por qué cruzar al navegador.
+  const puedeFacturar = puedeFacturarElectronicamente(settings);
 
   let ultimoCierre = null;
   let resumen = null;
@@ -63,6 +67,7 @@ export default async function CajaPage() {
         resumen={resumen}
         movimientos={movimientos}
         cuentas={cuentas}
+        puedeFacturar={puedeFacturar}
         usaMesas={usaMesas}
         timeZone={ctx.business.timeZone}
       />

@@ -3,6 +3,7 @@ import { AppModule, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
+import { faltantesParaFacturar } from "@/lib/billing/factus-habilitacion";
 import { tenantDb } from "@/lib/db/tenant";
 import { PanelConfiguracion } from "./panel-configuracion";
 
@@ -34,6 +35,26 @@ export default async function ConfiguracionPage() {
     }),
   ]);
 
+  /**
+   * Las credenciales de Factus NO cruzan a un componente cliente.
+   *
+   * `PanelConfiguracion` es `"use client"`: todo lo que reciba viaja al navegador
+   * dentro de la carga de RSC y se puede leer en el código fuente de la página.
+   * Se sacan del objeto por destructuring —y no eligiendo campo por campo— para
+   * que una columna secreta que se agregue mañana no se cuele por olvido; en su
+   * lugar viaja solo si está cargada, que es lo único que el formulario necesita
+   * para pintarse.
+   */
+  const {
+    factusClientId,
+    factusClientSecret,
+    factusUsername,
+    factusPassword,
+    ...settingsSinSecretos
+  } = settings;
+
+  const cargada = (valor: string | null) => Boolean(valor && valor.trim() !== "");
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -45,7 +66,14 @@ export default async function ConfiguracionPage() {
 
       <PanelConfiguracion
         negocio={negocio}
-        settings={settings}
+        settings={{
+          ...settingsSinSecretos,
+          tieneClientId: cargada(factusClientId),
+          tieneClientSecret: cargada(factusClientSecret),
+          tieneUsername: cargada(factusUsername),
+          tienePassword: cargada(factusPassword),
+          faltantesParaFacturar: faltantesParaFacturar(settings),
+        }}
         facturacion={facturacion}
         mesasHabilitado={ctx.modules.has(AppModule.MESAS)}
         esPropietario={esPropietario}

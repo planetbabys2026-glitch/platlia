@@ -24,10 +24,10 @@ test("lo que se canta aparece en cocina, separado por estación", async ({ page 
   const pedido = page.url();
 
   // Uno de barra y uno de cocina: el seed les puso estación distinta.
-  await page.getByRole("button", { name: /cerveza nacional · botella/i }).click();
-  await expect(page.getByRole("complementary")).toContainText("Cerveza nacional");
+  await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
+  await expect(page.getByRole("complementary", { name: "La cuenta" })).toContainText("Cerveza nacional");
   await page.getByRole("button", { name: /bandeja paisa/i }).click();
-  await expect(page.getByRole("complementary")).toContainText("Bandeja paisa");
+  await expect(page.getByRole("complementary", { name: "La cuenta" })).toContainText("Bandeja paisa");
 
   await page.goto("/cocina");
   await expect(page.getByRole("heading", { name: /^barra ·/i })).toBeVisible();
@@ -68,10 +68,10 @@ test("el tiquete sale cuadrado y con el impuesto desagregado", async ({ page }) 
   const pedido = page.url();
 
   // Tres cervezas de $5.000: total $15.000, con 8% incluido.
-  await page.getByRole("button", { name: /cerveza nacional · botella/i }).click();
+  await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
   await page.getByRole("button", { name: "+" }).first().click();
   await page.getByRole("button", { name: "+" }).first().click();
-  await expect(page.getByRole("complementary").getByText("Total").locator("..")).toContainText(
+  await expect(page.getByRole("complementary", { name: "La cuenta" }).getByText("Total").locator("..")).toContainText(
     "$15.000",
   );
 

@@ -116,6 +116,18 @@ export const crearSucursalSchema = z.object({
 });
 
 export const configuracionFactusSchema = z.object({
+  /**
+   * Las credenciales de la API de Factus. Son opcionales en el schema y no
+   * porque se puedan omitir —sin ellas no se factura— sino por la semántica del
+   * campo secreto: si llega vacío, se conserva lo que ya estaba guardado. Así el
+   * formulario puede mostrar la contraseña enmascarada sin borrarla cada vez que
+   * alguien cambia el código de municipio.
+   */
+  factusClientId: textoOpcional(200),
+  factusClientSecret: textoOpcional(200),
+  factusUsername: textoOpcional(160),
+  factusPassword: textoOpcional(200),
+
   factusNumberingRangeId: z.preprocess(
     (v) => (v === "" || v === undefined || v === null ? undefined : Number(v)),
     z.number().int().min(1, "Ingresa un ID de rango de numeración válido de la DIAN."),

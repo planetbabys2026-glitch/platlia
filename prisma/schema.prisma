@@ -769,9 +769,19 @@ model Order {
   cashSessionId String?
   cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
 
-  guestsCount     Int?
+  guestsCount Int?
+
+  /// La etiqueta de la CUENTA, no el nombre fiscal: "Andrés", "Cuenta 2". Una
+  /// mesa puede tener varias cuentas abiertas a la vez —un grupo que pide por
+  /// separado— y esto es lo que las distingue en el salón, en la comanda de
+  /// cocina y en el tiquete. A quién se le factura lo deciden `docType` y
+  /// `docNumber`: sin número de documento, la factura sale a consumidor final y
+  /// este nombre ni se mira.
   customerName    String?
   customerPhone   String?
+  /// Correo al que se manda la factura electrónica. Sin esto Factus cae a un
+  /// literal del código y la factura no le llega a nadie.
+  customerEmail   String?
   deliveryAddress String?
   docType         String?
   docNumber       String?

@@ -48,6 +48,8 @@ type PanelCajaProps = {
     createdAt: Date;
   }>;
   cuentas: React.ComponentProps<typeof CuentasPorCobrar>["cuentas"];
+  /** Si el negocio está en condiciones de emitir factura electrónica. */
+  puedeFacturar: boolean;
   usaMesas: boolean;
   timeZone: string;
 };
@@ -58,6 +60,7 @@ export function PanelCaja({
   resumen,
   movimientos,
   cuentas,
+  puedeFacturar,
   usaMesas,
   timeZone,
 }: PanelCajaProps) {
@@ -126,7 +129,7 @@ export function PanelCaja({
               Tickets y pedidos enviados a la caja desde el módulo de Salón.
             </p>
           </div>
-          <CuentasPorCobrar cuentas={cuentas} />
+          <CuentasPorCobrar cuentas={cuentas} puedeFacturar={puedeFacturar} />
         </div>
       )}
 

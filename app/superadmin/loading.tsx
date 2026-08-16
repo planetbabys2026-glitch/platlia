@@ -1,5 +1,5 @@
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { EsqueletoPantalla } from "@/components/ui/esqueleto-pantalla";
 
 export default function SuperadminLoading() {
-  return <PantallaCargando mensaje="Cargando Consola Superadmin..." />;
+  return <EsqueletoPantalla />;
 }

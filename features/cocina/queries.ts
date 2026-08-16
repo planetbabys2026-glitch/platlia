@@ -1,5 +1,28 @@
 import "server-only";
+import { OrderItemStatus, OrderStatus, OrderType } from "@/generated/prisma/enums";
 import { tenantDb } from "@/lib/db/tenant";
+
+/**
+ * Qué renglón está en manos de la cocina: ya se envió y todavía no se entregó.
+ *
+ * Vive suelto para que `getComandas` y `contarComandasVivas` no puedan
+ * divergir: si la pantalla y la insignia del menú no filtran igual, el número
+ * del menú miente sobre lo que se va a ver al entrar, que es peor que no tener
+ * número.
+ */
+const RENGLON_EN_COCINA = {
+  status: { in: [OrderItemStatus.PENDIENTE, OrderItemStatus.EN_PREPARACION, OrderItemStatus.LISTO] },
+  sentToKitchenAt: { not: null },
+};
+
+/**
+ * Un pedido de mesa deja de importarle a la cocina cuando se cierra; uno sin
+ * mesa, no: se paga por adelantado y hay que prepararlo igual.
+ */
+const PEDIDO_QUE_LE_IMPORTA_A_COCINA = [
+  { status: { in: [OrderStatus.ABIERTA, OrderStatus.CUENTA_PEDIDA] } },
+  { status: OrderStatus.PAGADA, type: { not: OrderType.MESA } },
+];
 
 // El valor por defecto vive en features/cocina/constantes.ts, sin "server-only",
 // porque la pantalla lo necesita en el navegador. Se reexporta por comodidad.
@@ -25,6 +48,13 @@ export type ComandaOrden = {
   orderId: string;
   code: number;
   mesa: string | null;
+  /**
+   * De quién es esta cuenta: "Andrés", "Cuenta 2". Una mesa puede tener varias
+   * cuentas abiertas a la vez, y cada una llega acá como su propia comanda. Sin
+   * el nombre, a la cocina le llegan tres tarjetas idénticas que dicen "Mesa 12"
+   * y no hay forma de saber a quién servirle qué.
+   */
+  cuenta: string | null;
   turno: number | null;
   type: string;
   notes: string | null;
@@ -46,14 +76,10 @@ export type EstacionGroup = {
 export async function getComandas(businessId: string, businessDate: Date): Promise<EstacionGroup[]> {
   const items = await tenantDb(businessId).orderItem.findMany({
     where: {
-      status: { in: ["PENDIENTE", "EN_PREPARACION", "LISTO"] },
-      sentToKitchenAt: { not: null },
+      ...RENGLON_EN_COCINA,
       order: {
         businessDate,
-        OR: [
-          { status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
-          { status: "PAGADA", type: { not: "MESA" } },
-        ],
+        OR: PEDIDO_QUE_LE_IMPORTA_A_COCINA,
       },
     },
     orderBy: { createdAt: "asc" },
@@ -77,6 +103,7 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
           type: true,
           turnNumber: true,
           notes: true,
+          customerName: true,
           table: { select: { name: true } },
         },
       },
@@ -103,6 +130,7 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
         orderId: item.order.id,
         code: item.order.code,
         mesa: item.order.table?.name ?? null,
+        cuenta: item.order.customerName,
         turno: item.order.turnNumber,
         type: item.order.type,
         notes: item.order.notes,
@@ -137,3 +165,24 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
 
 export type Estacion = Awaited<ReturnType<typeof getComandas>>[number];
 export type Comanda = Estacion["comandas"][number];
+
+/**
+ * Cuántas comandas tiene la cocina en la mano ahora mismo.
+ *
+ * Cuenta **pedidos, no renglones ni tarjetas**: `getComandas` parte cada pedido
+ * en una comanda por estación, así que un pedido con una hamburguesa y una
+ * limonada aparece dos veces en la pantalla. La insignia del menú tiene que
+ * decir cuántos pedidos faltan, no cuántas tarjetas hay.
+ */
+export async function contarComandasVivas(
+  businessId: string,
+  businessDate: Date,
+): Promise<number> {
+  return tenantDb(businessId).order.count({
+    where: {
+      businessDate,
+      OR: PEDIDO_QUE_LE_IMPORTA_A_COCINA,
+      items: { some: RENGLON_EN_COCINA },
+    },
+  });
+}

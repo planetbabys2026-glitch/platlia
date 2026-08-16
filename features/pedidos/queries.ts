@@ -16,6 +16,9 @@ export async function getPedido(businessId: string, orderId: string) {
       guestsCount: true,
       customerName: true,
       customerPhone: true,
+      customerEmail: true,
+      docType: true,
+      docNumber: true,
       deliveryAddress: true,
       notes: true,
       subtotalCop: true,
@@ -94,6 +97,9 @@ export async function getPedidoParaTiquete(businessId: string, orderId: string) 
       guestsCount: true,
       customerName: true,
       customerPhone: true,
+      customerEmail: true,
+      docType: true,
+      docNumber: true,
       deliveryAddress: true,
       subtotalCop: true,
       discountCop: true,
@@ -183,6 +189,10 @@ export async function getCarta(businessId: string) {
           stockQty: true,
           hasRecipe: true,
           recipeNeedsModifiers: true,
+          // La tarifa viaja con la carta para que el renglón que se anticipa al
+          // servidor calcule su impuesto con la misma tarifa que va a quedar
+          // congelada en el pedido, y no con una estimación del negocio.
+          taxRate: { select: { rateBp: true } },
           recipeItems: {
             select: {
               quantityRequired: true,
@@ -236,7 +246,7 @@ export async function getCarta(businessId: string) {
 
 /** Los pedidos que siguen vivos, para el panel y para lo que no es mesa. */
 export async function getPedidosAbiertos(businessId: string) {
-  return tenantDb(businessId).order.findMany({
+  const pedidos = await tenantDb(businessId).order.findMany({
     where: { status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
     orderBy: { openedAt: "asc" },
     select: {
@@ -248,7 +258,14 @@ export async function getPedidosAbiertos(businessId: string) {
       totalCop: true,
       openedAt: true,
       customerName: true,
+      tableId: true,
       table: { select: { name: true } },
+      // Los que quedaron en cero se pueden cerrar sin cobrar, y hay que poder
+      // distinguirlos en la lista: si no, se quedan abiertos toda la jornada y
+      // después trancan el cierre de caja.
+      _count: { select: { items: { where: { status: { not: "ANULADO" } } } } },
     },
   });
+
+  return pedidos.map(({ _count, ...pedido }) => ({ ...pedido, renglones: _count.items }));
 }

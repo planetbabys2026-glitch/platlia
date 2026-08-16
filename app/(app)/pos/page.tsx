@@ -3,10 +3,11 @@ import { AppModule } from "@/generated/prisma/enums";
 import { getCajaAbierta } from "@/features/caja/queries";
 import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
 import { getSettings } from "@/features/negocio/queries";
+import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { requireModule } from "@/lib/auth/dal";
 import { ModuloPosInteractive } from "./modulo-pos-interactive";
 
-export const metadata: Metadata = { title: "POS Mostrador" };
+export const metadata: Metadata = { title: "Pedido sin mesa" };
 export const dynamic = "force-dynamic";
 
 export default async function PosPage({
@@ -31,6 +32,7 @@ export default async function PosPage({
       caja={caja}
       pedidosAbiertos={pedidos}
       pedidoInicial={pedidoInicial}
+      puedeFacturar={puedeFacturarElectronicamente(settings)}
       settings={{
         deliveryEnabled: settings.deliveryEnabled,
         requireOpenCashSession: settings.requireOpenCashSession,

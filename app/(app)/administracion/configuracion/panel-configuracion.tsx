@@ -70,6 +70,12 @@ type PanelConfiguracionProps = {
     legalOrganizationCode?: string | null;
     tributeCode?: string | null;
     responsibilities?: string | null;
+    // Booleanos, no los valores: las credenciales de Factus no cruzan al cliente.
+    tieneClientId: boolean;
+    tieneClientSecret: boolean;
+    tieneUsername: boolean;
+    tienePassword: boolean;
+    faltantesParaFacturar: string[];
   };
   facturacion: {
     suscripcion: {
@@ -278,6 +284,11 @@ export function PanelConfiguracion({
                 legalOrganizationCode: settings.legalOrganizationCode,
                 tributeCode: settings.tributeCode,
                 responsibilities: settings.responsibilities,
+                tieneClientId: settings.tieneClientId,
+                tieneClientSecret: settings.tieneClientSecret,
+                tieneUsername: settings.tieneUsername,
+                tienePassword: settings.tienePassword,
+                faltantes: settings.faltantesParaFacturar,
               }}
             />
           </CardContent>

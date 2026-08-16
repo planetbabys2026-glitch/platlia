@@ -1,9 +1,19 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { OrderChannel, OrderItemStatus, OrderStatus, OrderType } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
+import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
+import { recalcularTotales } from "@/features/pedidos/totales";
+import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { crearPedidoClienteQRSchema, type CrearPedidoClienteQRInput } from "@/features/pedidos/qr-schemas";
-import { publishCocinaUpdate, publishDomiciliosUpdate, publishTurneroUpdate } from "@/lib/redis";
+import { describirAviso } from "@/lib/avisos";
+import {
+  publicarAviso,
+  publishCocinaUpdate,
+  publishDomiciliosUpdate,
+  publishTurneroUpdate,
+} from "@/lib/redis";
 // eslint-disable-next-line no-restricted-imports -- Acción pública del menú QR para resolver el negocio por su slug público
 import { rootDb } from "@/lib/db/root";
 import { tenantDb } from "@/lib/db/tenant";
@@ -43,6 +53,7 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
     }
 
     const businessDate = currentBusinessDate(settings);
+    const puedeFacturar = puedeFacturarElectronicamente(settings);
     const db = tenantDb(business.id);
 
     const resultado = await db.$transaction(async (tx) => {
@@ -59,12 +70,20 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
 
       // 4. Si es pedido por mesa, verificar mesa si viene id
       let tableId: string | null = null;
+      // El nombre va al aviso que salta en las demás pantallas: "Mesa 12 · Sofía"
+      // se entiende de un vistazo, un id no.
+      let mesaNombre: string | null = null;
       if (input.type === "MESA" && input.tableId) {
         const mesa = await tx.table.findFirst({
-          where: { id: input.tableId },
-          select: { id: true },
+          where: { id: input.tableId, deletedAt: null },
+          select: { id: true, name: true, status: true },
         });
-        if (mesa) tableId = mesa.id;
+        // Una mesa archivada o fuera de servicio no recibe pedidos: su QR puede
+        // seguir pegado a una mesa que el negocio ya sacó del salón.
+        if (mesa && mesa.status !== "INACTIVA") {
+          tableId = mesa.id;
+          mesaNombre = mesa.name;
+        }
       }
 
       // Buscar usuario bot/sistema o primer miembro para openedById
@@ -92,12 +111,18 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           openedById: primerMiembro.userId,
           turnNumber,
           tableId,
-          customerName: input.customerName || (input.tableName ? `Mesa: ${input.tableName}` : "Cliente QR"),
+          // El nombre es la etiqueta de la cuenta: en la mesa el schema lo exige,
+          // y en domicilio se cae a un genérico porque ahí lo que identifica al
+          // pedido es el teléfono y la dirección.
+          customerName: input.customerName?.trim() || "Cliente QR",
           customerPhone: input.customerPhone ?? null,
-          deliveryAddress: input.customerAddress ?? null,
-          docType: input.docType ?? null,
-          docNumber: input.docNumber ?? null,
+          // Los datos fiscales solo se guardan si el negocio de verdad puede
+          // emitir factura electrónica; si no, quedarían ahí sin que nadie los
+          // vaya a usar nunca.
+          docType: puedeFacturar ? (input.docType ?? null) : null,
+          docNumber: puedeFacturar ? (input.docNumber ?? null) : null,
           deliveryStatus: "PENDIENTE",
+          deliveryAddress: input.customerAddress ?? null,
           notes: input.customerAddress ? `Domicilio: ${input.customerAddress}` : null,
           subtotalCop: 0,
           taxCop: 0,
@@ -106,10 +131,6 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
       });
 
       // 6. Insertar renglones de producto
-      let totalSubtotal = 0;
-      let totalTax = 0;
-      let totalTotal = 0;
-
       for (const itemInput of input.items) {
         const producto = await tx.product.findFirst({
           where: { id: itemInput.productId, deletedAt: null, active: true, isAvailable: true },
@@ -138,10 +159,6 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           taxRateBp: producto.taxRate.rateBp,
           taxIncluded: settings.pricesIncludeTax,
         });
-
-        totalSubtotal += linea.lineSubtotalCop;
-        totalTax += linea.lineTaxCop;
-        totalTotal += linea.lineTotalCop;
 
         await tx.orderItem.create({
           data: {
@@ -176,30 +193,27 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
         });
       }
 
-      // 7. Actualizar totales del pedido
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          subtotalCop: totalSubtotal,
-          taxCop: totalTax,
-          totalCop: totalTotal,
-        },
-      });
+      // 7. Totales, con la misma función que usan la mesa y el POS. Antes se
+      // sumaban a mano acá, que era la única de las cuatro rutas de creación de
+      // renglones que no pasaba por `recalcularTotales`: cualquier cambio en cómo
+      // se calcula un total se olvidaba justo del pedido que hace el cliente.
+      const totales = await recalcularTotales(tx, order.id);
 
-      // Si se asignó mesa, marcar mesa como OCUPADA
-      if (tableId) {
-        await tx.table.update({
-          where: { id: tableId },
-          data: { status: "OCUPADA" },
-        });
-      }
+      // La mesa refleja sus cuentas: este escaneo abrió una más, y puede haber
+      // otras del mesero o de los demás comensales.
+      await sincronizarEstadoMesa(tx, tableId);
 
       return {
         orderId: order.id,
         code: order.code,
         turnNumber,
         type: order.type,
-        totalCop: totalTotal,
+        totalCop: totales.totalCop,
+        tableId,
+        mesaNombre,
+        cuenta: order.customerName,
+        direccion: order.deliveryAddress,
+        productos: input.items.length,
       };
     });
 
@@ -207,6 +221,45 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
     void publishCocinaUpdate(business.id);
     void publishTurneroUpdate(business.id);
     void publishDomiciliosUpdate(business.id);
+
+    // Los renglones del QR nacen con `sentToKitchenAt` puesto: el cliente manda
+    // el pedido derecho a la cocina, sin mesero de por medio. Así que un pedido
+    // por QR siempre es una comanda nueva, y si además es a domicilio es también
+    // un domicilio nuevo: son dos pantallas distintas y las dos tienen que
+    // enterarse.
+    void publicarAviso(
+      business.id,
+      describirAviso({
+        tipo: "COCINA_NUEVA_COMANDA",
+        orderId: resultado.orderId,
+        code: resultado.code,
+        mesa: resultado.mesaNombre,
+        cuenta: resultado.cuenta,
+        turno: resultado.turnNumber,
+        productos: resultado.productos,
+      }),
+    );
+
+    if (resultado.type === "DOMICILIO") {
+      void publicarAviso(
+        business.id,
+        describirAviso({
+          tipo: "DOMICILIO_NUEVO",
+          orderId: resultado.orderId,
+          code: resultado.code,
+          cliente: resultado.cuenta,
+          direccion: resultado.direccion,
+          productos: resultado.productos,
+        }),
+      );
+    }
+
+    // El salón y la cocina se renderizan en el servidor: sin invalidarlas, la
+    // cuenta que acaba de abrir el comensal no aparece hasta que alguien recarga.
+    revalidatePath("/salon");
+    revalidatePath("/cocina");
+    revalidatePath("/caja");
+    revalidatePath("/domicilios");
 
     return { ok: true, data: resultado };
   } catch (err: unknown) {

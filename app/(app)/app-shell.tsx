@@ -27,6 +27,9 @@ import {
 import { Isotipo, Logotipo } from "@/components/marca/logo";
 import { Button } from "@/components/ui/button";
 import { salir } from "@/features/auth/actions";
+import { Campana } from "@/features/avisos/campana";
+import { Insignia } from "@/features/avisos/insignia";
+import { ProveedorAvisos, useAvisos } from "@/features/avisos/proveedor";
 import { cn } from "@/lib/utils";
 
 type AppShellProps = {
@@ -34,8 +37,12 @@ type AppShellProps = {
   businessName?: string;
   role?: string | null;
   usaMesas: boolean;
+  usaCocina?: boolean;
   usaDomicilios?: boolean;
   puedeVerInventario: boolean;
+  /** Contadores calculados en el servidor, para que la primera pintura ya traiga el número. */
+  cocinaInicial?: number;
+  domiciliosInicial?: number;
   children: React.ReactNode;
 };
 
@@ -44,16 +51,36 @@ type NavItem = {
   href: string;
   icono: React.ElementType;
   categoria: "OPERACION" | "GESTION";
+  /** Cuántos pendientes tiene ese destino ahora mismo. */
+  insignia?: number;
 };
 
-export function AppShell({
+/**
+ * El shell entero cuelga del proveedor de avisos: es lo que hace que la conexión
+ * en vivo sobreviva a las navegaciones del cliente, porque el layout de `(app)`
+ * no se vuelve a montar al cambiar de pantalla.
+ */
+export function AppShell(props: AppShellProps) {
+  return (
+    <ProveedorAvisos
+      cocinaInicial={props.cocinaInicial}
+      domiciliosInicial={props.domiciliosInicial}
+    >
+      <Shell {...props} />
+    </ProveedorAvisos>
+  );
+}
+
+function Shell({
   user,
   businessName,
   usaMesas,
+  usaCocina = true,
   usaDomicilios = true,
   puedeVerInventario,
   children,
 }: AppShellProps) {
+  const { cocina: comandasVivas, domicilios: domiciliosActivos } = useAvisos();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -110,12 +137,19 @@ export function AppShell({
             categoria: "OPERACION" as const,
           },
         ]),
-    {
-      titulo: "Cocina",
-      href: "/cocina",
-      icono: ChefHat,
-      categoria: "OPERACION" as const,
-    },
+    // El módulo se puede apagar por empresa y la página responde 404: hasta
+    // ahora el ítem se pintaba igual y llevaba a una pantalla que no existe.
+    ...(usaCocina
+      ? [
+          {
+            titulo: "Cocina",
+            href: "/cocina",
+            icono: ChefHat,
+            categoria: "OPERACION" as const,
+            insignia: comandasVivas,
+          },
+        ]
+      : []),
     {
       titulo: "Caja",
       href: "/caja",
@@ -129,6 +163,7 @@ export function AppShell({
             href: "/domicilios",
             icono: Bike,
             categoria: "OPERACION" as const,
+            insignia: domiciliosActivos,
           },
         ]
       : []),
@@ -179,6 +214,10 @@ export function AppShell({
           1. BARRA LATERAL DESKTOP (md: flex) - Colapsable con Acordeón
           ───────────────────────────────────────────────────────────── */}
       <aside
+        // Con nombre porque no es el único `<aside>` de la aplicación: la
+        // pantalla de una cuenta tiene el suyo, y dos landmarks sin nombre son
+        // indistinguibles tanto para un lector de pantalla como para una prueba.
+        aria-label="Menú principal"
         className={cn(
           "hidden md:flex flex-col sticky top-0 h-screen border-r border-[var(--linea-16)] bg-[var(--tinta)] transition-all duration-300 z-30 shrink-0",
           collapsed ? "w-20" : "w-64",
@@ -241,6 +280,15 @@ export function AppShell({
                     )}
                   />
                   {!collapsed && <span className="truncate">{item.titulo}</span>}
+                  {item.insignia !== undefined && (
+                    <Insignia
+                      valor={item.insignia}
+                      comoPunto={collapsed}
+                      // Con la barra expandida, la marca de "activo" ocupa el
+                      // borde derecho: la pastilla se corre para no quedar debajo.
+                      className={!collapsed && activo ? "mr-1.5" : undefined}
+                    />
+                  )}
                   {activo && (
                     <span className="absolute right-0 top-1.5 bottom-1.5 w-1 bg-[var(--brasa)] rounded-l-full" />
                   )}
@@ -381,6 +429,7 @@ export function AppShell({
             )}
 
             <div className="flex items-center gap-1">
+              <Campana />
               {collapsed && (
                 <Button
                   asChild
@@ -433,6 +482,7 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-1.5">
+            <Campana />
             <Button
               asChild
               variant="outline"
@@ -508,6 +558,7 @@ export function AppShell({
                           )}
                         />
                         <span>{item.titulo}</span>
+                        {item.insignia !== undefined && <Insignia valor={item.insignia} />}
                       </Link>
                     );
                   })}
@@ -636,16 +687,21 @@ export function AppShell({
             </Link>
           )}
 
-          <Link
-            href="/cocina"
-            className={cn(
-              "flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors w-16 py-1",
-              esRutaActiva("/cocina") ? "text-brand font-bold" : "text-muted-foreground",
-            )}
-          >
-            <ChefHat className="h-5 w-5" />
-            <span>Cocina</span>
-          </Link>
+          {usaCocina && (
+            <Link
+              href="/cocina"
+              className={cn(
+                "relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors w-16 py-1",
+                esRutaActiva("/cocina") ? "text-brand font-bold" : "text-muted-foreground",
+              )}
+            >
+              <ChefHat className="h-5 w-5" />
+              <span>Cocina</span>
+              {/* Como punto: un número acá desalinearía los cuatro iconos de la
+                  barra, que es lo único que se toca con el pulgar en un celular. */}
+              <Insignia valor={comandasVivas} comoPunto className="right-3 top-0.5" />
+            </Link>
+          )}
 
           <Link
             href="/caja"

@@ -12,7 +12,10 @@ import {
   qrMenuSchema,
   turneroSchema,
 } from "@/features/negocio/schemas";
+import { getSettings } from "@/features/negocio/queries";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { obtenerTokenFactus } from "@/lib/billing/factus";
+import { faltantesParaFacturar } from "@/lib/billing/factus-habilitacion";
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
 import { tenantDb } from "@/lib/db/tenant";
@@ -347,9 +350,19 @@ export const guardarConfiguracionFactus = defineAction({
   async handler({ input, ctx }) {
     const db = tenantDb(ctx.business.id);
 
+    // Campo secreto vacío = "no lo cambies". El formulario nunca devuelve la
+    // contraseña guardada —no baja al navegador—, así que escribir el `null` que
+    // llega la borraría cada vez que alguien toca cualquier otro campo.
+    const soloSiVino = (valor: string | undefined) =>
+      valor && valor.trim() !== "" ? { set: valor.trim() } : undefined;
+
     await db.businessSettings.updateMany({
       where: { businessId: ctx.business.id },
       data: {
+        factusClientId: soloSiVino(input.factusClientId),
+        factusClientSecret: soloSiVino(input.factusClientSecret),
+        factusUsername: soloSiVino(input.factusUsername),
+        factusPassword: soloSiVino(input.factusPassword),
         factusNumberingRangeId: input.factusNumberingRangeId ?? null,
         municipalityCode: input.municipalityCode ?? "05001",
         identificationDocumentCode: input.identificationDocumentCode ?? "31",
@@ -360,5 +373,45 @@ export const guardarConfiguracionFactus = defineAction({
     });
 
     revalidatePath("/administracion/configuracion");
+    revalidatePath("/caja");
+    revalidatePath("/pos");
+  },
+});
+
+/**
+ * Pide un token a Factus con lo que hay guardado.
+ *
+ * Es lo que convierte "configurado" en algo comprobable. Sin esto, la única forma
+ * de descubrir que una credencial estaba mal escrita era intentar facturarle a un
+ * cliente de verdad, con la persona esperando frente a la caja.
+ */
+export const probarConexionFactus = defineAction({
+  schema: z.object({}),
+  roles: [Role.PROPIETARIO, Role.ADMINISTRADOR],
+  async handler({ ctx }) {
+    const settings = await getSettings(ctx.business.id);
+
+    const faltantes = faltantesParaFacturar(settings);
+    if (faltantes.length > 0) {
+      throw new ErrorDeUsuario(`No se puede probar todavía: ${faltantes.join(" ")}`);
+    }
+
+    try {
+      await obtenerTokenFactus({
+        clientId: settings.factusClientId!,
+        clientSecret: settings.factusClientSecret!,
+        username: settings.factusUsername!,
+        password: settings.factusPassword!,
+      });
+    } catch (error) {
+      // El detalle sí se le muestra al dueño: son sus propias credenciales contra
+      // su propia cuenta de Factus, y sin el motivo ("client_id inválido") no
+      // tiene forma de saber cuál de los cuatro campos escribió mal. Se recorta
+      // para no volcar una respuesta HTTP entera en un Alert.
+      const detalle = error instanceof Error ? error.message.slice(0, 300) : "sin detalle";
+      throw new ErrorDeUsuario(`Factus rechazó la conexión. ${detalle}`);
+    }
+
+    return { mensaje: "Conexión con Factus correcta." };
   },
 });

@@ -48,8 +48,8 @@ test("un turno completo: abrir caja, cobrar una mesa y cuadrar el cierre", async
   await expect(page.getByRole("heading", { name: "Mesa 1" })).toBeVisible();
 
   // ── Cantar una cerveza de $5.000 ─────────────────────────────────────────
-  await page.getByRole("button", { name: /cerveza nacional · botella/i }).click();
-  const cuenta = page.getByRole("complementary");
+  await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
+  const cuenta = page.getByRole("complementary", { name: "La cuenta" });
   await expect(cuenta).toContainText("Cerveza nacional (Botella)");
 
   // Impuesto al consumo del 8% incluido en el precio: $5.000 se desagrega en
@@ -77,7 +77,7 @@ test("un turno completo: abrir caja, cobrar una mesa y cuadrar el cierre", async
   // El pedido queda pagado y el vuelto sigue a la vista: al cerrarse el pedido
   // desaparece la tarjeta de cobro, así que el vuelto se lee del pago guardado.
   await expect(page.getByText("Pagada").first()).toBeVisible();
-  const pagos = page.getByRole("complementary").getByText(/vuelto/i).locator("..");
+  const pagos = page.getByRole("complementary", { name: "La cuenta" }).getByText(/vuelto/i).locator("..");
   await expect(pagos).toContainText("$20.000");
   await expect(pagos).toContainText("$5.000");
 
@@ -123,8 +123,8 @@ test("no se puede cerrar la caja con un pedido sin cobrar", async ({ page }) => 
 
   await page.goto("/salon");
   await page.getByRole("button", { name: /abrir pedido en la mesa 2$/i }).click();
-  await page.getByRole("button", { name: /cerveza nacional · botella/i }).click();
-  await expect(page.getByRole("complementary")).toContainText("Cerveza nacional");
+  await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
+  await expect(page.getByRole("complementary", { name: "La cuenta" })).toContainText("Cerveza nacional");
 
   await page.goto("/caja");
   await page.getByLabel(/cuánto contaste/i).fill("5000");

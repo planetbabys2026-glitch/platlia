@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getDomicilios } from "@/features/domicilios/queries";
+import { DOMICILIOS_EN_CURSO, getDomicilios } from "@/features/domicilios/queries";
 import { getSettings, getTimeSettings } from "@/features/negocio/queries";
 import { requireBusiness } from "@/lib/auth/dal";
 import { PanelDomicilios } from "./panel-domicilios";
@@ -21,7 +21,14 @@ export default async function DomiciliosPage() {
     getTimeSettings(ctx.business.id),
   ]);
 
-  const activosCount = domicilios.filter((d) => d.status !== "ENTREGADO" && d.status !== "CANCELADO").length;
+  // Antes esto filtraba por `d.status`, que es el estado del pedido
+  // (ABIERTA/PAGADA/ANULADA) y nunca vale "ENTREGADO" ni "CANCELADO": el chip
+  // mostraba siempre el total del día, entregados incluidos. El estado del
+  // reparto es `deliveryStatus`, y es el mismo criterio que usa la insignia del
+  // menú.
+  const activosCount = domicilios.filter((d) =>
+    DOMICILIOS_EN_CURSO.includes(d.deliveryStatus),
+  ).length;
 
   return (
     <div className="space-y-6 max-w-7xl">

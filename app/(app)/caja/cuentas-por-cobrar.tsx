@@ -3,6 +3,10 @@
 import { useActionState, useState } from "react";
 import { PaymentMethod } from "@/generated/prisma/enums";
 import { registrarPago } from "@/features/pedidos/actions";
+import {
+  DatosFiscales,
+  valorFiscalInicial,
+} from "@/features/pedidos/components/datos-fiscales";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,8 +42,12 @@ type Cuenta = {
   taxCop: number;
   tipCop: number;
   customerName: string | null;
+  docType: string | null;
+  docNumber: string | null;
+  customerEmail: string | null;
   billRequestedAt: Date | null;
   openedAt: Date;
+  tableId: string | null;
   table: { id: string; name: string } | null;
   openedBy: { name: string };
   items: {
@@ -50,8 +58,15 @@ type Cuenta = {
   }[];
 };
 
-function FormularioCobro({ cuenta }: { cuenta: Cuenta }) {
+function FormularioCobro({
+  cuenta,
+  puedeFacturar,
+}: {
+  cuenta: Cuenta;
+  puedeFacturar: boolean;
+}) {
   const [metodo, setMetodo] = useState<string>(PaymentMethod.EFECTIVO);
+  const [fiscal, setFiscal] = useState(() => valorFiscalInicial(cuenta));
   const [estado, accion, isPending] = useActionState(registrarPago, ESTADO_INICIAL);
   const faltanteCop = Math.max(0, cuenta.totalCop - cuenta.paidCop);
 
@@ -130,13 +145,20 @@ function FormularioCobro({ cuenta }: { cuenta: Cuenta }) {
         )}
       </div>
 
+      <DatosFiscales
+        puedeFacturar={puedeFacturar}
+        orderId={cuenta.id}
+        valor={fiscal}
+        onChange={setFiscal}
+      />
+
       <Button
         type="submit"
         size="lg"
         disabled={isPending}
         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 text-sm shadow-md gap-2"
       >
-        {isPending ? "Procesando cobro…" : `💳 Confirmar pago de ${formatCop(faltanteCop)} y liberar mesa`}
+        {isPending ? "Procesando cobro…" : `💳 Confirmar pago de ${formatCop(faltanteCop)}`}
       </Button>
 
       {!estado.ok && estado.error && (
@@ -148,7 +170,47 @@ function FormularioCobro({ cuenta }: { cuenta: Cuenta }) {
   );
 }
 
-export function CuentasPorCobrar({ cuentas }: { cuentas: Cuenta[] }) {
+/**
+ * Agrupa las cuentas por mesa, conservando el orden de prioridad que trae la
+ * consulta (primero las que pidieron la cuenta).
+ *
+ * Sin esto, las tres cuentas separadas de la mesa 12 se ven como tres pedidos
+ * sueltos entre los de otras mesas, y el cajero termina cobrándole a una persona
+ * la cuenta de otra. Lo que no es de mesa —para llevar, domicilio— queda suelto,
+ * porque ahí cada pedido es de una persona distinta.
+ */
+function agruparPorMesa(cuentas: Cuenta[]) {
+  const grupos: { clave: string; mesa: string | null; cuentas: Cuenta[] }[] = [];
+  const porMesa = new Map<string, number>();
+
+  for (const cuenta of cuentas) {
+    if (!cuenta.tableId) {
+      grupos.push({ clave: cuenta.id, mesa: null, cuentas: [cuenta] });
+      continue;
+    }
+    const indice = porMesa.get(cuenta.tableId);
+    if (indice === undefined) {
+      porMesa.set(cuenta.tableId, grupos.length);
+      grupos.push({
+        clave: cuenta.tableId,
+        mesa: cuenta.table?.name ?? null,
+        cuentas: [cuenta],
+      });
+    } else {
+      grupos[indice].cuentas.push(cuenta);
+    }
+  }
+
+  return grupos;
+}
+
+export function CuentasPorCobrar({
+  cuentas,
+  puedeFacturar,
+}: {
+  cuentas: Cuenta[];
+  puedeFacturar: boolean;
+}) {
   const [cuentaExpandida, setCuentaExpandida] = useState<string | null>(null);
 
   if (cuentas.length === 0) {
@@ -174,99 +236,123 @@ export function CuentasPorCobrar({ cuentas }: { cuentas: Cuenta[] }) {
         </h2>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-        {cuentas.map((cuenta) => {
-          const titulo = cuenta.table
-            ? `Mesa ${cuenta.table.name}${cuenta.turnNumber !== null ? ` · ${formatTurno(cuenta.turnNumber, 99, true)}` : ""}`
-            : cuenta.turnNumber !== null
-              ? `Turno ${formatTurno(cuenta.turnNumber, 99, false)}`
-              : `Pedido #${cuenta.code}`;
+      {agruparPorMesa(cuentas).map((grupo) => (
+        <div key={grupo.clave} className="space-y-3">
+          {/* Encabezado solo cuando la mesa trae varias cuentas: si es una sola,
+              el título de la tarjeta ya dice de qué mesa es. */}
+          {grupo.cuentas.length > 1 && (
+            <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-dashed border-border/80 bg-card/60 px-3 py-2">
+              <span className="text-sm font-bold">
+                Mesa {grupo.mesa}
+                <span className="text-muted-foreground ml-2 text-xs font-normal">
+                  {grupo.cuentas.length} cuentas separadas
+                </span>
+              </span>
+              <span className="numeral text-sm font-semibold">
+                {formatCop(grupo.cuentas.reduce((suma, c) => suma + c.totalCop, 0))}
+              </span>
+            </div>
+          )}
 
-          const expandida = cuentaExpandida === cuenta.id || cuentas.length === 1;
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+            {grupo.cuentas.map((cuenta) => {
+              const destino = cuenta.table
+                ? `Mesa ${cuenta.table.name}`
+                : cuenta.turnNumber !== null
+                  ? `Turno ${formatTurno(cuenta.turnNumber, 99, false)}`
+                  : `Pedido #${cuenta.code}`;
+              // Con varias cuentas en la misma mesa, el nombre es lo único que
+              // distingue a quién se le está cobrando.
+              const nombre = cuenta.customerName?.trim();
+              const titulo = nombre && cuenta.table ? `${destino} · ${nombre}` : destino;
 
-          return (
-            <Card
-              key={cuenta.id}
-              className={cn(
-                "transition-all duration-200 border-border/80",
-                cuenta.status === "CUENTA_PEDIDA" && "border-amber-500/50 bg-amber-500/5 ring-1 ring-amber-500/20",
-              )}
-            >
-              <CardContent className="p-4 space-y-3">
-                {/* Header de la tarjeta de cuenta */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-base">{titulo}</h3>
-                      <Badge
-                        variant={cuenta.status === "CUENTA_PEDIDA" ? "default" : "outline"}
-                        className={cn(
-                          cuenta.status === "CUENTA_PEDIDA"
-                            ? "bg-amber-500 text-[#171512] font-bold"
-                            : "border-[var(--linea-30)] text-[var(--muted)]",
-                        )}
-                      >
-                        {cuenta.status === "CUENTA_PEDIDA" ? "CUENTA PEDIDA 🧾" : "Abierta"}
-                      </Badge>
+              const expandida = cuentaExpandida === cuenta.id || cuentas.length === 1;
+
+              return (
+                <Card
+                  key={cuenta.id}
+                  className={cn(
+                    "transition-all duration-200 border-border/80",
+                    cuenta.status === "CUENTA_PEDIDA" && "border-amber-500/50 bg-amber-500/5 ring-1 ring-amber-500/20",
+                  )}
+                >
+                  <CardContent className="p-4 space-y-3">
+                    {/* Header de la tarjeta de cuenta */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-base">{titulo}</h3>
+                          <Badge
+                            variant={cuenta.status === "CUENTA_PEDIDA" ? "default" : "outline"}
+                            className={cn(
+                              cuenta.status === "CUENTA_PEDIDA"
+                                ? "bg-amber-500 text-[#171512] font-bold"
+                                : "border-[var(--linea-30)] text-[var(--muted)]",
+                            )}
+                          >
+                            {cuenta.status === "CUENTA_PEDIDA" ? "CUENTA PEDIDA 🧾" : "Abierta"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[var(--muted)]">
+                          Pedido #{cuenta.code} · Abrió {cuenta.openedBy.name}
+                          {cuenta.customerName && ` · ${cuenta.customerName}`}
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="numeral text-xl font-extrabold text-[var(--papel)] block font-display">
+                          {formatCop(cuenta.totalCop)}
+                        </span>
+                        <span className="text-[11px] text-[var(--muted)] font-mono">
+                          {cuenta.items.length} {cuenta.items.length === 1 ? "producto" : "productos"}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-xs text-[var(--muted)]">
-                      Pedido #{cuenta.code} · Abrió {cuenta.openedBy.name}
-                      {cuenta.customerName && ` · ${cuenta.customerName}`}
-                    </p>
-                  </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="numeral text-xl font-extrabold text-[var(--papel)] block font-display">
-                      {formatCop(cuenta.totalCop)}
-                    </span>
-                    <span className="text-[11px] text-[var(--muted)] font-mono">
-                      {cuenta.items.length} {cuenta.items.length === 1 ? "producto" : "productos"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Resumen de items del ticket */}
-                <div className="rounded-lg bg-[var(--panel-2)] border border-[var(--linea-16)] p-2.5 space-y-1 text-xs">
-                  {cuenta.items.map((item) => (
-                    <div key={item.id} className="flex justify-between gap-2">
-                      <span className="truncate">
-                        <strong className="text-[var(--brasa)] font-semibold">{item.quantity}x</strong>{" "}
-                        {item.nameSnapshot}
-                      </span>
-                      <span className="numeral text-[var(--muted)] font-medium shrink-0 font-mono">
-                        {formatCop(item.lineTotalCop)}
-                      </span>
+                    {/* Resumen de items del ticket */}
+                    <div className="rounded-lg bg-[var(--panel-2)] border border-[var(--linea-16)] p-2.5 space-y-1 text-xs">
+                      {cuenta.items.map((item) => (
+                        <div key={item.id} className="flex justify-between gap-2">
+                          <span className="truncate">
+                            <strong className="text-[var(--brasa)] font-semibold">{item.quantity}x</strong>{" "}
+                            {item.nameSnapshot}
+                          </span>
+                          <span className="numeral text-[var(--muted)] font-medium shrink-0 font-mono">
+                            {formatCop(item.lineTotalCop)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                {/* Botón para desplegar / cobrar */}
-                {!expandida ? (
-                  <div className="flex items-center gap-2 pt-1">
-                    <a
-                      href={`/imprimir/pedido/${cuenta.id}`}
-                      target="_blank"
-                      rel="noopener"
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
-                    >
-                      🖨️ Pre-cuenta
-                    </a>
-                    <Button
-                      type="button"
-                      onClick={() => setCuentaExpandida(cuenta.id)}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs shadow-sm"
-                    >
-                      Cobrar en caja →
-                    </Button>
-                  </div>
-                ) : (
-                  <FormularioCobro cuenta={cuenta} />
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                    {/* Botón para desplegar / cobrar */}
+                    {!expandida ? (
+                      <div className="flex items-center gap-2 pt-1">
+                        <a
+                          href={`/imprimir/pedido/${cuenta.id}`}
+                          target="_blank"
+                          rel="noopener"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                        >
+                          🖨️ Pre-cuenta
+                        </a>
+                        <Button
+                          type="button"
+                          onClick={() => setCuentaExpandida(cuenta.id)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs shadow-sm"
+                        >
+                          Cobrar en caja →
+                        </Button>
+                      </div>
+                    ) : (
+                      <FormularioCobro cuenta={cuenta} puedeFacturar={puedeFacturar} />
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }

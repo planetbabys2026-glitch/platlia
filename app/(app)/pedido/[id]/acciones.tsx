@@ -16,7 +16,6 @@ import {
 } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
@@ -51,12 +50,13 @@ function Enviar({
   const { pending } = useFormStatus();
   const cargando = pending || isPending;
   return (
-    <>
-      <PantallaCargando forcePending={cargando} />
-      <Button type="submit" variant={variant} size={size} className={className} disabled={cargando}>
-        {cargando ? "…" : children}
-      </Button>
-    </>
+    // Sin velo a pantalla completa. Estas son acciones que ocurren adentro de la
+    // pantalla que uno está mirando —subir una cantidad, poner una nota— y taparla
+    // entera mientras tanto dejaba la aplicación muda y sorda: los toques caían
+    // sobre el overlay, así que la gente tocaba otra vez. El botón alcanza.
+    <Button type="submit" variant={variant} size={size} className={className} disabled={cargando}>
+      {cargando ? "…" : children}
+    </Button>
   );
 }
 
@@ -214,7 +214,6 @@ export function PedirCuenta({ orderId, esMesa }: { orderId: string; esMesa?: boo
   return (
     <form action={accion}>
       <input type="hidden" name="orderId" value={orderId} />
-      <PantallaCargando forcePending={isPending} />
       <Button
         type="submit"
         variant="outline"
@@ -311,23 +310,18 @@ export function Cobrar({
 
 export function ConfirmarPedido({
   orderId,
-  hasItems,
   turnNumber,
   isMesa,
 }: {
   orderId: string;
-  hasItems: boolean;
   turnNumber: number | null;
   isMesa: boolean;
 }) {
   const [estado, accion, isPending] = useActionState(confirmarPedido, ESTADO_INICIAL);
 
-  if (!hasItems) return null;
-
   return (
     <form action={accion} className="space-y-2">
       <input type="hidden" name="orderId" value={orderId} />
-      <PantallaCargando forcePending={isPending} />
       <Button
         type="submit"
         size="lg"

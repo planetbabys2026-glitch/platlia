@@ -16,6 +16,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "html",
 
+  // Los 30 s por defecto no alcanzan y el fallo que producen no se parece a la
+  // causa: estas pruebas recorren turnos enteros contra un build de producción y
+  // una base real, y los ganchos —que dejan la caja cerrada resolviendo lo que
+  // haya quedado abierto— gastan buena parte del presupuesto antes de que la
+  // prueba empiece. `test.setTimeout()` adentro del test no cubre al `beforeEach`,
+  // así que tiene que estar acá.
+  timeout: 120_000,
+
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
@@ -32,8 +40,13 @@ export default defineConfig({
 
   // Los e2e corren contra un build de producción: `next dev` tiene tiempos y
   // comportamientos distintos que producen falsos positivos.
+  //
+  // `start:standalone` y NO `start`: `next.config.ts` usa `output: "standalone"`,
+  // y el propio Next avisa por consola que con esa salida `next start` no es el
+  // arranque correcto. Es además el mismo comando que usa el despliegue, así que
+  // los e2e prueban contra el servidor que de verdad va a correr.
   webServer: {
-    command: "pnpm build && pnpm start",
+    command: "pnpm build && pnpm start:standalone",
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,

@@ -28,10 +28,10 @@ test("una venta cobrada aparece en el informe con el impuesto desagregado", asyn
   await page.goto("/salon");
   await page.getByRole("button", { name: /abrir pedido en la mesa 6$/i }).click();
   await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
-  await page.getByRole("button", { name: /cerveza nacional · botella/i }).click();
+  await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
   await page.getByRole("button", { name: "+" }).first().click();
   await page.getByRole("button", { name: "+" }).first().click();
-  await expect(page.getByRole("complementary").getByText("Total").locator("..")).toContainText(
+  await expect(page.getByRole("complementary", { name: "La cuenta" }).getByText("Total").locator("..")).toContainText(
     "$15.000",
   );
   await page.getByRole("button", { name: /registrar pago/i }).click();

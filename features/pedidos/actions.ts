@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AppModule, OrderChannel, Role } from "@/generated/prisma/enums";
+import { AppModule, OrderChannel, OrderType, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
+import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
 import { recalcularTotales } from "@/features/pedidos/totales";
 import { modificadoresDeRenglon, resolverModificadores } from "@/features/pedidos/modificadores";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
@@ -12,16 +13,26 @@ import {
   anularItemSchema,
   anularPedidoSchema,
   cambiarCantidadSchema,
+  liberarMesaSchema,
   pagoSchema,
   pedidoSchema,
   ponerNotaItemSchema,
   procesarVentaPosCompletaSchema,
   propinaSchema,
   quitarItemSchema,
+  renombrarCuentaSchema,
 } from "@/features/pedidos/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { publishCocinaUpdate, publishTurneroUpdate } from "@/lib/redis";
+import { describirAviso } from "@/lib/avisos";
+import {
+  publicarAviso,
+  publishCocinaUpdate,
+  publishDomiciliosUpdate,
+  publishTurneroUpdate,
+} from "@/lib/redis";
 import { tieneRol } from "@/lib/auth/reglas";
+import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
+import { etiquetaDeCuenta } from "@/lib/salon/mesa";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import {
@@ -82,6 +93,10 @@ export const abrirPedido = defineAction({
 
     return conReintento(() =>
       db.$transaction(async (tx) => {
+        // La etiqueta que va a llevar la cuenta. Con nombre es el nombre; sin
+        // nombre, el ordinal dentro de la mesa.
+        let customerName = input.customerName?.trim() || null;
+
         if (input.tableId) {
           const mesa = await tx.table.findFirst({
             where: { id: input.tableId, deletedAt: null },
@@ -92,14 +107,19 @@ export const abrirPedido = defineAction({
             throw new ErrorDeUsuario(`La mesa ${mesa.name} está fuera de servicio.`);
           }
 
-          const ocupada = await tx.order.findFirst({
-            where: { tableId: mesa.id, status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
-            select: { id: true },
-          });
-          if (ocupada) {
-            throw new ErrorDeUsuario(
-              `La mesa ${mesa.name} ya tiene un pedido abierto. Abrilo en vez de crear otro.`,
-            );
+          // Acá antes se rechazaba abrir una segunda cuenta en una mesa ocupada.
+          // Ya no: un grupo que llega junto y pide por separado abre una cuenta
+          // por persona, cada una con su comanda y su tiquete. Quien mantiene el
+          // estado de la mesa es `sincronizarEstadoMesa`, no este bloque.
+          //
+          // El ordinal cuenta TODAS las cuentas de la jornada, incluidas las ya
+          // cerradas: si se recicla, dos tiquetes del mismo día dicen "Cuenta 2"
+          // y no son la misma.
+          if (!customerName) {
+            const abiertasHoy = await tx.order.count({
+              where: { tableId: mesa.id, businessDate },
+            });
+            customerName = etiquetaDeCuenta(null, abiertasHoy + 1);
           }
         }
 
@@ -125,28 +145,31 @@ export const abrirPedido = defineAction({
             tableId: input.tableId ?? null,
             cashSessionId: caja?.id ?? null,
             guestsCount: input.guestsCount ?? null,
-            customerName: input.customerName ?? null,
+            customerName,
             customerPhone: input.customerPhone ?? null,
             deliveryAddress: input.deliveryAddress ?? null,
             notes: input.notes ?? null,
             openedById: ctx.user.id,
           },
-          select: { id: true, code: true, turnNumber: true },
+          select: { id: true, code: true, turnNumber: true, tableId: true },
         });
 
-        if (input.tableId) {
-          await tx.table.update({
-            where: { id: input.tableId },
-            data: { status: "OCUPADA" },
-          });
-        }
+        await sincronizarEstadoMesa(tx, pedido.tableId);
 
         return pedido;
       }),
     ).then((pedido) => {
-      revalidatePath("/salon");
-      revalidatePath("/turnero");
-      revalidatePath(`/pedido/${pedido.id}`);
+      // No se revalida ni el salón ni la pantalla de la mesa: de las dos nos
+      // estamos yendo, las dos son `force-dynamic` y se rearman solas en la
+      // próxima visita. Revalidar la pantalla que se abandona era justamente lo
+      // que hacía perder el salto a la cuenta: el cuadro se repintaba como mesa
+      // ocupada antes de que el efecto del cliente alcanzara a navegar, y el
+      // pedido quedaba abierto en la base con la persona mirando el salón.
+      //
+      // Tampoco sirve `redirect()` desde acá, aunque parezca lo natural: deja la
+      // transición de la acción a medio cerrar y la pantalla de destino no vuelve
+      // a repintarse. En la práctica el mesero tocaba un producto, no veía
+      // aparecer nada en la cuenta, volvía a tocar, y terminaba con seis.
       void publishTurneroUpdate(ctx.business.id);
       return pedido;
     });
@@ -323,6 +346,8 @@ export const cambiarCantidad = defineAction({
     });
 
     revalidatePath(`/pedido/${orderId}`);
+    revalidatePath("/salon");
+    revalidatePath("/caja");
   },
 });
 
@@ -417,6 +442,8 @@ export const quitarItem = defineAction({
     });
 
     revalidatePath(`/pedido/${orderId}`);
+    revalidatePath("/salon");
+    revalidatePath("/caja");
   },
 });
 
@@ -488,6 +515,8 @@ export const anularItem = defineAction({
     });
 
     revalidatePath(`/pedido/${orderId}`);
+    revalidatePath("/salon");
+    revalidatePath("/caja");
   },
 });
 
@@ -510,12 +539,7 @@ export const pedirCuenta = defineAction({
         where: { id: pedido.id },
         data: { status: "CUENTA_PEDIDA", billRequestedAt: new Date() },
       });
-      if (pedido.tableId) {
-        await tx.table.update({
-          where: { id: pedido.tableId },
-          data: { status: "CUENTA_PEDIDA" },
-        });
-      }
+      await sincronizarEstadoMesa(tx, pedido.tableId);
     });
 
     revalidatePath("/salon");
@@ -605,6 +629,20 @@ export const registrarPago = defineAction({
         },
       });
 
+      // Los datos para la factura electrónica viajan con el cobro, y se guardan
+      // solo si el negocio de verdad puede emitir: el gate está acá y no solo en
+      // la pantalla, porque una Server Action se alcanza por POST directo.
+      if (input.facturaElectronica && puedeFacturarElectronicamente(settings)) {
+        await tx.order.update({
+          where: { id: pedido.id },
+          data: {
+            docType: input.docType ?? null,
+            docNumber: input.docNumber ?? null,
+            customerEmail: input.customerEmail ?? null,
+          },
+        });
+      }
+
       const totales = await recalcularTotales(tx, pedido.id);
       const faltante = totales.totalCop - totales.paidCop;
 
@@ -641,12 +679,19 @@ export const registrarPago = defineAction({
             cashSessionId: pedido.cashSessionId ?? caja.id,
           },
         });
-        if (pedido.tableId) {
-          await tx.table.update({ where: { id: pedido.tableId }, data: { status: "LIBRE" } });
-        }
+        // La mesa no se libera por haber cobrado ESTA cuenta: se libera cuando no
+        // le queda ninguna abierta. Con cuentas separadas, cobrarle a uno de tres
+        // dejaba la mesa libre con los otros dos todavía sentados.
+        await sincronizarEstadoMesa(tx, pedido.tableId);
       }
 
-      return { cerrado, faltanteCop: Math.max(0, faltante), changeCop, totales };
+      return {
+        cerrado,
+        faltanteCop: Math.max(0, faltante),
+        changeCop,
+        totales,
+        tableId: pedido.tableId,
+      };
     });
 
     revalidatePath("/salon");
@@ -735,9 +780,7 @@ export const anularPedido = defineAction({
         },
       });
 
-      if (pedido.tableId) {
-        await tx.table.update({ where: { id: pedido.tableId }, data: { status: "LIBRE" } });
-      }
+      await sincronizarEstadoMesa(tx, pedido.tableId);
 
       await tx.auditLog.create({
         data: {
@@ -752,10 +795,197 @@ export const anularPedido = defineAction({
           },
         },
       });
+
     });
 
     revalidatePath("/salon");
+    revalidatePath("/caja");
     revalidatePath(`/pedido/${input.orderId}`);
+  },
+});
+
+/**
+ * Cierra una cuenta en la que nadie pidió nada.
+ *
+ * Es el agujero que dejaba mesas y pedidos abiertos para siempre: una mesa que se
+ * abrió por error, o un "Nuevo pedido" para llevar que quedó sin productos, no
+ * tenía salida. Cobrar era imposible —`pagoSchema` exige un monto mayor a cero—,
+ * caja no los listaba —`getCuentasPorCobrar` pide al menos un renglón— y anular
+ * exigía rol de caja y un motivo escrito, así que el mesero que la abrió no podía
+ * deshacerla. Y mientras tanto `cerrarCaja` se negaba a cerrar el turno.
+ *
+ * No pide motivo a propósito: "se abrió por error" no es una decisión que alguien
+ * vaya a discutir después, y obligar a escribirlo era justamente lo que hacía que
+ * nadie lo hiciera. Queda en la bitácora igual, con quién y cuándo.
+ */
+export const cerrarSinConsumo = defineAction({
+  schema: pedidoSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx, db }) {
+    await db.$transaction(async (tx) => {
+      const pedido = await tx.order.findFirst({
+        where: { id: input.orderId },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          tableId: true,
+          customerName: true,
+          _count: { select: { items: { where: { status: { not: "ANULADO" } } } } },
+        },
+      });
+      if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
+      if (pedido.status === "PAGADA") throw new ErrorDeUsuario("Ese pedido ya está pagado.");
+      if (pedido.status === "ANULADA") throw new ErrorDeUsuario("Ese pedido ya estaba cerrado.");
+      if (pedido._count.items > 0) {
+        throw new ErrorDeUsuario(
+          "Esa cuenta tiene consumo: hay que cobrarla, o anularla con motivo.",
+        );
+      }
+
+      await tx.order.update({
+        where: { id: pedido.id },
+        data: {
+          status: "ANULADA",
+          canceledAt: new Date(),
+          canceledById: ctx.user.id,
+          canceledReason: "Sin consumo",
+        },
+      });
+
+      await sincronizarEstadoMesa(tx, pedido.tableId);
+
+      await tx.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "pedido.cerrar-sin-consumo",
+          entity: "Order",
+          entityId: pedido.id,
+          metadata: { pedido: pedido.code, cuenta: pedido.customerName },
+        },
+      });
+
+    });
+
+    revalidatePath("/salon");
+    revalidatePath("/pos");
+    revalidatePath("/caja");
+    revalidatePath(`/pedido/${input.orderId}`);
+  },
+});
+
+/**
+ * Cierra de una todas las cuentas vacías de una mesa.
+ *
+ * Sin esto, una mesa que se abrió por error con tres cuentas obliga a entrar a
+ * cada una para cerrarla. Si alguna tiene consumo no se cierra nada: la mesa se
+ * libera entera o no se libera, porque cerrar la mitad deja al mesero creyendo
+ * que ya está y a la mesa todavía ocupada.
+ */
+export const liberarMesa = defineAction({
+  schema: liberarMesaSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.MESAS,
+  async handler({ input, ctx, db }) {
+    const cerradas = await db.$transaction(async (tx) => {
+      const mesa = await tx.table.findFirst({
+        where: { id: input.tableId, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          orders: {
+            where: { status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
+            orderBy: { openedAt: "asc" },
+            select: {
+              id: true,
+              code: true,
+              customerName: true,
+              _count: { select: { items: { where: { status: { not: "ANULADO" } } } } },
+            },
+          },
+        },
+      });
+      if (!mesa) throw new ErrorDeUsuario("Esa mesa no existe.");
+      if (mesa.orders.length === 0) {
+        throw new ErrorDeUsuario(`La mesa ${mesa.name} ya está libre.`);
+      }
+
+      const conConsumo = mesa.orders.filter((o) => o._count.items > 0);
+      if (conConsumo.length > 0) {
+        const nombres = conConsumo
+          .map((o, i) => etiquetaDeCuenta(o.customerName, i + 1))
+          .join(", ");
+        throw new ErrorDeUsuario(
+          conConsumo.length === 1
+            ? `La cuenta de ${nombres} tiene consumo: cobrala antes de liberar la mesa.`
+            : `Estas cuentas tienen consumo: ${nombres}. Cobralas antes de liberar la mesa.`,
+        );
+      }
+
+      const ahora = new Date();
+      await tx.order.updateMany({
+        where: { id: { in: mesa.orders.map((o) => o.id) } },
+        data: {
+          status: "ANULADA",
+          canceledAt: ahora,
+          canceledById: ctx.user.id,
+          canceledReason: "Sin consumo",
+        },
+      });
+
+      await sincronizarEstadoMesa(tx, mesa.id);
+
+      await tx.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "mesa.liberar-sin-consumo",
+          entity: "Table",
+          entityId: mesa.id,
+          metadata: { mesa: mesa.name, cuentas: mesa.orders.map((o) => o.code) },
+        },
+      });
+
+      return mesa.orders.length;
+    });
+
+    revalidatePath("/salon");
+    revalidatePath("/caja");
+    return { cerradas };
+  },
+});
+
+/**
+ * Le pone nombre a una cuenta: "Andrés", "Camila".
+ *
+ * Es lo único que distingue las cuentas de una misma mesa en el salón, en la
+ * comanda que sale a cocina y en el tiquete. No es un dato fiscal: a quién se le
+ * factura se decide al cobrar, y sin documento la venta va a consumidor final.
+ */
+export const renombrarCuenta = defineAction({
+  schema: renombrarCuentaSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx, db }) {
+    const pedido = await db.order.findFirst({
+      where: { id: input.orderId },
+      select: { id: true, status: true, tableId: true },
+    });
+    if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
+    if (pedido.status === "PAGADA" || pedido.status === "ANULADA") {
+      throw new ErrorDeUsuario("El pedido ya está cerrado.");
+    }
+
+    await db.order.update({
+      where: { id: pedido.id },
+      data: { customerName: input.customerName ?? null },
+    });
+
+    revalidatePath("/salon");
+    revalidatePath("/cocina");
+    revalidatePath("/caja");
+    revalidatePath(`/pedido/${pedido.id}`);
+    void publishCocinaUpdate(ctx.business.id);
   },
 });
 
@@ -771,10 +1001,15 @@ export const confirmarPedido = defineAction({
         where: { id: input.orderId },
         select: {
           id: true,
+          code: true,
           type: true,
           turnNumber: true,
           businessDate: true,
           status: true,
+          // Para el aviso que salta en las demás pantallas. Se piden acá, dentro
+          // de la consulta que igual se hace, y no en un viaje aparte después.
+          customerName: true,
+          table: { select: { name: true } },
           items: {
             where: { status: { not: "ANULADO" } },
             select: { id: true },
@@ -810,7 +1045,18 @@ export const confirmarPedido = defineAction({
         },
       });
 
-      return { turnNumber };
+      return {
+        turnNumber,
+        aviso: describirAviso({
+          tipo: "COCINA_NUEVA_COMANDA",
+          orderId: pedido.id,
+          code: pedido.code,
+          mesa: pedido.table?.name ?? null,
+          cuenta: pedido.customerName,
+          turno: turnNumber,
+          productos: pedido.items.length,
+        }),
+      };
     });
 
     revalidatePath("/salon");
@@ -819,8 +1065,12 @@ export const confirmarPedido = defineAction({
     revalidatePath(`/pedido/${input.orderId}`);
     void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
+    // Este es el momento canónico en que un pedido llega a la cocina, y por eso
+    // acá sí se levanta un aviso: los otros `publishCocinaUpdate` del archivo
+    // —una nota, un renombre, un cobro— mueven el contador y nada más.
+    void publicarAviso(ctx.business.id, resultado.aviso);
 
-    return resultado;
+    return { turnNumber: resultado.turnNumber };
   },
 });
 
@@ -846,12 +1096,30 @@ export const procesarVentaPosCompleta = defineAction({
       );
     }
 
+    // Los datos de la factura electrónica solo se guardan si el negocio de verdad
+    // puede emitir: el gate va acá y no solo en la pantalla, porque una Server
+    // Action se alcanza por POST directo sin pasar por la interfaz.
+    const datosFiscales =
+      input.facturaElectronica && puedeFacturarElectronicamente(settings)
+        ? {
+            docType: input.docType ?? null,
+            docNumber: input.docNumber ?? null,
+            customerEmail: input.customerEmail ?? null,
+          }
+        : {};
+
     const resultado = await conReintento(() =>
       db.$transaction(async (tx) => {
         const ahora = new Date();
         const debeEnviarACocina = input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
 
-        let pedido: { id: string; code: number; turnNumber: number | null };
+        let pedido: {
+          id: string;
+          code: number;
+          turnNumber: number | null;
+          tableId: string | null;
+          table: { name: string } | null;
+        };
 
         if (input.orderId) {
           const existente = await tx.order.findFirst({
@@ -877,8 +1145,17 @@ export const procesarVentaPosCompleta = defineAction({
               customerPhone: input.customerPhone ?? null,
               deliveryAddress: input.deliveryAddress ?? null,
               notes: input.notes ?? null,
+              ...datosFiscales,
             },
-            select: { id: true, code: true, turnNumber: true },
+            select: {
+              id: true,
+              code: true,
+              turnNumber: true,
+              tableId: true,
+              // Para el aviso: un pedido parqueado puede traer mesa, aunque el
+              // POS casi siempre trabaje sin ella.
+              table: { select: { name: true } },
+            },
           });
 
           // Este camino borra y recrea todos los renglones en vez de calcular un
@@ -931,9 +1208,18 @@ export const procesarVentaPosCompleta = defineAction({
               customerPhone: input.customerPhone ?? null,
               deliveryAddress: input.deliveryAddress ?? null,
               notes: input.notes ?? null,
+              ...datosFiscales,
               openedById: ctx.user.id,
             },
-            select: { id: true, code: true, turnNumber: true },
+            select: {
+              id: true,
+              code: true,
+              turnNumber: true,
+              tableId: true,
+              // Para el aviso: un pedido parqueado puede traer mesa, aunque el
+              // POS casi siempre trabaje sin ella.
+              table: { select: { name: true } },
+            },
           });
         }
 
@@ -1079,7 +1365,7 @@ export const procesarVentaPosCompleta = defineAction({
 
           const pActualizado = await tx.order.findUniqueOrThrow({
             where: { id: pedido.id },
-            select: { totalCop: true, paidCop: true },
+            select: { totalCop: true, paidCop: true, cashSessionId: true },
           });
 
           const amountCop = p.amountCop > 0 ? p.amountCop : pActualizado.totalCop;
@@ -1113,8 +1399,15 @@ export const procesarVentaPosCompleta = defineAction({
               data: {
                 status: "PAGADA",
                 closedAt: new Date(),
+                // Este camino cerraba a medias: sin quién cobró y, si el pedido
+                // se había abierto sin caja, sin colgarse de la que sí lo cobró
+                // —o sea, fuera del arqueo—. `registrarPago` ya hacía las dos
+                // cosas; acá faltaban.
+                closedById: ctx.user.id,
+                cashSessionId: pActualizado.cashSessionId ?? caja?.id ?? null,
               },
             });
+            await sincronizarEstadoMesa(tx, pedido.tableId);
           }
         }
 
@@ -1122,6 +1415,8 @@ export const procesarVentaPosCompleta = defineAction({
           orderId: pedido.id,
           code: pedido.code,
           turnNumber: pedido.turnNumber,
+          tableId: pedido.tableId,
+          mesa: pedido.table?.name ?? null,
           pagado: input.accion === "PAGAR_DIRECTO",
         };
       }),
@@ -1132,11 +1427,50 @@ export const procesarVentaPosCompleta = defineAction({
 
     revalidatePath("/pos");
     revalidatePath("/caja");
+    revalidatePath("/salon");
     if (debeEnviarACocinaNotificacion) {
       revalidatePath("/cocina");
       revalidatePath("/turnero");
       void publishCocinaUpdate(ctx.business.id);
       void publishTurneroUpdate(ctx.business.id);
+      // Los renglones que van a cocina son los del carrito: este camino borra y
+      // recrea todos los del pedido, así que `input.items` es exactamente lo que
+      // la cocina va a ver.
+      void publicarAviso(
+        ctx.business.id,
+        describirAviso({
+          tipo: "COCINA_NUEVA_COMANDA",
+          orderId: resultado.orderId,
+          code: resultado.code,
+          mesa: resultado.mesa,
+          cuenta: input.customerName ?? null,
+          turno: resultado.turnNumber,
+          productos: input.items.length,
+        }),
+      );
+    }
+
+    // Un domicilio tomado por el POS nunca avisaba al panel de domicilios: se
+    // publicaba en cocina y en el turnero, pero no en su propio canal, así que
+    // aparecía recién cuando alguien recargaba. El aviso sale solo la primera
+    // vez —volver a parquear el mismo pedido no es un domicilio nuevo—.
+    if (input.type === OrderType.DOMICILIO) {
+      revalidatePath("/domicilios");
+      void publishDomiciliosUpdate(ctx.business.id);
+
+      if (!input.orderId) {
+        void publicarAviso(
+          ctx.business.id,
+          describirAviso({
+            tipo: "DOMICILIO_NUEVO",
+            orderId: resultado.orderId,
+            code: resultado.code,
+            cliente: input.customerName ?? null,
+            direccion: input.deliveryAddress ?? null,
+            productos: input.items.length,
+          }),
+        );
+      }
     }
 
     return resultado;

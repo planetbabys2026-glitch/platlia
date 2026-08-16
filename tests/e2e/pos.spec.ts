@@ -113,32 +113,17 @@ test("desde POS se abre un pedido para llevar y uno a domicilio", async ({ page 
   await abrirCaja(page);
   await page.goto("/pos");
 
-  await page.getByLabel("Nombre del cliente").fill("Recoge en mostrador");
-  await page.getByRole("button", { name: /nuevo pedido/i }).click();
-  // La página del pedido no dice "para llevar" en ningún lado: solo el turno.
-  // Esa distinción se lee en la lista de /pos, no en el detalle.
-  await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
-  await expect(page.getByText(/turno \d+/i)).toBeVisible();
+  // El tipo de consumo y los datos del cliente se eligen acá, con el pedido ya
+  // abierto y el carrito a la vista. Antes se preguntaban dos veces: una en la
+  // barra del salón y otra en esta misma pantalla.
+  await page.getByRole("button", { name: /^llevar$/i }).click();
+  await page.getByLabel(/a nombre de qui[eé]n/i).fill("Recoge en mostrador");
+  await expect(page.getByRole("button", { name: /cobrar y entregar/i })).toBeVisible();
 
-  await page.goto("/pos");
-  await expect(
-    page.locator("li").filter({ hasText: "Recoge en mostrador" }),
-  ).toContainText("para llevar");
-
-  await page.getByLabel("Tipo de pedido").selectOption("DOMICILIO");
-  await page.getByLabel("Nombre del cliente").fill("Envío a domicilio");
-  // Sin dirección, el servidor lo rechaza: abrirPedidoSchema la exige para DOMICILIO.
-  await page.getByRole("button", { name: /nuevo pedido/i }).click();
-  await expect(page.getByText(/un domicilio necesita dirección/i)).toBeVisible();
-
-  await page.getByLabel("Dirección de entrega").fill("Calle 10 # 20-30");
-  await page.getByRole("button", { name: /nuevo pedido/i }).click();
-  await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
-
-  await page.goto("/pos");
-  await expect(
-    page.locator("li").filter({ hasText: "Envío a domicilio" }),
-  ).toContainText("domicilio");
+  // Un domicilio exige celular y dirección, y los pide en el mismo lugar.
+  await page.getByRole("button", { name: /^domicilio$/i }).click();
+  await expect(page.getByLabel(/celular \/ teléfono/i)).toBeVisible();
+  await expect(page.getByLabel(/dirección de entrega/i)).toBeVisible();
 
   await cerrarPedidosAbiertos(page);
   await dejarCajaCerrada(page);

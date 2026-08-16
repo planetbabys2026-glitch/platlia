@@ -38,12 +38,23 @@ function tokenValido(recibido: string, esperado: string): boolean {
 }
 
 /**
- * Crea el superadministrador maestro. Se usa una sola vez, en el primer
- * despliegue, y después se borra `SUPERADMIN_BOOTSTRAP_TOKEN` del entorno.
+ * Rehace el superadministrador maestro desde cero: borra los que haya y deja
+ * uno solo, el que se acaba de escribir.
  *
- * Tres cerrojos: sin la variable la página responde 404 —indistinguible de una
- * ruta inexistente—, el token se compara en tiempo constante, y si ya existe un
- * superadministrador la ruta se cierra sola aunque la variable siga puesta.
+ * Es una puerta de recuperación, no un alta de gente. Para sumar a alguien al
+ * equipo de soporte está `/superadmin/equipo`, que exige estar adentro; esto es
+ * para cuando **nadie** puede entrar y hay que volver a empezar.
+ *
+ * Lo único que la abre es `SUPERADMIN_BOOTSTRAP_TOKEN`. Sin esa variable la
+ * página responde 404 —indistinguible de una ruta inexistente, así que ni
+ * siquiera confirma que Platlia tenga una puerta de recuperación— y el token se
+ * compara en tiempo constante.
+ *
+ * **Mientras la variable esté en el entorno, la puerta está abierta.** Antes se
+ * cerraba sola al existir el primer superadministrador, que era una red de
+ * contención para el olvido de borrarla; ahora esa red no está y el token es una
+ * llave permanente. Quien lo lea del entorno entra. Sacarlo después de usarlo
+ * dejó de ser una recomendación y es parte del procedimiento.
  */
 export const crearSuperAdmin = definePublicAction({
   schema: bootstrapSchema,
@@ -52,14 +63,44 @@ export const crearSuperAdmin = definePublicAction({
     if (!esperado) throw new ErrorDeUsuario("El bootstrap está cerrado.");
 
     if (!tokenValido(input.token, esperado)) {
+      // Queda anotado: es la única señal de que alguien está probando la puerta.
+      await rootDb.auditLog.create({
+        data: {
+          action: "superadmin.bootstrap.token-invalido",
+          entity: "User",
+          metadata: { email: input.email },
+        },
+      });
       throw new ErrorDeUsuario("Token incorrecto.");
     }
 
-    const yaHay = await rootDb.user.count({ where: { isSuperAdmin: true } });
-    if (yaHay > 0) {
-      throw new ErrorDeUsuario(
-        "Ya existe un superadministrador. Esta ruta no crea el segundo: borrá SUPERADMIN_BOOTSTRAP_TOKEN del entorno.",
-      );
+    const anteriores = await rootDb.user.findMany({
+      where: { isSuperAdmin: true, email: { not: input.email } },
+      select: { id: true, email: true, _count: { select: { memberships: true } } },
+    });
+
+    // "Borrar los que hay" con el único matiz que importa: a quien además
+    // trabaja en un negocio se le quita la marca y se le matan las sesiones de
+    // soporte, pero no se le borra la cuenta. Borrarla se llevaría por cascada
+    // sus membresías y dejaría a un negocio sin su dueño por recuperar un acceso
+    // que no tiene nada que ver. A las cuentas que solo existían para dar
+    // soporte no les queda nada que conservar y se borran de verdad.
+    const borrados: string[] = [];
+    const degradados: string[] = [];
+
+    for (const anterior of anteriores) {
+      await revokeAllSessions(anterior.id, "SUPERADMIN");
+
+      if (anterior._count.memberships === 0) {
+        await rootDb.user.delete({ where: { id: anterior.id } });
+        borrados.push(anterior.email);
+      } else {
+        await rootDb.user.update({
+          where: { id: anterior.id },
+          data: { isSuperAdmin: false },
+        });
+        degradados.push(anterior.email);
+      }
     }
 
     const existente = await rootDb.user.findUnique({
@@ -68,10 +109,17 @@ export const crearSuperAdmin = definePublicAction({
     });
 
     if (existente) {
+      // Reusar el correo es el caso normal de recuperación: se cambia la clave,
+      // así que toda sesión suya —de soporte y del producto— tiene que morir.
       await rootDb.user.update({
         where: { id: existente.id },
-        data: { isSuperAdmin: true, passwordHash: await hashPassword(input.password) },
+        data: {
+          name: input.name,
+          isSuperAdmin: true,
+          passwordHash: await hashPassword(input.password),
+        },
       });
+      await revokeAllSessions(existente.id);
     } else {
       await rootDb.user.create({
         data: {
@@ -88,7 +136,12 @@ export const crearSuperAdmin = definePublicAction({
       data: {
         action: "superadmin.bootstrap",
         entity: "User",
-        metadata: { email: input.email },
+        metadata: {
+          email: input.email,
+          reemplazo: existente ? "correo existente" : "cuenta nueva",
+          borrados,
+          degradados,
+        },
       },
     });
 

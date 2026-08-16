@@ -45,6 +45,24 @@ export function textoOpcional(max: number) {
   );
 }
 
+/** Un correo opcional: el campo vacío de un formulario no es un correo inválido. */
+export const correoOpcional = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+  z.email("Escribí un correo válido.").max(160).optional(),
+);
+
+/**
+ * Una casilla de formulario: llega "on" cuando está marcada y no llega cuando no.
+ *
+ * Un `z.boolean()` pelado la rechaza siempre, porque nunca recibe un booleano de
+ * verdad. Está acá y no repetida en cada feature porque el error se ve igual en
+ * todas: la casilla parece no guardarse nunca.
+ */
+export const casilla = z.preprocess(
+  (v) => v === "on" || v === "true" || v === true,
+  z.boolean(),
+);
+
 /** Un identificador que vino de un formulario. */
 export const id = z.string().min(1, "Falta el identificador.").max(64);
 

@@ -74,13 +74,36 @@ export const cerrarCaja = defineAction({
     });
     if (!abierta) throw new ErrorDeUsuario("No hay ninguna caja abierta.");
 
-    const pedidosSinCobrar = await db.order.count({
+    const pedidosSinCobrar = await db.order.findMany({
       where: { cashSessionId: abierta.id, status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
+      orderBy: { openedAt: "asc" },
+      select: {
+        code: true,
+        customerName: true,
+        table: { select: { name: true } },
+        _count: { select: { items: { where: { status: { not: "ANULADO" } } } } },
+      },
     });
-    if (pedidosSinCobrar > 0) {
+    if (pedidosSinCobrar.length > 0) {
+      // Nombrarlos y no solo contarlos: el cajero tiene que salir a buscarlos, y
+      // "hay 3 pedidos sin cobrar" no le dice a cuáles mesas ir. Los vacíos se
+      // señalan aparte porque se resuelven distinto —con "Cerrar sin consumo"—
+      // y son justamente los que antes dejaban la caja trabada sin salida.
+      const cuantos = pedidosSinCobrar.length;
+      const detalle = pedidosSinCobrar
+        .slice(0, 5)
+        .map((pedido) => {
+          const donde = pedido.table ? `Mesa ${pedido.table.name}` : `Pedido #${pedido.code}`;
+          const quien = pedido.customerName?.trim();
+          const etiqueta = quien ? `${donde} · ${quien}` : donde;
+          return pedido._count.items === 0 ? `${etiqueta} (sin consumo)` : etiqueta;
+        })
+        .join(", ");
+      const resto = cuantos > 5 ? ` y ${cuantos - 5} más` : "";
+
       throw new ErrorDeUsuario(
-        `Hay ${pedidosSinCobrar} ${pedidosSinCobrar === 1 ? "pedido" : "pedidos"} sin cobrar. ` +
-          "Cobralos o anulalos antes de cerrar la caja.",
+        `Hay ${cuantos} ${cuantos === 1 ? "cuenta" : "cuentas"} sin cobrar: ${detalle}${resto}. ` +
+          "Cobralas, o cerralas sin consumo si nadie pidió nada.",
       );
     }
 

@@ -11,6 +11,7 @@
  */
 
 import { TaxKind } from "@/generated/prisma/enums";
+import { CONSUMIDOR_FINAL, esConsumidorFinal } from "@/lib/billing/factus-habilitacion";
 
 export type FactusItemTax = {
   code: string; // "01" (IVA), "04" (INC)
@@ -161,11 +162,15 @@ export function construirPayloadFactus(datos: DatosFacturaPlatlia): FactusPayloa
   const { order, business, numberingRangeId } = datos;
 
   // 1. Cliente (Si no se especificó documento, se asigna Consumidor Final 222222222222 según la DIAN)
-  const esConsumidorFinal = !order.customerDocNumber || order.customerDocNumber.trim() === "";
-  const docCode = esConsumidorFinal ? "13" : mapearDocumentoDian(order.customerDocType);
-  const docNum = esConsumidorFinal ? "222222222222" : order.customerDocNumber!.trim();
-  const nombreCliente = esConsumidorFinal
-    ? "Consumidor Final"
+  const aConsumidorFinal = esConsumidorFinal({ docNumber: order.customerDocNumber });
+  const docCode = aConsumidorFinal
+    ? CONSUMIDOR_FINAL.codigoDocumento
+    : mapearDocumentoDian(order.customerDocType);
+  const docNum = aConsumidorFinal ? CONSUMIDOR_FINAL.documento : order.customerDocNumber!.trim();
+  // `customerName` es la etiqueta de la cuenta ("Andrés", "Cuenta 2"), no un
+  // nombre fiscal: solo se usa cuando de verdad hay un documento al cual atarlo.
+  const nombreCliente = aConsumidorFinal
+    ? CONSUMIDOR_FINAL.nombre
     : order.customerName?.trim() || "Cliente General";
 
   const esJuridica = docCode === "31";
