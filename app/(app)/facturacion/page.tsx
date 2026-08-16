@@ -3,10 +3,16 @@ import { getFacturacion } from "@/features/facturacion/queries";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireBusiness } from "@/lib/auth/dal";
-import { diasParaElCorte } from "@/lib/billing/suscripcion";
+import { cuentaDelPropietario } from "@/lib/billing/cuenta";
+import { listaVigenteDeLaBase } from "@/lib/billing/lista";
+import { prorratearSedeNueva } from "@/lib/billing/prorrateo";
+import { cotizarTodas, listaParaNegocio, type Periodicidad } from "@/lib/billing/precios";
+import { aplicarPagoAprobado, diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
 import { BotonPagar } from "./boton-pagar";
+import { CobroAutomatico } from "./cobro-automatico";
+import { SedeAdicional } from "./sede-adicional";
 
 export const metadata: Metadata = { title: "Facturación" };
 export const dynamic = "force-dynamic";
@@ -36,7 +42,7 @@ export default async function FacturacionPage() {
   if (!suscripcion) {
     return (
       <div className="mx-auto max-w-md space-y-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Facturación</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Facturación</h1>
         <p className="text-muted-foreground text-sm">
           Este negocio no tiene una suscripción registrada. Escribinos y la creamos.
         </p>
@@ -49,10 +55,91 @@ export default async function FacturacionPage() {
   const vence = suscripcion.currentPeriodEnd ?? suscripcion.trialEndsAt;
   const zona = ctx.business.timeZone;
 
+  // Las tres opciones y, para cada una, hasta cuándo quedaría paga si se comprara
+  // hoy. Ese "hasta cuándo" es la pregunta real de quien está por renovar, y se
+  // calcula con la MISMA función que usa el webhook: lo que se promete acá es
+  // exactamente lo que se va a aplicar cuando entre el pago.
+  // La licencia es de la CUENTA, no de esta sede: el precio depende de cuántas
+  // sedes cubre y se cobra una sola vez.
+  const cuenta = await cuentaDelPropietario(ctx.user.id);
+  const lista = listaParaNegocio(await listaVigenteDeLaBase(), cuenta?.priceCop ?? suscripcion.priceCop);
+  const sedes = cuenta?.sedes ?? 1;
+  const cotizaciones = cotizarTodas(lista, sedes);
+  const ahora = new Date();
+  const vencimientos = Object.fromEntries(
+    cotizaciones.map((c) => [
+      c.periodicidad,
+      formatDayInTimeZone(
+        aplicarPagoAprobado(suscripcion, ahora, c.mesesOtorgados).currentPeriodEnd,
+        zona,
+      ),
+    ]),
+  ) as Record<Periodicidad, string>;
+
+  /**
+   * La compra de una sede más.
+   *
+   * Solo tiene sentido ofrecerla con la licencia viva y el período corriendo: con
+   * la licencia vencida lo que corresponde es renovar, y ahí la sede nueva ya
+   * entra en el precio del período completo.
+   */
+  const cupoDisponible = Boolean(cuenta && cuenta.sedes < cuenta.maxBranches);
+  const puedeSumarSede = Boolean(
+    cuenta &&
+      cuenta.sedes < 2 &&
+      cuenta.status === "ACTIVA" &&
+      cuenta.currentPeriodEnd &&
+      cuenta.currentPeriodEnd > ahora,
+  );
+  /**
+   * El cobro automático. Solo se ofrece con la licencia viva: autorizar un débito
+   * estando vencido cobraría en el momento, y quien está vencido primero quiere
+   * ver cuánto le van a cobrar hoy, no comprometerse a un débito recurrente.
+   */
+  const cobroActivo = cuenta?.cobroAutomatico
+    ? {
+        frecuencia: cuenta.cobroAutomatico,
+        montoCop: cotizaciones.find(
+          (c) => c.periodicidad === (cuenta.cobroAutomatico === "ANUAL" ? "ANUAL" : "MENSUAL"),
+        )!.totalCop,
+        proximoCobro: cuenta.currentPeriodEnd
+          ? formatDayInTimeZone(cuenta.currentPeriodEnd, zona)
+          : "—",
+      }
+    : null;
+
+  const mensual = cotizaciones.find((c) => c.periodicidad === "MENSUAL")!;
+  const anual = cotizaciones.find((c) => c.periodicidad === "ANUAL")!;
+  const opcionesDeCobro = [
+    {
+      frecuencia: "MENSUAL" as const,
+      etiqueta: "Todos los meses",
+      montoCop: mensual.totalCop,
+      ahorroCop: 0,
+    },
+    {
+      frecuencia: "ANUAL" as const,
+      etiqueta: "Una vez al año",
+      montoCop: anual.totalCop,
+      ahorroCop: anual.ahorroCop,
+    },
+  ];
+
+  const prorrateo =
+    cuenta && puedeSumarSede
+      ? prorratearSedeNueva({
+          lista,
+          sedesActuales: cuenta.sedes,
+          inicioPeriodo: cuenta.currentPeriodStart,
+          finPeriodo: cuenta.currentPeriodEnd,
+          ahora,
+        })
+      : null;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Facturación</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Facturación</h1>
         <p className="text-muted-foreground text-sm">
           {ctx.business.name} · {formatCop(suscripcion.priceCop)} al mes
         </p>
@@ -93,7 +180,28 @@ export default async function FacturacionPage() {
           )}
 
           {suscripcion.status !== "CANCELADA" && (
-            <BotonPagar precioCop={suscripcion.priceCop} />
+            <BotonPagar cotizaciones={cotizaciones} vencimientos={vencimientos} sedes={sedes} />
+          )}
+
+          {(cobroActivo || suscripcion.status === "ACTIVA") && (
+            <CobroAutomatico
+              activo={cobroActivo}
+              opciones={opcionesDeCobro}
+              desdeCuando={
+                cuenta?.currentPeriodEnd ? formatDayInTimeZone(cuenta.currentPeriodEnd, zona) : "—"
+              }
+            />
+          )}
+
+          {puedeSumarSede && prorrateo && (
+            <SedeAdicional
+              montoCop={prorrateo.montoCop}
+              diasRestantes={prorrateo.diasRestantes}
+              mensualAntesCop={prorrateo.mensualAntesCop}
+              mensualDesdeAhoraCop={prorrateo.mensualDesdeAhoraCop}
+              hastaCuando={formatDayInTimeZone(cuenta!.currentPeriodEnd!, zona)}
+              cupoDisponible={cupoDisponible}
+            />
           )}
         </CardContent>
       </Card>

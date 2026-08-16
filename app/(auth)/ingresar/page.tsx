@@ -27,7 +27,7 @@ export default async function IngresarPage({
         <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--linea)]">
           — Ingreso de usuarios
         </p>
-        <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-[var(--papel)] leading-[0.95]">
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
           Entrar al piso
         </h1>
         <p className="text-[var(--linea)] text-sm">

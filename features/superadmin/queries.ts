@@ -166,3 +166,10 @@ export async function getPagosEIntentos() {
 
   return { pagos, webhooks };
 }
+
+/** Todas las listas de precios: la base y las promociones, vigentes o no. */
+export async function getListasDePrecios() {
+  return rootDb.listaDePrecios.findMany({
+    orderBy: [{ desde: "asc" }, { createdAt: "asc" }],
+  });
+}

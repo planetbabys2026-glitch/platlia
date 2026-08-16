@@ -32,7 +32,7 @@ export default async function RestablecerContrasenaPage({
   return (
     <div className="space-y-6">
       <div className="space-y-1 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Elegí una contraseña nueva</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Elegí una contraseña nueva</h1>
       </div>
 
       <FormularioRestablecer token={token} />

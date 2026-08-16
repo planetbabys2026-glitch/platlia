@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const SECCIONES = [
   { href: "/superadmin", etiqueta: "Negocios" },
+  { href: "/superadmin/precios", etiqueta: "Precios" },
   { href: "/superadmin/auditoria", etiqueta: "Auditoría y Pagos" },
   { href: "/superadmin/equipo", etiqueta: "Equipo" },
 ] as const;

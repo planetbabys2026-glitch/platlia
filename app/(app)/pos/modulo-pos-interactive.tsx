@@ -48,6 +48,7 @@ import {
 import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consumo";
 import { claveDeLinea } from "@/lib/modificadores";
 import { formatCop } from "@/lib/money";
+import { SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { cn } from "@/lib/utils";
 
 export type PosProducto = ProductoConModificadores & {
@@ -210,12 +211,12 @@ function Paso({
 }) {
   return (
     <div className="flex items-start gap-2.5">
-      <span className="numeral mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--brasa)] text-[11px] font-bold text-[var(--tinta)]">
+      <span className="numeral mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--brasa)] text-rotulo font-bold text-[var(--tinta)]">
         {numero}
       </span>
       <div className="min-w-0">
         <p className="text-sm font-bold leading-none text-foreground">{titulo}</p>
-        {ayuda && <p className="text-muted-foreground mt-1 text-[11px] leading-snug">{ayuda}</p>}
+        {ayuda && <p className="text-muted-foreground mt-1 text-rotulo leading-snug">{ayuda}</p>}
       </div>
     </div>
   );
@@ -252,7 +253,7 @@ function AccionDelPedido({
         "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all",
         "disabled:pointer-events-none disabled:opacity-40",
         destacada
-          ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+          ? "border-success-soft bg-success text-white hover:bg-success/90"
           : "border-border bg-card hover:border-brand hover:bg-brand/5",
       )}
     >
@@ -261,7 +262,7 @@ function AccionDelPedido({
         <span className="block text-sm font-bold leading-tight">{titulo}</span>
         <span
           className={cn(
-            "mt-0.5 block text-[11px] leading-snug",
+            "mt-0.5 block text-rotulo leading-snug",
             destacada ? "text-white/80" : "text-muted-foreground",
           )}
         >
@@ -771,8 +772,8 @@ export function ModuloPosInteractive({
     <div className="space-y-4">
       {/* ── Si la caja está cerrada y se exige caja abierta ────────────────── */}
       {settings.requireOpenCashSession && !caja ? (
-        <Card className="max-w-xl mx-auto border-amber-500/40 bg-amber-500/5 shadow-md rounded-2xl p-6 space-y-4 text-center">
-          <div className="size-14 mx-auto rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-2xl font-bold">
+        <Card className="max-w-xl mx-auto border-warning/40 bg-warning/5 shadow-md rounded-2xl p-6 space-y-4 text-center">
+          <div className="size-14 mx-auto rounded-full bg-warning/20 text-warning-soft flex items-center justify-center text-2xl font-bold">
             🔒
           </div>
           <div className="space-y-1">
@@ -825,7 +826,7 @@ export function ModuloPosInteractive({
               <div>
                 <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
                   Pedido sin mesa
-                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  <Badge variant="outline" className="text-rotulo bg-success/10 text-success-soft border-success/30">
                     Caja abierta
                   </Badge>
                 </h1>
@@ -838,11 +839,11 @@ export function ModuloPosInteractive({
 
             <div className="flex items-center gap-2">
               {activeOrderId ? (
-                <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 p-1.5 px-3 rounded-xl">
+                <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 p-1.5 px-3 rounded-xl">
                   {/* Antes decía "Editando Pedido #5 (Turno #3)": dos números con
                       numeral y sin decir cuál es cuál. El consecutivo es contable
                       y el turno es el que se canta. */}
-                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                  <span className="text-xs font-bold text-warning-soft">
                     Pedido {orderCode}
                     {turnNumber !== null ? ` · Turno ${turnNumber}` : ""}
                   </span>
@@ -851,7 +852,7 @@ export function ModuloPosInteractive({
                     size="sm"
                     variant="outline"
                     onClick={nuevoPedido}
-                    className="h-7 text-xs font-bold gap-1 rounded-lg border-amber-500/40"
+                    className="h-7 text-xs font-bold gap-1 rounded-lg border-warning/40"
                   >
                     Empezar otro
                   </Button>
@@ -876,12 +877,12 @@ export function ModuloPosInteractive({
                 onClick={() => setModalParqueadosAbierto(true)}
                 className="relative text-xs font-semibold rounded-xl h-9 gap-1.5 border-brand/30 hover:bg-brand/5 text-foreground"
               >
-                <PauseCircle className="size-4 text-amber-500" />
+                <PauseCircle className="size-4 text-warning-soft" />
                 {/* "Parqueados" es de autos. Lo que son es pedidos empezados que
                     todavía no se cobraron. */}
                 <span>En espera</span>
                 {pedidosAbiertos.length > 0 && (
-                  <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 h-4 min-w-4 rounded-full">
+                  <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
                     {pedidosAbiertos.length}
                   </Badge>
                 )}
@@ -891,7 +892,7 @@ export function ModuloPosInteractive({
 
           {/* Banner de Éxito Temporal */}
           {mensajeExito && (
-            <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 flex items-center justify-between">
+            <Alert className="border-success/40 bg-success/10 text-success-soft flex items-center justify-between">
               <div>
                 <AlertTitle className="font-bold text-sm">{mensajeExito.titulo}</AlertTitle>
                 <AlertDescription className="text-xs">{mensajeExito.detalle}</AlertDescription>
@@ -956,16 +957,16 @@ export function ModuloPosInteractive({
                   className={cn(
                     "h-10 text-xs font-bold rounded-xl gap-1.5 shrink-0 transition-all",
                     alertasStockPos.length > 0
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20"
+                      ? "border-warning/40 bg-warning/10 text-warning-soft hover:bg-warning/20"
                       : "border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <AlertTriangle className="size-4 text-amber-500" />
+                  <AlertTriangle className="size-4 text-warning-soft" />
                   <span className="hidden sm:inline">
                     {alertasStockPos.length > 0 ? `${alertasStockPos.length} Stock Crítico` : "Stock OK"}
                   </span>
                   {alertasStockPos.length > 0 && (
-                    <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 h-4 min-w-4 rounded-full">
+                    <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
                       {alertasStockPos.length}
                     </Badge>
                   )}
@@ -978,7 +979,7 @@ export function ModuloPosInteractive({
                   type="button"
                   onClick={() => setCategoriaSeleccionada(null)}
                   className={cn(
-                    "px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border",
+                    "inline-flex min-h-11 tableta:min-h-9 items-center px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border",
                     categoriaSeleccionada === null
                       ? "bg-brand text-brand-foreground border-brand font-semibold shadow-sm"
                       : "bg-card text-muted-foreground hover:text-foreground border-border"
@@ -996,7 +997,7 @@ export function ModuloPosInteractive({
                       )
                     }
                     className={cn(
-                      "px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border",
+                      "inline-flex min-h-11 tableta:min-h-9 items-center px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border",
                       categoriaSeleccionada === cat.id
                         ? "bg-brand text-brand-foreground border-brand font-semibold shadow-sm"
                         : "bg-card text-muted-foreground hover:text-foreground border-border"
@@ -1032,13 +1033,12 @@ export function ModuloPosInteractive({
                   </div>
                 ) : (
                   categoriasFiltradas.map((cat) => (
-                    <div key={cat.id} className="space-y-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                        <span>{cat.name}</span>
-                        <span className="h-px bg-border flex-1" />
-                      </h3>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <SeccionPlegable
+                      key={cat.id}
+                      titulo={cat.name}
+                      cuenta={cat.products.length}
+                    >
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
                         {cat.products.map((prod) => {
                           const cant = enCarritoDelProducto(prod.id);
                           const conModificadores = tieneModificadores(prod);
@@ -1083,14 +1083,14 @@ export function ModuloPosInteractive({
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                   />
                                   {!prod.isAvailable && (
-                                    <span className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex items-center justify-center text-[11px] font-bold text-destructive">
+                                    <span className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex items-center justify-center text-rotulo font-bold text-destructive">
                                       Agotado
                                     </span>
                                   )}
                                 </div>
                               )}
                               {!prod.imageUrl && !prod.isAvailable && (
-                                <span className="text-destructive text-[11px] font-bold">Agotado</span>
+                                <span className="text-destructive text-rotulo font-bold">Agotado</span>
                               )}
 
                               {/* Info del Producto */}
@@ -1098,7 +1098,7 @@ export function ModuloPosInteractive({
                                 <h4 className="font-semibold text-xs text-foreground line-clamp-2 leading-tight">
                                   {prod.name}
                                 </h4>
-                                <p className="numeral font-bold text-sm text-brand dark:text-[#3E9EA2]">
+                                <p className="numeral font-bold text-sm text-brand">
                                   {formatCop(prod.priceCop)}
                                 </p>
 
@@ -1114,12 +1114,12 @@ export function ModuloPosInteractive({
                                   return (
                                     <div
                                       className={cn(
-                                        "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border w-fit mt-1",
+                                        "inline-flex items-center gap-1 text-rotulo font-bold px-1.5 py-0.5 rounded-md border w-fit mt-1",
                                         esSinStock
-                                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                          ? "bg-destructive/10 text-destructive-soft border-destructive/30"
                                           : esBajoStock
-                                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                                          : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                                          ? "bg-warning/10 text-warning-soft border-warning/30"
+                                          : "bg-success/10 text-success-soft border-success/30"
                                       )}
                                       title={
                                         tieneReceta
@@ -1145,7 +1145,7 @@ export function ModuloPosInteractive({
                                   disabled={!prod.isAvailable}
                                   size="sm"
                                   className={cn(
-                                    "w-full h-8 text-[11px] font-bold rounded-xl gap-1 transition-all",
+                                    "w-full h-8 text-rotulo font-bold rounded-xl gap-1 transition-all",
                                     cant > 0
                                       ? "bg-brand text-brand-foreground"
                                       : "bg-secondary text-secondary-foreground group-hover:bg-brand group-hover:text-brand-foreground"
@@ -1159,7 +1159,7 @@ export function ModuloPosInteractive({
                           );
                         })}
                       </div>
-                    </div>
+                    </SeccionPlegable>
                   ))
                 )}
               </div>
@@ -1171,7 +1171,7 @@ export function ModuloPosInteractive({
                 {/* Header del Carrito */}
                 <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ShoppingCart className="size-4 text-brand dark:text-[#3E9EA2]" />
+                    <ShoppingCart className="size-4 text-brand" />
                     <span className="font-bold text-sm text-foreground">El pedido</span>
                   </div>
                   {cart.length > 0 && (
@@ -1200,7 +1200,7 @@ export function ModuloPosInteractive({
                       <div className="p-6 text-center text-muted-foreground space-y-1">
                         <ShoppingBag className="size-8 mx-auto opacity-30" />
                         <p className="text-xs font-medium">Todavía no hay nada</p>
-                        <p className="text-[11px] opacity-75">
+                        <p className="text-rotulo opacity-75">
                           Tocá un producto de la izquierda y aparece acá.
                         </p>
                       </div>
@@ -1216,7 +1216,7 @@ export function ModuloPosInteractive({
                                 {item.name}
                               </span>
                               {item.opciones.length > 0 && (
-                                <span className="text-[10px] font-medium text-muted-foreground block leading-tight">
+                                <span className="text-rotulo font-medium text-muted-foreground block leading-tight">
                                   {item.opciones
                                     .map((o) =>
                                       o.priceDeltaCop > 0
@@ -1226,11 +1226,11 @@ export function ModuloPosInteractive({
                                     .join(" · ")}
                                 </span>
                               )}
-                              <span className="numeral text-[11px] font-semibold text-muted-foreground block">
+                              <span className="numeral text-rotulo font-semibold text-muted-foreground block">
                                 {formatCop(precioUnitario(item))} c/u
                               </span>
                             </div>
-                            <span className="numeral font-bold text-xs text-brand dark:text-[#3E9EA2] shrink-0">
+                            <span className="numeral font-bold text-xs text-brand shrink-0">
                               {formatCop(precioUnitario(item) * item.quantity)}
                             </span>
                           </div>
@@ -1262,7 +1262,7 @@ export function ModuloPosInteractive({
                                 value={item.notes}
                                 onChange={(e) => actualizarNotaItem(item.lineKey, e.target.value)}
                                 placeholder="Nota ítem..."
-                                className="h-6 text-[10px] w-28 rounded-lg px-1.5"
+                                className="h-6 text-rotulo w-28 rounded-lg px-1.5"
                               />
                               <button
                                 type="button"
@@ -1286,7 +1286,7 @@ export function ModuloPosInteractive({
                   />
                   {/* Selector de Tipo de Consumo */}
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                    <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
                       ¿Cómo se lo lleva?
                     </Label>
                     {/* `bg-muted` acá era el beige de la paleta —un token de
@@ -1300,10 +1300,10 @@ export function ModuloPosInteractive({
                         type="button"
                         onClick={() => setTipoConsumo("LLEVAR")}
                         className={cn(
-                          "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                          "min-h-11 tableta:min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
                           tipoConsumo === "LLEVAR"
                             ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
-                            : "text-[var(--muted)] hover:text-[var(--papel)]"
+                            : "text-muted-foreground hover:text-[var(--papel)]"
                         )}
                       >
                         <ShoppingBag className="size-3.5" /> Llevar
@@ -1312,10 +1312,10 @@ export function ModuloPosInteractive({
                         type="button"
                         onClick={() => setTipoConsumo("EN_SITIO")}
                         className={cn(
-                          "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                          "min-h-11 tableta:min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
                           tipoConsumo === "EN_SITIO"
                             ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
-                            : "text-[var(--muted)] hover:text-[var(--papel)]"
+                            : "text-muted-foreground hover:text-[var(--papel)]"
                         )}
                       >
                         <Utensils className="size-3.5" /> En sitio
@@ -1325,10 +1325,10 @@ export function ModuloPosInteractive({
                           type="button"
                           onClick={() => setTipoConsumo("DOMICILIO")}
                           className={cn(
-                            "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                            "min-h-11 tableta:min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
                             tipoConsumo === "DOMICILIO"
                               ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
-                              : "text-[var(--muted)] hover:text-[var(--papel)]"
+                              : "text-muted-foreground hover:text-[var(--papel)]"
                           )}
                         >
                           <Bike className="size-3.5" /> Domicilio
@@ -1342,7 +1342,7 @@ export function ModuloPosInteractive({
                     <div className="space-y-1">
                       <Label htmlFor="customerName" className="text-xs font-medium flex items-center justify-between">
                         <span>¿A nombre de quién?</span>
-                        <span className="text-[10px] font-semibold text-rose-500">Obligatorio</span>
+                        <span className="text-rotulo font-semibold text-destructive-soft">Obligatorio</span>
                       </Label>
                       <Input
                         id="customerName"
@@ -1355,12 +1355,12 @@ export function ModuloPosInteractive({
                         className={cn(
                           "h-9 text-xs rounded-xl transition-all",
                           cart.length > 0 && !customerName.trim()
-                            ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5 placeholder:text-rose-400 font-semibold text-foreground"
+                            ? "border-destructive-soft ring-2 ring-destructive/20 bg-destructive/5 placeholder:text-destructive-soft font-semibold text-foreground"
                             : "bg-background border-input"
                         )}
                       />
                       {cart.length > 0 && !customerName.trim() && (
-                        <p className="text-[10px] text-rose-500 font-medium pt-0.5">
+                        <p className="text-rotulo text-destructive-soft font-medium pt-0.5">
                           Sin nombre no se puede entregar ni imprimir: es lo que se canta y lo que sale en el tiquete.
                         </p>
                       )}
@@ -1369,11 +1369,11 @@ export function ModuloPosInteractive({
                     {/* Campos obligatorios si es Domicilio */}
                     {tipoConsumo === "DOMICILIO" && (
                       <div className="space-y-2 p-3 rounded-xl bg-brand/5 border border-brand/20">
-                        <span className="text-xs font-bold text-brand dark:text-[#3E9EA2] block flex items-center gap-1">
+                        <span className="text-xs font-bold text-brand block flex items-center gap-1">
                           <Bike className="size-3.5" /> Datos Requeridos para Domicilio
                         </span>
                         <div className="space-y-1.5">
-                          <Label htmlFor="customerPhone" className="text-[11px] font-semibold">
+                          <Label htmlFor="customerPhone" className="text-rotulo font-semibold">
                             Celular / Teléfono *
                           </Label>
                           <Input
@@ -1386,7 +1386,7 @@ export function ModuloPosInteractive({
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="deliveryAddress" className="text-[11px] font-semibold">
+                          <Label htmlFor="deliveryAddress" className="text-rotulo font-semibold">
                             Dirección de Entrega *
                           </Label>
                           <Input
@@ -1438,7 +1438,7 @@ export function ModuloPosInteractive({
                       <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
                         Total
                       </span>
-                      <span className="numeral text-2xl font-extrabold text-brand dark:text-[#3E9EA2]">
+                      <span className="numeral text-2xl font-extrabold text-brand">
                         {formatCop(totalCart)}
                       </span>
                     </div>
@@ -1498,7 +1498,7 @@ export function ModuloPosInteractive({
               <Card className="w-full max-w-md bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="size-5 text-emerald-600 dark:text-emerald-400" />
+                    <DollarSign className="size-5 text-success-soft" />
                     <h3 className="font-bold text-base text-foreground">Cobrar el pedido</h3>
                   </div>
                   <button
@@ -1513,8 +1513,8 @@ export function ModuloPosInteractive({
                 <div className="p-5 space-y-4">
                   {/* Total a pagar */}
                   <div className="text-center p-3 rounded-2xl bg-brand/5 border border-brand/20 space-y-0.5">
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase">Total del Pedido</span>
-                    <p className="numeral text-3xl font-extrabold text-brand dark:text-[#3E9EA2]">
+                    <span className="text-rotulo font-semibold text-muted-foreground uppercase">Total del Pedido</span>
+                    <p className="numeral text-3xl font-extrabold text-brand">
                       {formatCop(totalCart)}
                     </p>
                   </div>
@@ -1523,7 +1523,7 @@ export function ModuloPosInteractive({
                   <div className="space-y-1 bg-muted/30 p-2.5 rounded-xl border border-border">
                     <Label htmlFor="modalCustomerName" className="text-xs font-semibold flex items-center justify-between">
                       <span>Cliente Factura / Ticket *</span>
-                      <span className="text-[10px] font-bold text-rose-500">(Obligatorio)</span>
+                      <span className="text-rotulo font-bold text-destructive-soft">(Obligatorio)</span>
                     </Label>
                     <Input
                       id="modalCustomerName"
@@ -1593,7 +1593,7 @@ export function ModuloPosInteractive({
                             key={b.label}
                             type="button"
                             onClick={() => setMontoRecibido(b.val.toString())}
-                            className="px-2.5 py-1 rounded-lg bg-background border border-border text-[11px] font-bold hover:bg-brand hover:text-brand-foreground transition-colors"
+                            className="px-2.5 py-1 rounded-lg bg-background border border-border text-rotulo font-bold hover:bg-brand hover:text-brand-foreground transition-colors"
                           >
                             {b.label}
                           </button>
@@ -1603,7 +1603,7 @@ export function ModuloPosInteractive({
                       {/* Devuelta calculada */}
                       <div className="flex items-center justify-between pt-2 border-t border-border/60">
                         <span className="text-xs font-semibold text-muted-foreground">Cambio / Devuelta:</span>
-                        <span className="numeral text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="numeral text-lg font-bold text-success-soft">
                           {formatCop(cambioDevuelta)}
                         </span>
                       </div>
@@ -1622,7 +1622,7 @@ export function ModuloPosInteractive({
                         className="h-10 text-xs rounded-xl bg-background font-mono"
                         required
                       />
-                      <span className="text-[11px] text-muted-foreground block">
+                      <span className="text-rotulo text-muted-foreground block">
                         Requerido para conciliación de pagos electrónicos y tarjetas.
                       </span>
                     </div>
@@ -1643,7 +1643,7 @@ export function ModuloPosInteractive({
                       type="button"
                       disabled={procesandoAccion}
                       onClick={() => ejecutarProcesarPos("PAGAR_DIRECTO")}
-                      className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md gap-2"
+                      className="w-full h-11 bg-success hover:bg-success/90 text-white font-bold text-sm rounded-xl shadow-md gap-2"
                     >
                       {procesandoAccion ? "Procesando Cobro..." : "🚀 Confirmar Pago y Cerrar Pedido"}
                     </Button>
@@ -1659,7 +1659,7 @@ export function ModuloPosInteractive({
               <Card className="w-full max-w-lg bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <PauseCircle className="size-5 text-amber-500" />
+                    <PauseCircle className="size-5 text-warning-soft" />
                     <h3 className="font-bold text-base text-foreground">
                       Pedidos en espera ({pedidosAbiertos.length})
                     </h3>
@@ -1694,11 +1694,11 @@ export function ModuloPosInteractive({
                               Pedido #{p.code}
                             </span>
                             {p.turnNumber && (
-                              <Badge variant="outline" className="text-[10px] bg-brand/10 text-brand">
+                              <Badge variant="outline" className="text-rotulo bg-brand/10 text-brand">
                                 Turno #{p.turnNumber}
                               </Badge>
                             )}
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className="text-rotulo">
                               {p.type === "DOMICILIO" ? "🛵 Domicilio" : "🛍️ Llevar"}
                             </Badge>
                           </div>
@@ -1707,7 +1707,7 @@ export function ModuloPosInteractive({
                               Cliente: {p.customerName}
                             </p>
                           )}
-                          <p className="numeral text-xs font-bold text-brand dark:text-[#3E9EA2]">
+                          <p className="numeral text-xs font-bold text-brand">
                             Total: {formatCop(p.totalCop)}
                           </p>
                         </div>
@@ -1740,7 +1740,7 @@ export function ModuloPosInteractive({
               <Card className="w-full max-w-lg bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="size-5 text-amber-500" />
+                    <AlertTriangle className="size-5 text-warning-soft" />
                     <h3 className="font-bold text-base text-foreground">
                       Alertas Rápidas de Inventario
                     </h3>
@@ -1756,7 +1756,7 @@ export function ModuloPosInteractive({
 
                 <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
                   {alertasStockPos.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20 font-medium">
+                    <div className="p-6 text-center text-xs text-success-soft bg-success/10 rounded-xl border border-success/20 font-medium">
                       🟢 Excelente: Todos los insumos y productos terminados cuentan con suficiente stock disponible.
                     </div>
                   ) : (
@@ -1775,7 +1775,7 @@ export function ModuloPosInteractive({
                                 <span className="font-bold text-foreground">{a.nombre}</span>
                                 <Badge
                                   variant="outline"
-                                  className="text-[9px] px-1.5 py-0 uppercase font-mono"
+                                  className="text-rotulo px-1.5 py-0 uppercase font-mono"
                                 >
                                   {a.tipo === "INSUMO"
                                     ? "Insumo Receta"
@@ -1784,15 +1784,15 @@ export function ModuloPosInteractive({
                                     : "Plato Receta"}
                                 </Badge>
                               </div>
-                              <p className="text-[11px] text-muted-foreground">{a.detalle}</p>
+                              <p className="text-rotulo text-muted-foreground">{a.detalle}</p>
                             </div>
 
                             <Badge
                               className={cn(
-                                "text-[10px] font-bold shrink-0",
+                                "text-rotulo font-bold shrink-0",
                                 a.nivel === "CRITICO"
-                                  ? "bg-rose-500 text-white"
-                                  : "bg-amber-500 text-white"
+                                  ? "bg-destructive text-white"
+                                  : "bg-warning text-white"
                               )}
                             >
                               {a.nivel}

@@ -4,49 +4,43 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Check, Sparkles, Building2, Store, PhoneCall, ArrowRight } from "lucide-react";
+import { cotizar, type ListaDePrecios, type Periodicidad } from "@/lib/billing/precios";
+import { formatCop } from "@/lib/money";
 
-export function Pricing() {
+/**
+ * La calculadora de precios de la portada.
+ *
+ * Los números NO se calculan acá: llegan de la misma lista con la que se cobra.
+ * Antes esta pantalla tenía su propia matriz —`* 0.9` y `* 0.8`— que no coincidía
+ * con nada del backend y que además se contradecía sola: cobraba 20% de descuento
+ * al año y el texto decía "(2 meses gratis)", que es otro número. Prometer un
+ * precio distinto del que se cobra es la peor clase de bug.
+ */
+export function Pricing({ lista }: { lista: ListaDePrecios }) {
   const [sucursales, setSucursales] = useState<1 | 2 | "3+">(1);
   const [frecuencia, setFrecuencia] = useState<"mensual" | "6meses" | "12meses">("12meses");
 
-  // Matriz de Precios
-  // 1 sucursal: $50.000/mes base
-  // 2 sucursales: $80.000/mes base ($40.000/sucursal)
-  // 3+ sucursales: Plan Personalizado (Contactar Asesor)
   const calcularPrecio = () => {
-    if (sucursales === "3+") {
-      return null;
-    }
-    const baseMensual = sucursales === 1 ? 50000 : 80000;
-    if (frecuencia === "mensual") {
-      return {
-        mensualEquiv: baseMensual,
-        cobroTotal: baseMensual,
-        ahorroText: "Facturación mensual flexible",
-        periodoText: "al mes",
-      };
-    } else if (frecuencia === "6meses") {
-      const mensualConDesc = baseMensual * 0.9;
-      const total6Meses = mensualConDesc * 6;
-      const ahorroTotal = baseMensual * 6 - total6Meses;
-      return {
-        mensualEquiv: Math.round(mensualConDesc),
-        cobroTotal: Math.round(total6Meses),
-        ahorroText: `Ahorras $${ahorroTotal.toLocaleString("es-CO")} COP (10% desc)`,
-        periodoText: `cobrado cada 6 meses ($${Math.round(total6Meses).toLocaleString("es-CO")} COP)`,
-      };
-    } else {
-      // 12 meses (20% desc)
-      const mensualConDesc = baseMensual * 0.8;
-      const total12Meses = mensualConDesc * 12;
-      const ahorroTotal = baseMensual * 12 - total12Meses;
-      return {
-        mensualEquiv: Math.round(mensualConDesc),
-        cobroTotal: Math.round(total12Meses),
-        ahorroText: `¡Ahorras $${ahorroTotal.toLocaleString("es-CO")} COP! (2 meses gratis)`,
-        periodoText: `cobrado al año ($${Math.round(total12Meses).toLocaleString("es-CO")} COP)`,
-      };
-    }
+    if (sucursales === "3+") return null;
+
+    const periodicidad: Periodicidad =
+      frecuencia === "mensual" ? "MENSUAL" : frecuencia === "6meses" ? "SEMESTRAL" : "ANUAL";
+    const c = cotizar({ lista, sedes: sucursales, periodicidad });
+
+    const meses = c.mesesGratis === 1 ? "1 mes gratis" : `${c.mesesGratis} meses gratis`;
+
+    return {
+      mensualEquiv: c.mensualEquivalenteCop,
+      cobroTotal: c.totalCop,
+      ahorroText:
+        c.ahorroCop > 0
+          ? `Ahorrás ${formatCop(c.ahorroCop)} COP · ${meses}`
+          : "Facturación mensual flexible",
+      periodoText:
+        periodicidad === "MENSUAL"
+          ? "al mes"
+          : `cobrado cada ${c.mesesOtorgados} meses (${formatCop(c.totalCop)} COP)`,
+    };
   };
 
   const precio = calcularPrecio();
@@ -57,13 +51,13 @@ export function Pricing() {
         
         {/* Encabezado */}
         <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-          <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+          <span className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
             — Tarifas en Pesos Colombianos (COP)
           </span>
           <h2 className="font-display font-black text-4xl sm:text-6xl uppercase tracking-tight text-[var(--papel)] leading-[0.92]">
             Tarifa plana sin letras pequeñas
           </h2>
-          <p className="text-[var(--muted)] text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
             Sin límite de mesas, meseros, comandas ni pantallas conectadas. 7 días de prueba gratis sin ingresar tarjeta de crédito.
           </p>
 
@@ -72,7 +66,7 @@ export function Pricing() {
             
             {/* Selector de Sucursales */}
             <div className="space-y-2">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--muted)] block">
+              <span className="font-mono text-rotulo uppercase tracking-wider text-muted-foreground block">
                 1. SELECCIONA EL NÚMERO DE SUCURSALES:
               </span>
               <div className="inline-flex flex-wrap justify-center items-center p-1 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] gap-1">
@@ -82,7 +76,7 @@ export function Pricing() {
                   className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
                     sucursales === 1
                       ? "bg-[var(--papel)] text-[var(--tinta)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--papel)]"
+                      : "text-muted-foreground hover:text-[var(--papel)]"
                   }`}
                 >
                   <Store className="size-3.5" />
@@ -94,7 +88,7 @@ export function Pricing() {
                   className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
                     sucursales === 2
                       ? "bg-[var(--papel)] text-[var(--tinta)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--papel)]"
+                      : "text-muted-foreground hover:text-[var(--papel)]"
                   }`}
                 >
                   <Store className="size-3.5" />
@@ -106,7 +100,7 @@ export function Pricing() {
                   className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
                     sucursales === "3+"
                       ? "bg-[var(--papel)] text-[var(--tinta)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--papel)]"
+                      : "text-muted-foreground hover:text-[var(--papel)]"
                   }`}
                 >
                   <Building2 className="size-3.5" />
@@ -118,7 +112,7 @@ export function Pricing() {
             {/* Selector de Frecuencia (Solo si no es 3+) */}
             {sucursales !== "3+" && (
               <div className="space-y-2">
-                <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--muted)] block">
+                <span className="font-mono text-rotulo uppercase tracking-wider text-muted-foreground block">
                   2. SELECCIONA LA FRECUENCIA DE PAGO:
                 </span>
                 <div className="inline-flex flex-wrap justify-center items-center p-1 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-30)] gap-1">
@@ -128,7 +122,7 @@ export function Pricing() {
                     className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all ${
                       frecuencia === "mensual"
                         ? "bg-[var(--papel)] text-[var(--tinta)] shadow-xs"
-                        : "text-[var(--muted)] hover:text-[var(--papel)]"
+                        : "text-muted-foreground hover:text-[var(--papel)]"
                     }`}
                   >
                     MENSUAL
@@ -139,11 +133,11 @@ export function Pricing() {
                     className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
                       frecuencia === "6meses"
                         ? "bg-[var(--papel)] text-[var(--tinta)] shadow-xs"
-                        : "text-[var(--muted)] hover:text-[var(--papel)]"
+                        : "text-muted-foreground hover:text-[var(--papel)]"
                     }`}
                   >
                     <span>6 MESES</span>
-                    <span className="bg-[var(--brasa)] text-[var(--tinta)] text-[10px] font-bold px-1.5 py-0.5 rounded">
+                    <span className="bg-[var(--brasa)] text-[var(--tinta)] text-rotulo font-bold px-1.5 py-0.5 rounded">
                       -10%
                     </span>
                   </button>
@@ -153,11 +147,11 @@ export function Pricing() {
                     className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
                       frecuencia === "12meses"
                         ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs"
-                        : "text-[var(--muted)] hover:text-[var(--papel)]"
+                        : "text-muted-foreground hover:text-[var(--papel)]"
                     }`}
                   >
                     <span>12 MESES (ANUAL)</span>
-                    <span className="bg-[var(--tinta)] text-[var(--papel)] text-[10px] font-bold px-1.5 py-0.5 rounded">
+                    <span className="bg-[var(--tinta)] text-[var(--papel)] text-rotulo font-bold px-1.5 py-0.5 rounded">
                       -20%
                     </span>
                   </button>
@@ -184,7 +178,7 @@ export function Pricing() {
                 <h3 className="font-display font-black text-3xl uppercase text-[var(--papel)]">
                   Plan Cadenas & Franquicias
                 </h3>
-                <p className="text-[var(--muted)] text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   Para grupos gastronómicos y marcas con 3 o más locales.
                 </p>
               </div>
@@ -193,13 +187,13 @@ export function Pricing() {
                 <div className="font-display font-black text-4xl text-[var(--brasa)]">
                   Cotización Especial
                 </div>
-                <p className="text-xs text-[var(--muted)]">
+                <p className="text-xs text-muted-foreground">
                   Ofrecemos tarifas preferenciales por volumen, consolidación multi-negocio y acompañamiento en la carga inicial.
                 </p>
               </div>
 
               <div className="space-y-3">
-                <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">
+                <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                   Beneficios del Plan Empresarial:
                 </p>
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[var(--papel)]">
@@ -230,14 +224,14 @@ export function Pricing() {
             /* Vista para 1 o 2 sucursales con calculadora */
             <div className="space-y-6">
               <div>
-                <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--muted)]">
+                <span className="font-mono text-rotulo uppercase tracking-widest text-muted-foreground">
                   PLAN PROFESIONAL ILIMITADO
                 </span>
                 <div className="flex items-baseline gap-2 mt-2">
                   <span className="font-display font-black text-5xl sm:text-6xl text-[var(--papel)] leading-none tracking-tight">
                     ${precio.mensualEquiv.toLocaleString("es-CO")}
                   </span>
-                  <span className="font-mono text-xs text-[var(--muted)] uppercase">
+                  <span className="font-mono text-xs text-muted-foreground uppercase">
                     COP / MES
                   </span>
                 </div>
@@ -246,7 +240,7 @@ export function Pricing() {
                 </p>
               </div>
 
-              <div className="py-4 border-y border-dashed border-[var(--linea-30)] space-y-2 text-xs text-[var(--muted)]">
+              <div className="py-4 border-y border-dashed border-[var(--linea-30)] space-y-2 text-xs text-muted-foreground">
                 <div className="flex justify-between font-mono">
                   <span>Facturación:</span>
                   <span className="text-[var(--papel)] font-bold">{precio.periodoText}</span>
@@ -262,7 +256,7 @@ export function Pricing() {
               </div>
 
               <div className="space-y-3">
-                <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--muted)]">
+                <p className="font-mono text-rotulo uppercase tracking-wider text-muted-foreground">
                   Todo lo que incluye tu suscripción:
                 </p>
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-[var(--papel)]">
@@ -293,7 +287,7 @@ export function Pricing() {
             </div>
           ) : null}
 
-          <div className="pt-4 text-center font-mono text-[11px] text-[var(--linea-55)] tracking-wider">
+          <div className="pt-4 text-center font-mono text-rotulo text-[var(--linea-55)] tracking-wider">
             SIN CONTRATO DE PERMANENCIA · CANCELA CUANDO QUIERAS
           </div>
         </div>

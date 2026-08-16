@@ -17,7 +17,7 @@ export default async function AuditoriaSuperAdminPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Auditoría y Pagos</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Auditoría y Pagos</h1>
         <p className="text-muted-foreground text-sm">
           Bitácora completa de acciones de superadministradores, extensiones de licencia e historial de cobros con MercadoPago.
         </p>

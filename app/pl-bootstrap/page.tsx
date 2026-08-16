@@ -40,7 +40,7 @@ export default async function BootstrapPage() {
 
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">
             {cuantos > 0 ? "Rehacer el superadministrador" : "Crear el superadministrador"}
           </h1>
           <p className="text-muted-foreground text-sm">

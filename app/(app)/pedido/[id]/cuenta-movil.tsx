@@ -39,10 +39,12 @@ export function CuentaMovil({ titulo, children }: { titulo: string; children: Re
   return (
     <Sheet open={abierta} onOpenChange={setAbierta}>
       {/* Deja aire al final de la página para que la barra no tape el último
-          producto de la carta. */}
-      <div aria-hidden className="h-20 lg:hidden" />
+          producto de la carta. En teléfono hay DOS barras ancladas abajo —esta y
+          la de navegación del shell, de 4rem— así que el colchón las cuenta a las
+          dos: antes medía una sola y la de navegación quedaba encima de la cuenta. */}
+      <div aria-hidden className="h-36 sm:h-20 lg:hidden" />
 
-      <div className="border-border/80 bg-card/95 fixed inset-x-0 bottom-0 z-40 border-t p-3 backdrop-blur lg:hidden">
+      <div className="border-border/80 bg-card/95 fixed inset-x-0 bottom-16 z-30 border-t p-3 backdrop-blur sm:bottom-0 lg:hidden">
         <SheetTrigger asChild>
           <button
             type="button"

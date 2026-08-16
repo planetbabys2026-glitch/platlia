@@ -10,7 +10,7 @@ export default function RecuperarPage() {
         <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--linea)]">
           — Seguridad de la cuenta
         </p>
-        <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-[var(--papel)] leading-[0.95]">
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
           Recuperar contraseña
         </h1>
         <p className="text-[var(--linea)] text-sm">

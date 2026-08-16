@@ -37,7 +37,7 @@ export default async function SalonAdminPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Salón</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Salón</h1>
         <p className="text-muted-foreground text-sm">
           {mesas.length} {mesas.length === 1 ? "mesa" : "mesas"} en {areas.length}{" "}
           {areas.length === 1 ? "área" : "áreas"}.

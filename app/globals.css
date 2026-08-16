@@ -41,12 +41,16 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
 
   /* Identidad Platlia: Dark Kitchen-Fire Tokens */
   --color-tinta: var(--tinta);
@@ -72,6 +76,65 @@
   --color-espera-atencion: var(--espera-atencion);
   --color-espera-demora: var(--espera-demora);
   --color-espera-critico: var(--espera-critico);
+
+  /* ── Escala tipográfica ────────────────────────────────────────────────────
+     Había VEINTE tamaños distintos, ocho de ellos valores sueltos en píxeles
+     (9, 9.5, 10, 10.5, 11, 11.5, 12, 13) que a la vista son el mismo tamaño pero
+     no coinciden en ninguna línea: eso es lo que se lee como desprolijo.
+
+     Ahora son seis pasos con saltos que de verdad se notan, y uno solo por
+     debajo del cuerpo. Los saltos crecen ~1.15 abajo y ~1.25 arriba: separación
+     suficiente para que la jerarquía se vea sin que el salto grite.
+
+       rotulo  11px   mono, versalitas: rótulos de sección, chips, sellos
+       xs      13px   dato denso: metadatos, pie de tarjeta
+       sm      15px   EL CUERPO (es el del export)
+       base    17px   lo que se lee primero: nombre de plato, renglón
+       lg      20px   título de tarjeta o panel
+       xl      24px   número de mesa dentro de una tarjeta
+
+     Arriba de eso manda `font-display` con `clamp()`, que no es un paso de la
+     escala sino otra voz.
+
+     El interlineado sube con el tamaño en vez de quedarse fijo: a 13px con 16px
+     de línea el texto se apelmaza, y esto se lee de pie y con poca luz. */
+  --text-rotulo: 0.6875rem;
+  --text-rotulo--line-height: 1.45;
+  --text-rotulo--letter-spacing: 0.16em;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.3;
+  /* De acá para arriba también hay que redefinir, si no `xl` y `2xl` caen los dos
+     en 24px —el `2xl` de Tailwind es 1.5rem— y quedan dos nombres para el mismo
+     tamaño: exactamente el ruido que esta escala viene a sacar.
+     La razón se mantiene en ~1.2 hasta arriba, así que cada paso se nota. */
+  --text-2xl: 1.8125rem;
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 2.1875rem;
+  --text-3xl--line-height: 1.1;
+  --text-4xl: 2.625rem;
+  --text-4xl--line-height: 1.05;
+  --text-5xl: 3.25rem;
+  --text-5xl--line-height: 1;
+  --text-6xl: 4rem;
+  --text-6xl--line-height: 1;
+
+  /* Los dos puntos de quiebre del prototipo. Ninguno coincide con los de Tailwind,
+     así que se declaran: `lg` (1024) y `xl` (1280) dejan a la tablet vertical de
+     820px con la barra lateral puesta, apretando el área de trabajo a ~564px.
+     Son min-width, como todo en Tailwind: `tableta:` aplica de 1020 para arriba.
+
+     tableta → la barra lateral existe; abajo de eso es cajón.
+     doble   → caben dos columnas; abajo de eso el panel pegajoso se vuelve estático. */
+  --breakpoint-tableta: 1020px;
+  --breakpoint-doble: 1180px;
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -100,7 +163,9 @@
   /* Derivados oficiales */
   --linea-16: color-mix(in oklch, var(--linea) 16%, transparent);
   --linea-30: color-mix(in oklch, var(--linea) 30%, transparent);
-  --linea-55: var(--linea);
+  /* El export la define al 55% de alfa. Estaba sólida, y por eso los rótulos
+     chicos —que son justamente los que deben susurrar— gritaban. */
+  --linea-55: color-mix(in oklch, var(--linea) 55%, transparent);
 
   --panel: color-mix(in oklch, var(--acero) 13%, var(--tinta));
   --panel-bg: color-mix(in oklch, var(--acero) 13%, var(--tinta));
@@ -110,8 +175,14 @@
   --input-bg-focus: color-mix(in oklch, var(--acero) 36%, var(--tinta));
   --brasa-hover: color-mix(in oklch, var(--brasa) 88%, var(--papel));
   --brasa-glow: color-mix(in oklch, var(--brasa) 22%, transparent);
+  --brasa-dim: color-mix(in oklch, var(--brasa) 82%, var(--tinta));
+  /* Dos fuerzas distintas y no intercambiables: `soft` es relleno (se le escribe
+     encima), `borde` es línea (el export la usa en .chip.is-hot y .btn-danger). */
   --brasa-soft: color-mix(in oklch, var(--brasa) 18%, transparent);
+  --brasa-borde: color-mix(in oklch, var(--brasa) 55%, transparent);
+  --papel-45: color-mix(in oklch, var(--papel) 45%, transparent);
   --papel-60: color-mix(in oklch, var(--papel) 60%, transparent);
+  --papel-90: color-mix(in oklch, var(--papel) 90%, transparent);
   --tinta-soft: color-mix(in oklch, var(--tinta) 72%, transparent);
 
   /* Tokens semánticos de la aplicación */
@@ -131,22 +202,42 @@
   --primary-foreground: var(--tinta);
   --secondary: var(--panel-2);
   --secondary-foreground: var(--papel);
-  
-  /* --muted y --muted-foreground son texto secundario claro y nítido (#c9c2af) */
-  --muted: var(--linea);
+
+  /* `--muted` es la SUPERFICIE (la usa `bg-muted`) y `--muted-foreground` el TEXTO
+     secundario. Estaban las dos en `--linea` (#C9C2AF), que es un beige de texto:
+     cada `bg-muted` pintaba un bloque casi blanco sobre el fondo oscuro. El bug se
+     encontró y se parchó a mano dos veces —en `esqueleto-pantalla.tsx` y en el POS,
+     cada uno con su comentario— mientras los otros 46 seguían ahí. Se arregla acá,
+     una vez, en el origen. */
+  --muted: var(--panel-2);
   --muted-foreground: var(--linea);
-  
+
+
   --accent: var(--panel-3);
   --accent-foreground: var(--brasa);
 
   --destructive: #d03030;
   --destructive-foreground: #ffffff;
+  /* El rojo sólido sobre `--tinta` queda apenas en 4:1. Para texto y borde va este,
+     aclarado hacia el papel; el sólido sigue siendo el del relleno. */
+  --destructive-soft: color-mix(in oklch, var(--destructive) 62%, var(--papel));
+  /* La tríada semántica. No es decorativa: en el piso, "pagado", "va demorado" y
+     "esto se anula" tienen que distinguirse de un vistazo y a un metro de la
+     pantalla. Los verdes y ámbares de Tailwind estaban puestos crudos y chillaban
+     sobre la tinta; estos están desaturados hacia el mundo de la marca.
+     `-soft` es la versión aclarada para TEXTO sobre fondo oscuro; la sólida es
+     para rellenos, donde el texto va en `-foreground`. */
   --success: #2f7d4f;
   --success-foreground: #ffffff;
-  --warning: var(--brasa);
+  --success-soft: color-mix(in oklch, var(--success) 55%, var(--papel));
+  /* Ámbar propio, deliberadamente separado de Brasa: si la advertencia fuera del
+     color del acento institucional, todo lo naranja dejaría de querer decir algo. */
+  --warning: #c8862a;
   --warning-foreground: var(--tinta);
+  --warning-soft: color-mix(in oklch, var(--warning) 58%, var(--papel));
   --info: #4a94c4;
   --info-foreground: #ffffff;
+  --info-soft: color-mix(in oklch, var(--info) 58%, var(--papel));
 
   --border: var(--linea-16);
   --input: var(--linea-16);
@@ -191,7 +282,8 @@
     background-color: var(--tinta);
     color: var(--papel);
     font-family: var(--font-sans);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* Sin `font-feature-settings`: los `cv02`…`cv11` que había eran variantes de
+       carácter propias de Inter y General Sans no las tiene. */
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -214,6 +306,33 @@
     font-family: var(--font-display);
     color: var(--papel);
     letter-spacing: -0.02em;
+  }
+
+  /* El mínimo táctil, de una vez y para todo.
+     Abajo de 1020px esto se opera con el dedo, muchas veces de pie y apurado, y
+     el manual fija 44px. Ponerlo acá y no control por control es lo único que
+     evita que la próxima pantalla nazca con botones de 28px: se cumple sola.
+     `.tap-libre` es la salida para los controles que de verdad tienen que ser
+     chicos y van bien espaciados. */
+  @media (max-width: 1019.98px) {
+    button:not(.tap-libre),
+    select:not(.tap-libre),
+    [role="button"]:not(.tap-libre),
+    [role="tab"]:not(.tap-libre),
+    /* Los enlaces NO entran por selector de etiqueta: un `<a>` dentro de un
+       párrafo se estiraría y rompería el interlineado. Entran los que ya se
+       comportan como botón, que son los que el dedo busca. */
+    a[data-slot="button"]:not(.tap-libre),
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.tap-libre),
+    textarea:not(.tap-libre) {
+      min-height: 44px;
+    }
+    /* Los cuadrados (iconos sueltos, pasos de cantidad) crecen parejo, para no
+       quedar como una pastilla alta y angosta. */
+    button.aspect-square:not(.tap-libre),
+    [role="button"].aspect-square:not(.tap-libre) {
+      min-width: 44px;
+    }
   }
 }
 
@@ -309,6 +428,25 @@
     color: var(--papel);
   }
 
+  /* Rótulo de sección: mono en versalitas y una guía punteada que se come el ancho
+     que sobra. Es la firma del sistema —la línea de la tirilla térmica— y lo que
+     separa una pantalla de trabajo de una lista de tarjetas sueltas. */
+  .rotulo-seccion {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .rotulo-seccion::after {
+    content: "";
+    flex: 1;
+    border-top: 1px dashed var(--linea-30);
+  }
+
   /* Eyebrows */
   .eyebrow {
     font-family: var(--font-mono);
@@ -322,6 +460,22 @@
     content: '— ';
     color: var(--linea-30);
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Menú QR del cliente
+   La única pantalla que no se apoya en `--tinta`: el fondo lo elige cada negocio,
+   así que las superficies son capas translúcidas —se adaptan a cualquier fondo— y
+   los textos son papel con alfa, no un gris fijo. Un `slate-400` sobre un fondo
+   desconocido puede caer en cualquier contraste, y esto se lee en la calle.
+   ───────────────────────────────────────────────────────────────────────────── */
+[style*="--qr-acento"] {
+  --qr-texto: color-mix(in oklch, var(--papel) 96%, transparent);
+  --qr-texto-2: color-mix(in oklch, var(--papel) 80%, transparent);
+  --qr-texto-3: color-mix(in oklch, var(--papel) 64%, transparent);
+  --qr-superficie: color-mix(in oklch, #000 34%, transparent);
+  --qr-superficie-2: color-mix(in oklch, #000 55%, transparent);
+  --qr-borde: color-mix(in oklch, var(--papel) 16%, transparent);
 }
 
 /* Animaciones del Sistema Dark Kitchen-Fire (Open Design) */
@@ -400,6 +554,29 @@
 
 .animate-shake {
   animation: shake 0.4s ease-in-out;
+}
+
+/* El export respeta la preferencia en las 15 pantallas. Un salón con una tablet
+   por mesero es exactamente donde el movimiento de más molesta, y hay gente que
+   lo tiene apagado por vértigo o por migraña: acá no es un detalle de cortesía. */
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .animate-card-in,
+  .animate-stamp-in,
+  .animate-call-in,
+  .animate-shake {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @media print {

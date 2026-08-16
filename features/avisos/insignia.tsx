@@ -36,7 +36,7 @@ export function Insignia({
   return (
     <span
       className={cn(
-        "numeral ml-auto shrink-0 rounded-full bg-[var(--brasa)] px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-[var(--tinta)]",
+        "numeral ml-auto shrink-0 rounded-full bg-[var(--brasa)] px-1.5 py-0.5 font-mono text-rotulo font-bold leading-none text-[var(--tinta)]",
         className,
       )}
     >

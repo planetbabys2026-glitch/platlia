@@ -7,7 +7,10 @@ import {
   actualizarLimiteSucursalesSchema,
   agregarSuperAdminSchema,
   bootstrapSchema,
+  cambiarPrecioEmpresaSchema,
   editarSuperAdminSchema,
+  guardarListaBaseSchema,
+  guardarPromocionSchema,
   extenderSchema,
   gestionFacturacionElectronicaSchema,
   ingresoSchema,
@@ -27,7 +30,7 @@ import { correoDeAltaSuperAdmin } from "@/lib/email/plantillas";
 // eslint-disable-next-line no-restricted-imports
 import { rootDb } from "@/lib/db/root";
 import { env } from "@/lib/env";
-import { estadoSegunFechas } from "@/lib/billing/suscripcion";
+import { DIAS_DE_GRACIA, estadoSegunFechas } from "@/lib/billing/suscripcion";
 
 /** Comparación en tiempo constante: el token no se adivina midiendo respuestas. */
 function tokenValido(recibido: string, esperado: string): boolean {
@@ -247,31 +250,47 @@ export const extenderLicencia = definePublicAction({
         currentPeriodStart: true,
         currentPeriodEnd: true,
         graceUntil: true,
+        business: { select: { status: true } },
       },
     });
     if (!sub) throw new ErrorDeUsuario("Esa empresa no tiene suscripción.");
 
     const DIA = 86_400_000;
     // Se extiende desde la fecha de fin vigente o desde hoy
+    const ahora = new Date();
     const finVigente = sub.currentPeriodEnd ?? sub.trialEndsAt;
-    const base = finVigente && finVigente > new Date() ? finVigente : new Date();
+    const base = finVigente && finVigente > ahora ? finVigente : ahora;
     const nuevoFin = new Date(base.getTime() + input.dias * DIA);
 
     const actualizacionData = {
       currentPeriodEnd: nuevoFin,
       trialEndsAt: sub.status === "PRUEBA" ? nuevoFin : sub.trialEndsAt,
-      graceUntil: sub.status === "PRUEBA" ? nuevoFin : new Date(nuevoFin.getTime() + 3 * DIA),
+      graceUntil: sub.status === "PRUEBA" ? nuevoFin : new Date(nuevoFin.getTime() + DIAS_DE_GRACIA * DIA),
     };
+
+    /**
+     * Extender tiene que DESTRABAR, no solo mover una fecha.
+     *
+     * `estadoSegunFechas` deja `SUSPENDIDA` congelada sin mirar el reloj —a
+     * propósito: una suspensión de soporte es una decisión, no un accidente de
+     * cobro—. Pero el cron marca `SUSPENDIDA` a todo lo que pasó la gracia, así
+     * que al extender una licencia vencida el estado no se movía y el negocio
+     * seguía bloqueado con treinta días regalados encima. Nadie se enteraba hasta
+     * que el cliente volvía a llamar.
+     *
+     * La diferencia entre las dos suspensiones está en `Business.status`: la que
+     * decidió soporte lo pone en SUSPENDIDO. Esa no revive acá; se reactiva desde
+     * la pestaña Estado, que es donde se tomó la decisión.
+     */
+    const suspendidaPorSoporte = sub.business?.status !== "ACTIVO";
+    const estadoNuevo =
+      sub.status === "SUSPENDIDA" && !suspendidaPorSoporte && nuevoFin > ahora
+        ? "ACTIVA"
+        : estadoSegunFechas({ ...sub, ...actualizacionData }, ahora);
 
     await rootDb.subscription.update({
       where: { id: sub.id },
-      data: {
-        ...actualizacionData,
-        status: estadoSegunFechas(
-          { ...sub, ...actualizacionData },
-          new Date(),
-        ),
-      },
+      data: { ...actualizacionData, status: estadoNuevo },
     });
 
     await rootDb.auditLog.create({
@@ -281,7 +300,13 @@ export const extenderLicencia = definePublicAction({
         action: "superadmin.licencia.extender",
         entity: "Subscription",
         entityId: sub.id,
-        metadata: { dias: input.dias, motivo: input.motivo, hasta: nuevoFin.toISOString() },
+        metadata: {
+          dias: input.dias,
+          motivo: input.motivo,
+          hasta: nuevoFin.toISOString(),
+          estadoAnterior: sub.status,
+          estadoNuevo,
+        },
       },
     });
 
@@ -559,6 +584,155 @@ export const gestionarPaqueteFacturacionElectronica = definePublicAction({
           totalDisponible: nuevosDisponibles,
           motivo: input.motivo,
         },
+      },
+    });
+
+    revalidatePath("/superadmin");
+  },
+});
+
+// ─── Precios de la plataforma ────────────────────────────────────────────────
+
+/**
+ * El precio de lista de Platlia.
+ *
+ * Es lo único que faltaba para poder hacer una promoción sin tocar código: hasta
+ * acá el precio estaba escrito a mano en seis archivos y cambiarle la tarifa a un
+ * cliente se hacía con SQL.
+ */
+export const guardarListaBase = definePublicAction({
+  schema: guardarListaBaseSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const base = await rootDb.listaDePrecios.findFirst({
+      where: { desde: null, hasta: null },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const datos = {
+      precioSedePrincipalCop: input.precioSedePrincipalCop,
+      precioSedeAdicionalCop: input.precioSedeAdicionalCop,
+      mesesGratisSemestral: input.mesesGratisSemestral,
+      mesesGratisAnual: input.mesesGratisAnual,
+    };
+
+    const guardada = base
+      ? await rootDb.listaDePrecios.update({ where: { id: base.id }, data: datos })
+      : await rootDb.listaDePrecios.create({
+          data: { ...datos, nombre: "Lista base", activa: true },
+        });
+
+    await rootDb.auditLog.create({
+      data: {
+        userId: superAdmin.id,
+        action: "superadmin.precios.lista-base",
+        entity: "ListaDePrecios",
+        entityId: guardada.id,
+        metadata: {
+          motivo: input.motivo,
+          antes: base
+            ? {
+                principal: base.precioSedePrincipalCop,
+                adicional: base.precioSedeAdicionalCop,
+                gratis6: base.mesesGratisSemestral,
+                gratis12: base.mesesGratisAnual,
+              }
+            : null,
+          ahora: datos,
+        },
+      },
+    });
+
+    revalidatePath("/superadmin/precios");
+    // La portada y las pantallas de cobro leen la misma lista.
+    revalidatePath("/");
+    revalidatePath("/facturacion");
+  },
+});
+
+/** Crear o editar una promoción con fecha de inicio y fin. */
+export const guardarPromocion = definePublicAction({
+  schema: guardarPromocionSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    if (input.desde && input.hasta && input.hasta <= input.desde) {
+      throw new ErrorDeUsuario("La promoción tiene que terminar después de empezar.");
+    }
+
+    const datos = {
+      nombre: input.nombre,
+      precioSedePrincipalCop: input.precioSedePrincipalCop,
+      precioSedeAdicionalCop: input.precioSedeAdicionalCop,
+      mesesGratisSemestral: input.mesesGratisSemestral,
+      mesesGratisAnual: input.mesesGratisAnual,
+      desde: input.desde,
+      hasta: input.hasta,
+      activa: input.activa,
+    };
+
+    // Una promoción SIN fechas sería otra lista base y competiría con ella: se
+    // exige al menos un extremo para que siempre se sepa cuál es cuál.
+    if (!input.desde && !input.hasta) {
+      throw new ErrorDeUsuario(
+        "Poné al menos una fecha. Una promoción sin inicio ni fin no es una promoción: es el precio de lista.",
+      );
+    }
+
+    const guardada = input.id
+      ? await rootDb.listaDePrecios.update({ where: { id: input.id }, data: datos })
+      : await rootDb.listaDePrecios.create({ data: datos });
+
+    await rootDb.auditLog.create({
+      data: {
+        userId: superAdmin.id,
+        action: input.id ? "superadmin.precios.promo.editar" : "superadmin.precios.promo.crear",
+        entity: "ListaDePrecios",
+        entityId: guardada.id,
+        metadata: { motivo: input.motivo, ...datos, desde: input.desde?.toISOString() ?? null, hasta: input.hasta?.toISOString() ?? null },
+      },
+    });
+
+    revalidatePath("/superadmin/precios");
+    revalidatePath("/");
+    revalidatePath("/facturacion");
+  },
+});
+
+/**
+ * El precio pactado con una empresa.
+ *
+ * Es la herramienta para respetarle la tarifa a un cliente viejo cuando la lista
+ * sube, o para dejar pactado un precio especial. Hasta acá solo se podía por SQL.
+ */
+export const cambiarPrecioEmpresa = definePublicAction({
+  schema: cambiarPrecioEmpresaSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const sub = await rootDb.subscription.findUnique({
+      where: { businessId: input.businessId },
+      select: { id: true, priceCop: true },
+    });
+    if (!sub) throw new ErrorDeUsuario("Esa empresa no tiene suscripción.");
+
+    await rootDb.subscription.update({
+      where: { id: sub.id },
+      data: { priceCop: input.priceCop },
+    });
+
+    await rootDb.auditLog.create({
+      data: {
+        businessId: input.businessId,
+        userId: superAdmin.id,
+        action: "superadmin.precios.empresa",
+        entity: "Subscription",
+        entityId: sub.id,
+        metadata: { motivo: input.motivo, antes: sub.priceCop, ahora: input.priceCop },
       },
     });
 

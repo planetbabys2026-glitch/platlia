@@ -26,7 +26,7 @@ export default async function InventarioPage() {
     return (
       <div className="space-y-6">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Inventario</h1>
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Inventario</h1>
           <p className="text-muted-foreground text-sm">
             Gestión de stock de insumos, entradas por facturas de compra y recetas.
           </p>
@@ -61,7 +61,7 @@ export default async function InventarioPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Inventario</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Inventario</h1>
         <p className="text-muted-foreground text-sm">
           Control de stock de insumos, facturas de compra de proveedores, productos terminados y recetas por producto.
         </p>

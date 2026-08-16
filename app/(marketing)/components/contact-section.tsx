@@ -43,13 +43,13 @@ export function ContactSection() {
           
           {/* Información Comercial */}
           <div className="lg:col-span-5 space-y-6">
-            <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
               — Asesoría Gastronómica Directa
             </span>
             <h2 className="font-display font-black text-4xl sm:text-5xl uppercase tracking-tight text-[var(--papel)] leading-[0.94]">
               Hablemos de tu restaurante o bar
             </h2>
-            <p className="text-[var(--muted)] text-base leading-relaxed">
+            <p className="text-muted-foreground text-base leading-relaxed">
               ¿Tienes dudas sobre cómo implementar Platlia en tu local o necesitas una demostración guiada para tu equipo? Déjanos un mensaje y te responderemos en menos de 2 horas.
             </p>
 
@@ -59,7 +59,7 @@ export function ContactSection() {
                   <Phone className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">WhatsApp & Línea Comercial</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">WhatsApp & Línea Comercial</p>
                   <p className="font-bold text-[var(--papel)] text-base">+57 (310) 574-2111</p>
                 </div>
               </div>
@@ -69,7 +69,7 @@ export function ContactSection() {
                   <Mail className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">Correo de Ventas & Soporte</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Correo de Ventas & Soporte</p>
                   <p className="font-bold text-[var(--papel)] text-base">contacto@platlia.com</p>
                 </div>
               </div>
@@ -79,7 +79,7 @@ export function ContactSection() {
                   <MapPin className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">Cobertura Nacional</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Cobertura Nacional</p>
                   <p className="font-bold text-[var(--papel)] text-base">Bogotá, Medellín, Cali, Barranquilla y toda Colombia</p>
                 </div>
               </div>
@@ -89,7 +89,7 @@ export function ContactSection() {
                   <Clock className="size-4.5" />
                 </div>
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-wider text-[var(--muted)]">Horario de Atención</p>
+                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Horario de Atención</p>
                   <p className="font-bold text-[var(--papel)] text-base">Lunes a Domingo: 8:00 a.m. – 10:00 p.m.</p>
                 </div>
               </div>
@@ -107,7 +107,7 @@ export function ContactSection() {
                   <h3 className="font-display font-black text-3xl uppercase text-[var(--papel)]">
                     ¡Mensaje recibido con éxito!
                   </h3>
-                  <p className="text-[var(--muted)] text-sm max-w-md mx-auto">
+                  <p className="text-muted-foreground text-sm max-w-md mx-auto">
                     Gracias por tu interés en Platlia. Nuestro equipo de soporte comercial se pondrá en contacto contigo muy pronto.
                   </p>
                   <Button
@@ -126,7 +126,7 @@ export function ContactSection() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="contact-nombre" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                      <Label htmlFor="contact-nombre" className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
                         Tu nombre *
                       </Label>
                       <Input
@@ -140,7 +140,7 @@ export function ContactSection() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="contact-negocio" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                      <Label htmlFor="contact-negocio" className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
                         Nombre del restaurante / bar
                       </Label>
                       <Input
@@ -155,7 +155,7 @@ export function ContactSection() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="contact-correo" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                      <Label htmlFor="contact-correo" className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
                         Correo electrónico *
                       </Label>
                       <Input
@@ -170,7 +170,7 @@ export function ContactSection() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="contact-telefono" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                      <Label htmlFor="contact-telefono" className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
                         Celular / WhatsApp *
                       </Label>
                       <Input
@@ -186,7 +186,7 @@ export function ContactSection() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="contact-ciudad" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                    <Label htmlFor="contact-ciudad" className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
                       Ciudad o municipio
                     </Label>
                     <Input
@@ -199,7 +199,7 @@ export function ContactSection() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="contact-mensaje" className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">
+                    <Label htmlFor="contact-mensaje" className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
                       ¿Cómo te podemos ayudar?
                     </Label>
                     <textarea

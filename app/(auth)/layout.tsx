@@ -18,7 +18,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <Link href="/" className="transition-opacity hover:opacity-90">
             <Logotipo size="lg" eyebrow="SISTEMA GASTRONÓMICO" />
           </Link>
-          <span className="font-mono text-[11px] tracking-widest text-[var(--papel)] border border-[var(--linea-30)] rounded-full px-3.5 py-1 bg-[var(--panel-2)] uppercase">
+          <span className="font-mono text-rotulo tracking-widest text-[var(--papel)] border border-[var(--linea-30)] rounded-full px-3.5 py-1 bg-[var(--panel-2)] uppercase">
             PRUEBA GRATIS 7 DÍAS
           </span>
         </div>
@@ -41,7 +41,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         {/* Footer Meta */}
-        <div className="pt-4 border-t border-dashed border-[var(--linea-30)] flex items-center justify-between font-mono text-[11px] text-[var(--linea)] tracking-wider">
+        <div className="pt-4 border-t border-dashed border-[var(--linea-30)] flex items-center justify-between font-mono text-rotulo text-[var(--linea)] tracking-wider">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-[var(--brasa)] animate-pulse" />
             <span>SISTEMA OPERANDO EN VIVO · CORTE 5:00 A.M.</span>
@@ -69,7 +69,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {children}
         </div>
 
-        <div className="mt-8 pt-4 border-t border-dashed border-[var(--linea-30)] text-center font-mono text-[11px] text-[var(--linea)] tracking-wider">
+        <div className="mt-8 pt-4 border-t border-dashed border-[var(--linea-30)] text-center font-mono text-rotulo text-[var(--linea)] tracking-wider">
           PLATLIA MULTI-TENANT · BOGOTÁ · MEDELLÍN · CALI
         </div>
       </div>

@@ -264,7 +264,7 @@ function TarjetaGrupo({
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-semibold">{grupo.name}</h3>
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary" className="text-rotulo">
                 {resumenDelGrupo(grupo)}
               </Badge>
               <span className="text-muted-foreground text-xs">
@@ -346,7 +346,7 @@ function FilaOpcion({
             </span>
           )}
           {opcion.isDefault && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-rotulo">
               por defecto
             </Badge>
           )}

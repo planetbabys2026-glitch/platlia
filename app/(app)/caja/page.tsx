@@ -50,7 +50,7 @@ export default async function CajaPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
             {caja ? `Caja ${caja.code}` : "Caja"}
           </h1>
           <p className="text-muted-foreground text-sm">

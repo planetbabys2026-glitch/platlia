@@ -33,7 +33,7 @@ export default async function IngresarSuperAdminPage() {
 
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Superadministración</h1>
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Superadministración</h1>
           <p className="text-muted-foreground text-sm">
             Consola de soporte de Platlia. No es el ingreso de los negocios.
           </p>

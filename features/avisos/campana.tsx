@@ -48,7 +48,7 @@ export function Campana({ className }: { className?: string }) {
 
       <DropdownMenuContent align="end" className="w-80 max-w-[calc(100vw-2rem)]">
         <div className="flex items-center justify-between gap-2 pr-1">
-          <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.16em]">
+          <DropdownMenuLabel className="font-mono text-rotulo uppercase tracking-[0.16em]">
             Avisos
           </DropdownMenuLabel>
           <Button
@@ -57,7 +57,7 @@ export function Campana({ className }: { className?: string }) {
             size="sm"
             onClick={alternarSonido}
             aria-pressed={sonido}
-            className="h-8 gap-1.5 text-[11px] text-muted-foreground"
+            className="h-8 gap-1.5 text-rotulo text-muted-foreground"
           >
             {sonido ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
             {sonido ? "Con sonido" : "Silenciado"}
@@ -89,7 +89,7 @@ export function Campana({ className }: { className?: string }) {
                         {aviso.detalle}
                       </span>
                     </span>
-                    <span className="numeral shrink-0 font-mono text-[10px] text-muted-foreground">
+                    <span className="numeral shrink-0 font-mono text-rotulo text-muted-foreground">
                       {new Date(aviso.ts).toLocaleTimeString("es-CO", {
                         hour: "2-digit",
                         minute: "2-digit",

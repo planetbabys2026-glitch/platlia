@@ -36,7 +36,7 @@ export default async function VerificarCorreoPage({
 
   return (
     <div className="space-y-6 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">Confirmar correo</h1>
+      <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Confirmar correo</h1>
 
       {resultado.ok ? (
         <Alert>

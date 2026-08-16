@@ -205,6 +205,104 @@ no tiene cookie— junto con `/api/health`.
 `estadoSegunFechas` no revive lo cancelado ni lo suspendido a mano: eso son decisiones, no
 accidentes de cobro. El cron `pnpm cron:subs` solo escribe lo que el reloj ya volvió cierto.
 
+**El precio vive en `ListaDePrecios`, no en el código.** Es una tabla de la plataforma —no de un
+negocio— que edita el superadministrador en `/superadmin/precios`. Una fila sin fechas es la lista
+base; una fila con fechas es una promoción y le gana a la base mientras esté en su ventana. Antes el
+precio estaba escrito a mano en seis archivos y ya habían divergido: el schema decía 50.000, el alta
+de la segunda sede 30.000, y la portada calculaba con `* 0.9` y `* 0.8`.
+
+Toda la aritmética está en `lib/billing/precios.ts`, puro y con 30 tests; la consulta a la base, en
+`lib/billing/lista.ts`. **Nunca escribir un precio a mano en una pantalla**: se cotiza con
+`cotizar()`, que es lo que garantiza que la portada prometa lo mismo que cobra el checkout.
+
+**El descuento son meses de regalo, no un porcentaje**: 6 meses se pagan 5 y 12 se pagan 10. Un
+porcentaje sobre pesos enteros deja centavos que hay que redondear en algún lado, y "un mes de
+regalo" se explica sin calculadora.
+
+**`Subscription.priceCop` protege de las SUBAS, no de los descuentos** (`listaParaNegocio`): quien
+entró pagando menos conserva su precio cuando la lista sube, pero una promoción vigente le gana igual
+—una promo es una lista completa, no un descuento que se apile sobre otro precio—.
+
+**Un pago dice cuántos meses compró.** `aplicarPagoAprobado(sub, pagadoEn, meses)` **exige** el
+parámetro a propósito: antes sumaba `addMonths(desde, 1)` fijo, la cantidad no viajaba a ninguna
+parte y pagar un año daba un mes sin que nada fallara ni quedara registro. Los meses van en la
+`metadata` de la preferencia —que escribe el servidor, no el cliente— y `mesesSegunMonto` los deduce
+del monto como red. Ante la duda se aplica **lo menor**: equivocarse de menos se arregla con un
+mensaje a soporte; de más es plata regalada que nadie audita.
+
+**El intento de pago se registra ANTES de salir a MercadoPago**, con su `mpPreferenceId`: si el
+webhook nunca llega o la persona abandona el checkout, queda la fila que soporte necesita mirar.
+
+**Extender una licencia tiene que destrabar.** `estadoSegunFechas` deja `SUSPENDIDA` congelada a
+propósito, pero el cron marca así a todo lo que pasó la gracia: sin un caso especial, soporte
+regalaba 30 días y el negocio seguía bloqueado. `extenderLicencia` revive solo si
+`Business.status === "ACTIVO"`; lo que suspendió soporte a mano se reactiva desde su propia pestaña.
+
+**La licencia es de la CUENTA, no de la sede** (`lib/billing/cuenta.ts`). El modelo no tiene tabla de
+cuenta —cada `Business` tiene su `Subscription`— y la cuenta es implícita: las membresías de
+PROPIETARIO de una persona. La **principal** es la sede más vieja y es la única que cobra; un pago
+aprobado sincroniza las fechas de todas (`sincronizarSedes`). Sin eso, como el precio depende de
+cuántas sedes hay, cada sede cotizaba `50.000 + 30.000×(n−1)` por separado y **dos sedes salían
+$160.000 en vez de $80.000**.
+
+**`tenantDb` pisa el `businessId` que le pases en un `create`** (`withScope` lo esparce al final).
+Por eso los pagos se escriben con `rootDb`: pertenecen a la sede principal, que puede no ser la
+activa, y con `tenantDb` habrían quedado en la sede equivocada sin ningún error.
+
+**La sede adicional se compra primero y se crea después.** `comprarSedeAdicional` cobra el prorrateo
+de lo que queda del período y el webhook solo hace `maxBranches: { increment: 1 }` —una operación
+mínima e idempotente por el `mpPaymentId` único—; recién entonces `crearSucursalAdicional` deja
+crearla. Fabricar un negocio entero desde un aviso HTTP, con su configuración, sus impuestos y su
+membresía, es plata cobrada sin servicio si algo falla a mitad de camino. Antes la segunda sede era
+**gratis**: la guarda decía `cantActual >= maxPermitidas && maxPermitidas >= 2` y con el
+`maxBranches` de fábrica en 1 la segunda parte era falsa. Y la sede nueva **hereda las fechas de la
+cuenta** con `priceCop: 0`; antes nacía con siete días de prueba propios y su propio precio, o sea
+que vencía en otro momento y se cobraba aparte.
+
+### Cobro automático y avisos
+
+**El débito automático es otra API de MercadoPago**: `preapproval`, no Checkout Pro
+(`lib/billing/preapproval.ts`). Trae dos avisos nuevos al webhook —
+`subscription_preapproval` cuando la autorización cambia de estado y
+`subscription_authorized_payment` en cada cobro—, y el webhook los acepta explícitamente: cualquier
+tipo que no esté en la lista se contesta 200 y se ignora, que es lo que hace que MercadoPago deje de
+reintentar.
+
+Un cobro recurrente avisa con el id de una **factura** (`authorized_payment`), no con el del pago.
+Hay que resolverla primero (`consultarFacturaDeSuscripcion`) y recién ahí entra al camino de
+siempre. Ese pago **no trae nuestra metadata** —la autorización no la propaga a cada cobro—, así que
+la cantidad de meses la deduce `mesesSegunMonto` del monto: es exactamente para eso que existe esa
+red.
+
+**El primer débito se agenda para el fin del período ya pagado.** Quien lo enciende faltándole
+veinte días no puede terminar pagando dos veces por los mismos veinte días.
+
+**Cancelar el cobro NO apaga la licencia**: lo pago se usa hasta el final y después entra la gracia
+normal. Cortar el servicio en el momento sería cobrar por días que no se dan, y es lo que hace que
+la gente le tenga miedo al botón de cancelar. Por eso el botón está a la vista desde antes de
+activar y dice qué pasa al usarlo.
+
+**Si el débito se cae** (tarjeta vencida, sin cupo), MercadoPago pausa la autorización: el webhook
+apaga el cobro automático de este lado y la pantalla vuelve a ofrecer el pago manual, en vez de
+decir "se cobra solo" mientras no se cobra nada.
+
+**Los avisos de vencimiento salen del cron diario**, a 3 días del corte y el día del corte
+(`lib/billing/avisos-licencia.ts`, puro y con tests). La idempotencia va en `ultimoAvisoClave`, que
+guarda `"<fecha de corte>:<umbral>"`: al renovarse la licencia la fecha cambia y los avisos del
+período nuevo vuelven a salir **solos**, sin que nadie tenga que limpiar una marca. Con un booleano
+habría que acordarse de apagarlo en cada pago, y el día que alguien se olvide el cliente deja de
+recibir avisos para siempre sin que nada falle. Con cobro automático encendido **no se avisa**: se
+va a cobrar solo.
+
+**`lib/email/enviar.ts` no importa `server-only`**, por la misma razón que `lib/env.ts`: el cron es
+Node plano y `server-only` lanza fuera de la condición `react-server`. La guarda real es el
+`typeof window`.
+
+**Lo que no pasa por `defineAction` verifica la licencia a mano.** `crearPedidoClienteQR` es pública
+—la usa un comensal sin sesión— y no tenía ningún chequeo: un negocio vencido siguió recibiendo
+pedidos por QR indefinidamente. Misma clase de olvido: `crearNegocioPropio` validaba "ya tenés
+negocio" solo en la página, y una Server Action es un POST alcanzable con curl.
+
 ## Despliegue (VPS con Dokploy / nixpacks)
 
 `nixpacks.toml` manda; sin él nixpacks adivina y se equivoca en tres cosas, todas verificadas
@@ -235,14 +333,138 @@ La paleta cromática se basa en el acero inoxidable de cocina, el papel de tiril
 - **`--papel: #EDE7DA`**: Texto principal, fondos de ticket y alto contraste.
 - **`--brasa: #FF4E1F`**: Acento institucional, fuego de cocina, alertas y sellos (mapeado a `--brand` y `--primary`).
 - **`--acero: #3A3733`**: Paneles secundarios, tarjetas y superficies de soporte (`--panel-bg`, `--panel-2`, `--panel-3`).
-- **`--linea: #C9C2AF`**: Líneas guía punteadas, bordes y texto secundario / bajadas (mapeado a `--muted` y `--muted-foreground`).
+- **`--linea: #C9C2AF`**: Líneas guía punteadas, bordes y **texto** secundario / bajadas.
+
+**`--muted` es superficie, `--muted-foreground` es texto.** Esto ya se rompió tres veces: `--muted`
+estaba apuntando a `--linea` —un beige de texto— así que cada `bg-muted` pintaba un bloque casi
+blanco sobre el fondo oscuro. Hoy `--muted` es `--panel-2` y el beige vive solo en
+`--muted-foreground`. Nunca escribir `text-[var(--muted)]`: es `text-muted-foreground`.
+
+**Los campos tienen pozo.** `--input-bg` (acero 26% sobre tinta) y `--input-bg-focus` existen y hay
+que usarlos: un campo tiene que ser MÁS oscuro que el panel que lo contiene. `bg-input/20` da un
+beige al 3%, o sea nada, y el campo desaparece.
+
+**Nada de paletas crudas de Tailwind.** No hay `emerald-`, `amber-`, `rose-`, `slate-` en la
+interfaz: para estado va la tríada semántica `success` / `warning` / `destructive` / `info`, cada
+una con su variante `-soft` para TEXTO sobre fondo oscuro (la sólida es para rellenos, y ahí el
+texto va en `-foreground`).
 
 Sistema tipográfico:
-1. **Display (Títulos & Números Gigantes)**: `Big Shoulders Display` (`--font-display` / 900 Black) para números de mesa, encabezados de comanda y contadores de turno.
-2. **Body (Lectura en Piso)**: `Inter` (`--font-sans` / 400, 500, 600) para legibilidad optimizada en piso bajo baja iluminación.
-3. **Monospaced (Dinero COP & Tiempos)**: `Space Mono` (`--font-mono` / 400, 700 con `.numeral tabular-nums`) para moneda colombiana, cronómetros y sellos.
+1. **Display (Títulos & Números Gigantes)**: `Big Shoulders` (`--font-display` / 900 Black) para
+   números de mesa, encabezados de comanda y contadores de turno. El manual la llama *Big Shoulders
+   Display*, que es como se llamaba en Google Fonts antes de que absorbieran la superfamilia: **no
+   existe un `Big_Shoulders_Display` que importar**, el build falla.
+2. **Body (Lectura en Piso)**: `General Sans` (`--font-sans` / 400, 500, 600, 700). Viene de
+   Fontshare, no de Google, así que los `.woff2` viven en `app/fonts/` y se cargan con
+   `next/font/local`: sin pedido a un tercero, que es lo único que funciona cuando la PWA arranca
+   sin red. No poner `font-feature-settings` de Inter (`cv02`…`cv11`): General Sans no los tiene.
+3. **Monospaced (Dinero COP & Tiempos)**: `Space Mono` (`--font-mono` / 400, 700 con
+   `.numeral tabular-nums`) para moneda colombiana, cronómetros y sellos.
 
-Las piezas de marca se usan por `components/marca/logo.tsx`: `Logo`, `Logotipo` e `Isotipo` (silueta de tirilla térmica dentada de 22 picos con monograma "P" y acento Brasa).
+**La escala son seis pasos y no se inventa uno nuevo.** Había veinte tamaños, ocho de ellos valores
+sueltos en píxeles (9, 9.5, 10, 10.5, 11, 11.5, 12, 13) que a la vista son el mismo tamaño pero no
+coinciden en ninguna línea: eso es lo que se lee como desprolijo. Están redefinidos en `@theme`, así
+que se usan por su nombre de Tailwind:
+
+| clase | px | para qué |
+|---|---|---|
+| `text-rotulo` | 11 | mono en versalitas: rótulo de sección, chip, sello |
+| `text-xs` | 13 | dato denso: metadato, pie de tarjeta |
+| `text-sm` | 15 | **el cuerpo** |
+| `text-base` | 17 | lo que se lee primero: nombre de plato, renglón |
+| `text-lg` | 20 | título de tarjeta o panel |
+| `text-xl` | 24 | número de mesa dentro de una tarjeta |
+
+`text-2xl` y para arriba también están redefinidos: con los de fábrica, `xl` y `2xl` caen los dos en
+24px. Nada de `text-[13px]` ni parecidos — si hace falta un tamaño que no está, falta una decisión,
+no una clase.
+
+**Cuándo va cada letra.** Display solo para identificadores (número de mesa, de turno, título de
+pantalla). Mono para **cifras, horas y sellos**, nunca para una frase: una oración en monoespaciada
+se lee letra por letra, y así estaban las bajadas de los KPI de informes. Y cuando una cifra lleva
+palabra —"12 pedidos"— el número va en `.numeral` y la palabra en General Sans, aparte: en mono, el
+ancho fijo separa la palabra de su número como si fueran dos datos.
+
+**No poner `font-display` y `.numeral` en el mismo elemento**: las dos declaran la familia y se
+pisan. Ese bug estaba en la tarjeta de KPI.
+
+### El menú despliega las secciones de cada módulo
+
+Los módulos que por dentro son varias pantallas —Caja, Informes, Inventario, Configuración—
+declaran sus `secciones` en `app/(app)/navegacion.ts` y el menú las abre cuando el módulo está
+activo. Antes esas vistas solo existían como una tira de pestañas adentro de la pantalla: para saber
+que Inventario tenía Proveedores había que entrar y mirar.
+
+**La sección viaja en la URL** (`?vista=`), porque un enlace del menú no puede apuntar a un
+`useState`. `lib/vista-en-url.ts` es el hook compartido: usa `replace` y no `push` —cambiar de
+pestaña dentro de un módulo no es navegar, y con `push` habría que apretar "atrás" seis veces para
+salir de Configuración— y omite el parámetro cuando es la vista por defecto, así que `/caja` y
+`/caja?vista=cobros` se escriben igual.
+
+Se perdió una comodidad a propósito: Caja arrancaba en "movimientos" cuando no había cuentas por
+cobrar. Una pestaña que cambia sola según los datos no se puede enlazar, porque el mismo enlace
+llevaría a lugares distintos según la hora.
+
+**Configuración salió de Administración** y quedó al mismo nivel: adentro tiene siete pantallas, y
+dejarla como sub-ítem habría anidado un acordeón dentro de otro, tres niveles en una barra de 240px.
+La licencia es una de esas siete y ya no está suelta en el menú: es un parámetro del negocio, no una
+pantalla de trabajo.
+
+**Colapsada, la barra apila.** El encabezado y el pie ponían su contenido en fila, y en 80px de
+ancho —48px útiles arriba, 56px abajo— no entraban: el botón de colapsar y el de cerrar sesión se
+salían del borde. Con `flex-col` entran los dos.
+
+### Las categorías se pliegan
+
+`components/marca/seccion-plegable.tsx` agrupa productos por categoría en el POS y en el menú QR.
+En un teléfono, una carta de 18 productos en lista corrida muestra tres platos por pantalla y el
+resto es fe. La animación va por `grid-template-rows: 0fr → 1fr`, que es lo único que llega a la
+altura real sin medirla con JS: nada de `max-height` con un número inventado que recorta la última
+tarjeta cuando la categoría crece. Plegado se usa `inert`, no `hidden` —`display:none` cortaría la
+animación en seco—, y en el menú QR la primera categoría abre abierta, para que al escanear se vea
+comida y no una lista de títulos cerrados.
+
+Las piezas de marca se usan por `components/marca/logo.tsx`: `Logo`, `Logotipo` e `Isotipo` (silueta
+de tirilla térmica dentada de 22 picos con monograma "P" y acento Brasa). La composición de una
+pantalla sale de `components/marca/pantalla.tsx`: `EncabezadoPantalla`, `RotuloSeccion`, `Panel` y
+`Vacio`. **Un `h1` no se escribe a mano**: si no, vuelven a convivir dos convenciones —el display en
+mayúsculas del manual y el `text-2xl font-semibold` de shadcn—, que es lo que había.
+
+### Responsive: dos puntos de quiebre propios, y ninguno es de Tailwind
+
+El prototipo conmuta en 1020 y 1180, no en los `md`/`lg`/`xl` de fábrica. Están declarados en
+`@theme` y se usan como variantes:
+
+- **`tableta:` (1020px)** — de acá para arriba existe la barra lateral; abajo es cajón. Con el `md`
+  (768px) que había antes, una tablet vertical de 820px se comía 256px de barra y dejaba el área de
+  trabajo en ~564px: lo peor de los dos mundos.
+- **`doble:` (1180px)** — de acá para arriba caben dos columnas; abajo, el panel pegajoso se vuelve
+  estático y la pantalla pasa a una sola columna.
+
+**El mínimo táctil son 44px y se cumple solo.** Hay una regla en `@layer base` que se lo pone a
+`button`, `select`, `input`, `textarea`, `[role=button]` y `[role=tab]` por debajo de 1020px.
+Escribir alturas al revés —`h-9 sm:h-10`, o sea 36px justo en el teléfono— es el error que se
+repetía. Para el control que de verdad tiene que ser chico está `.tap-libre`.
+
+`scripts/revisar-viewports.ts` mide las dos cosas que no se ven leyendo código —desborde horizontal
+y controles por debajo de 44px— en los nueve tamaños del handoff:
+
+```bash
+pnpm tsx --env-file=.env scripts/revisar-viewports.ts --url http://127.0.0.1:3000
+```
+
+### El menú QR es la excepción
+
+`app/m/[slug]/` no se apoya en `--tinta`: **el fondo y el acento los elige cada negocio**
+(`qrMenuBgColor`, `qrMenuBgGradient`, `qrMenuAccent`). Por eso ahí las superficies son capas
+translúcidas —se adaptan a cualquier fondo— y los textos son papel con alfa (`--qr-texto`,
+`--qr-texto-2`, `--qr-texto-3`), nunca un gris fijo: sobre un fondo desconocido, un `slate-400`
+puede caer en cualquier contraste, y esto se lee en la calle con sol.
+
+De qué color va el texto ENCIMA del acento lo calcula `lib/contraste.ts` (`textoSobre`), y si el
+acento es demasiado oscuro para escribir con él sobre el fondo, `acentoSirveComoTexto` lo detecta y
+se aclara con `mezclarHacia`. Escribir `text-white` sobre el acento es un error: hay acentos claros
+—el ámbar y el celeste de los presets— donde queda ilegible.
 
 ## Estructura
 

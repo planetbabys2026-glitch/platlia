@@ -131,9 +131,9 @@ export default async function PedidoPage({
       {editable && pedido.type !== "MESA" && (
         <SegunConsumo
           conConsumo={
-            <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <Card className="border-success/30 bg-success/5">
               <CardContent className="pt-4 space-y-3">
-                <h2 className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">
+                <h2 className="font-semibold text-sm text-success-soft">
                   💳 Facturar y cobrar pedido (POS)
                 </h2>
                 <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
@@ -216,7 +216,7 @@ export default async function PedidoPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">
+            <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
               {pedido.table ? `Mesa ${pedido.table.name}` : `Pedido ${pedido.code}`}
             </h1>
             {/* De quién es esta cuenta. Una mesa puede tener varias abiertas a la

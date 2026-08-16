@@ -21,6 +21,7 @@ import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
+import { acentoSirveComoTexto } from "@/lib/contraste";
 import { cn } from "@/lib/utils";
 
 /** Las zonas que un negocio colombiano puede necesitar de verdad. */
@@ -173,7 +174,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
             id="timeZone"
             name="timeZone"
             defaultValue={operacion.timeZone}
-            className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+            className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
           >
             {ZONAS.map((zona) => (
               <option key={zona} value={zona}>
@@ -246,7 +247,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
           id="receiptWidth"
           name="receiptWidth"
           defaultValue={operacion.receiptWidth}
-          className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+          className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
         >
           <option value={ReceiptWidth.MM80}>80 mm</option>
           <option value={ReceiptWidth.MM55}>55 mm</option>
@@ -357,7 +358,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
-              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="size-2 rounded-full bg-success animate-pulse" />
               Enlace del Turnero para la TV del Salón
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -400,7 +401,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
               name="turneroMediaMode"
               value={modo}
               onChange={(e) => setModo(e.target.value)}
-              className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+              className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
             >
               <option value="NONE">Sin multimedia (Fondo Oscuro Estándar)</option>
               <option value="IMAGES">Carrusel de Imágenes Publicitarias</option>
@@ -414,7 +415,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
               id="turneroBadgePosition"
               name="turneroBadgePosition"
               defaultValue={settings.turneroBadgePosition}
-              className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+              className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
             >
               <option value="TOP_RIGHT">Esquina Superior Derecha</option>
               <option value="TOP_LEFT">Esquina Superior Izquierda</option>
@@ -562,7 +563,7 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
             {dias !== null && (
               <div>
                 <dt className="text-muted-foreground">Días de servicio restantes:</dt>
-                <dd className={`numeral font-bold ${dias <= 3 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                <dd className={`numeral font-bold ${dias <= 3 ? "text-destructive" : "text-success-soft"}`}>
                   {dias > 0 ? `${dias} días` : "Servicio suspendido (renová para trabajar)"}
                 </dd>
               </div>
@@ -589,7 +590,7 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
               </DialogHeader>
 
               {suscripcion?.status === "PRUEBA" ? (
-                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+                <div className="p-4 rounded-xl bg-warning/10 border border-warning/30 text-warning-soft text-xs space-y-2">
                   <span className="font-bold block">⚠️ Plan de Prueba Gratuita (7 Días)</span>
                   <p className="leading-relaxed">
                     Las sedes adicionales únicamente pueden crearse tras adquirir una licencia de pago activa.
@@ -654,19 +655,19 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="p-3 rounded-lg border border-border bg-card">
             <span className="font-bold text-foreground block">1 Sucursal</span>
-            <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 block">$50.000 COP / mes</span>
-            <span className="text-[11px] text-muted-foreground">Todos los módulos incluidos (Salón, POS, Cocina, Caja, Inventario, Recetas e Informes).</span>
+            <span className="text-base font-extrabold text-success-soft block">$50.000 COP / mes</span>
+            <span className="text-rotulo text-muted-foreground">Todos los módulos incluidos (Salón, POS, Cocina, Caja, Inventario, Recetas e Informes).</span>
           </div>
 
           <div className="p-3 rounded-lg border border-border bg-card">
             <span className="font-bold text-foreground block">2 Sucursales</span>
-            <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 block">$80.000 COP / mes</span>
-            <span className="text-[11px] text-muted-foreground">Ahorro de $20.000 COP/mes en la segunda sede.</span>
+            <span className="text-base font-extrabold text-success-soft block">$80.000 COP / mes</span>
+            <span className="text-rotulo text-muted-foreground">Ahorro de $20.000 COP/mes en la segunda sede.</span>
           </div>
         </div>
 
         <div className="p-3 rounded-lg border border-brand/30 bg-brand/5 text-xs space-y-1">
-          <span className="font-bold text-brand dark:text-[#3E9EA2] block">✨ Descuentos por Pago Anticipado</span>
+          <span className="font-bold text-brand block">✨ Descuentos por Pago Anticipado</span>
           <p className="text-muted-foreground">
             • <strong>6 Meses (Semestral):</strong> 10% de descuento ($270.000 para 1 sede / $432.000 para 2 sedes).<br />
             • <strong>12 Meses (Anual):</strong> 20% de descuento ($480.000 para 1 sede / $768.000 para 2 sedes).<br />
@@ -687,6 +688,7 @@ export type QrMenuSettingsProps = {
   qrMenuLogoUrl: string | null;
   qrMenuHeaderTitle: string | null;
   qrMenuHeaderSubtitle: string | null;
+  qrMenuAccent: string;
   slug: string;
   mesas: { id: string; name: string }[];
   deliveryEnabled?: boolean;
@@ -769,6 +771,16 @@ const BRAND_THEMES = [
 ];
 
 // ─── Paleta de Colores Sólidos Gastronómicos ───
+/** Los acentos de los seis temas de marca, para elegir uno sin abrir el tema entero. */
+const ACENTOS = [
+  { name: "Brasa Platlia", hex: "#FF4E1F" },
+  { name: "Ámbar Espresso", hex: "#D97706" },
+  { name: "Rojo Parrilla", hex: "#EF4444" },
+  { name: "Verde Esmeralda", hex: "#10B981" },
+  { name: "Rosa Trattoria", hex: "#F43F5E" },
+  { name: "Azul Titanio", hex: "#38BDF8" },
+];
+
 const COLOR_PRESETS = [
   { name: "Hierro Fundido", hex: "#171512", desc: "Oscuro carbón de cocina" },
   { name: "Brasa Ahumada", hex: "#2B140E", desc: "Cálido rojizo fuego" },
@@ -852,6 +864,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
   const [headerSubtitle, setHeaderSubtitle] = useState(
     settings.qrMenuHeaderSubtitle || "Pide directo y recibe tus platos calientes",
   );
+  const [accent, setAccent] = useState(settings.qrMenuAccent || "#FF4E1F");
 
   // Estado interactivo de UI
   const [subiendoLogo, setSubiendoLogo] = useState(false);
@@ -874,6 +887,9 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
     setBgGradient(tema.bgGradient);
     setHeaderTitle(tema.title);
     setHeaderSubtitle(tema.subtitle);
+    // El acento venía definido en cada preset desde el principio y se descartaba
+    // acá: por eso los seis temas cambiaban el fondo y ninguno el botón.
+    setAccent(tema.accent);
   };
 
   const copiarEnlace = (url: string, id: string) => {
@@ -1126,7 +1142,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
             )}
           >
             <span className="text-xs sm:text-sm font-bold">{tab.label}</span>
-            <span className="text-[10px] text-[var(--linea)] opacity-80">{tab.desc}</span>
+            <span className="text-rotulo text-[var(--linea)] opacity-80">{tab.desc}</span>
           </button>
         ))}
       </div>
@@ -1146,6 +1162,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
           <input type="hidden" name="qrMenuLogoUrl" value={logoUrl} />
           <input type="hidden" name="qrMenuHeaderTitle" value={headerTitle} />
           <input type="hidden" name="qrMenuHeaderSubtitle" value={headerSubtitle} />
+          <input type="hidden" name="qrMenuAccent" value={accent} />
 
           {/* ══════════════════════════════════════════════════════════════════
               PESTAÑA 1: IDENTIDAD VISUAL & TEMA
@@ -1187,7 +1204,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
                       <div className="flex items-center justify-between z-10">
                         <span className="text-lg">{tema.icon}</span>
-                        <span className="text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-[var(--tinta)]/80 text-[var(--papel)] border border-[var(--linea-30)]">
+                        <span className="text-rotulo font-mono uppercase px-1.5 py-0.5 rounded bg-[var(--tinta)]/80 text-[var(--papel)] border border-[var(--linea-30)]">
                           {tema.tag}
                         </span>
                       </div>
@@ -1262,6 +1279,60 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                     </div>
                   </div>
                 )}
+
+                {/* ─── Color de acento ───────────────────────────────────────
+                    El fondo ya se elegía; esto es lo que faltaba. Los botones,
+                    los precios y los totales del menú se pintan con este color.
+                    ─────────────────────────────────────────────────────────── */}
+                <div className="space-y-3 pt-3 border-t border-dashed border-[var(--linea-30)]">
+                  <div>
+                    <span className="text-xs font-semibold text-[var(--papel)] block">
+                      Color de acento
+                    </span>
+                    <span className="text-rotulo text-muted-foreground block">
+                      Con este color se pintan los botones, los precios y el total del menú.
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {ACENTOS.map((op) => (
+                      <button
+                        key={op.hex}
+                        type="button"
+                        onClick={() => setAccent(op.hex)}
+                        title={op.name}
+                        aria-label={`Acento ${op.name}`}
+                        aria-pressed={accent === op.hex}
+                        className={cn(
+                          "size-11 rounded-full border-2 transition-all cursor-pointer",
+                          accent === op.hex
+                            ? "border-[var(--papel)] ring-2 ring-[var(--papel)]/40 scale-110"
+                            : "border-[var(--linea-30)] hover:border-[var(--papel-60)]",
+                        )}
+                        style={{ backgroundColor: op.hex }}
+                      />
+                    ))}
+                    <label className="flex items-center gap-2 text-rotulo text-muted-foreground">
+                      <span>Otro</span>
+                      <input
+                        type="color"
+                        value={accent}
+                        onChange={(e) => setAccent(e.target.value.toUpperCase())}
+                        aria-label="Elegir otro color de acento"
+                        className="size-11 cursor-pointer rounded-lg border border-[var(--linea-30)] bg-transparent p-1"
+                      />
+                    </label>
+                  </div>
+                  {/* El color lo elige una persona que no está mirando la norma de
+                      contraste: si el acento no se lee sobre el fondo, se avisa acá
+                      y no en la calle, con el cliente adelante. */}
+                  {!acentoSirveComoTexto(accent, bgMode === "SOLID" ? bgColor : "#171512") && (
+                    <p className="flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-rotulo text-warning-soft">
+                      Ese acento queda muy cerca del fondo. Los botones se van a ver bien,
+                      pero los precios escritos con él se leen apenas: el menú los va a
+                      aclarar solo para que no desaparezcan.
+                    </p>
+                  )}
+                </div>
 
                 {/* Vista: Degradados en Cuadrícula */}
                 {bgMode === "GRADIENT" && (
@@ -1339,7 +1410,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                           <button
                             type="button"
                             onClick={() => setBgImageUrl("")}
-                            className="p-1.5 rounded-lg border border-[var(--linea-30)] text-rose-400 hover:bg-rose-950/40 text-xs"
+                            className="p-1.5 rounded-lg border border-[var(--linea-30)] text-destructive-soft hover:bg-destructive/40 text-xs"
                             title="Quitar imagen"
                           >
                             🗑️
@@ -1393,13 +1464,13 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                           variant="outline"
                           size="sm"
                           onClick={() => setLogoUrl("")}
-                          className="text-xs text-rose-400 border-rose-900/40 hover:bg-rose-950/30"
+                          className="text-xs text-destructive-soft border-destructive/40 hover:bg-destructive/30"
                         >
                           Quitar Logo
                         </Button>
                       )}
                     </div>
-                    <p className="text-[11px] text-[var(--linea)]">
+                    <p className="text-rotulo text-[var(--linea)]">
                       Formatos recomendados: PNG o JPG cuadrado (mínimo 200x200 px).
                     </p>
                   </div>
@@ -1431,7 +1502,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
                 {/* Presets de Títulos */}
                 <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] text-[var(--linea)] block font-semibold">
+                  <span className="text-rotulo text-[var(--linea)] block font-semibold">
                     Frases rápidas sugeridas:
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -1467,7 +1538,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
                 {/* Presets de Subtítulos */}
                 <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] text-[var(--linea)] block font-semibold">
+                  <span className="text-rotulo text-[var(--linea)] block font-semibold">
                     Mensajes de llamado a la acción:
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -1511,7 +1582,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   </div>
                   <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl text-center space-y-1">
                     <span className="text-xs text-[var(--linea)] block">Notificación:</span>
-                    <span className="font-mono font-bold text-sm text-emerald-400">EN TIEMPO REAL</span>
+                    <span className="font-mono font-bold text-sm text-success-soft">EN TIEMPO REAL</span>
                   </div>
                 </div>
               </div>
@@ -1644,7 +1715,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                               className="size-16 rounded-lg border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-sm"
                             />
                             <div className="text-xs space-y-1 min-w-0 flex-1">
-                              <span className="text-[11px] text-[var(--linea)] block truncate font-mono">
+                              <span className="text-rotulo text-[var(--linea)] block truncate font-mono">
                                 /m/{settings.slug}?mesa={mesa.name}
                               </span>
                               <a
@@ -1689,7 +1760,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
             </span>
 
             {/* Alternador de vista previa */}
-            <div className="flex bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-lg p-0.5 text-[10px]">
+            <div className="flex bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-lg p-0.5 text-rotulo">
               <button
                 type="button"
                 onClick={() => setPreviewModo("domicilio")}
@@ -1742,12 +1813,12 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   <h4 className="font-black font-display text-base leading-tight uppercase tracking-tight text-[var(--papel)]">
                     {headerTitle || "Menú Digital"}
                   </h4>
-                  <p className="text-[10.5px] text-[var(--linea)] leading-tight mt-0.5">
+                  <p className="text-rotulo text-[var(--linea)] leading-tight mt-0.5">
                     {headerSubtitle || "Pide directo desde tu celular"}
                   </p>
                 </div>
 
-                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--panel-2)]/90 border border-[var(--linea-30)] text-[10px] font-mono font-bold text-[var(--brasa)]">
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--panel-2)]/90 border border-[var(--linea-30)] text-rotulo font-mono font-bold text-[var(--brasa)]">
                   {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : "🛵 Domicilio · 25-40 min"}
                 </div>
               </div>
@@ -1755,12 +1826,12 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
               {/* Contenido Simulado de la Carta */}
               <div className="p-3 flex-1 space-y-2.5 bg-black/20 overflow-y-auto">
                 {/* Buscador ficticio */}
-                <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-[10px] text-[var(--linea)] border border-white/10">
+                <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-rotulo text-[var(--linea)] border border-white/10">
                   🔍 Buscar hamburguesa, cerveza...
                 </div>
 
                 {/* Categorías simuladas */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 text-[9.5px] font-mono">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 text-rotulo font-mono">
                   <span className="px-2 py-0.5 rounded-full bg-[var(--brasa)] text-[var(--tinta)] font-bold shrink-0">
                     Todas (12)
                   </span>
@@ -1799,7 +1870,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                         <span className="font-bold text-xs text-[var(--papel)]">{plato.nombre}</span>
                         <span className="font-mono font-bold text-xs text-[var(--brasa)]">{plato.precio}</span>
                       </div>
-                      <p className="text-[10px] text-[var(--linea)] leading-tight">{plato.desc}</p>
+                      <p className="text-rotulo text-[var(--linea)] leading-tight">{plato.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -1831,7 +1902,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
             <div id="tarjeta-qr-print-wrapper" className="flex items-center justify-center p-2 w-full my-auto">
               <div
                 id="tarjeta-qr-print"
-                className="w-[290px] min-w-[290px] max-w-[290px] rounded-2xl border-2 border-slate-900 bg-[#EDE7DA] p-5 text-[#171512] flex flex-col items-center text-center space-y-3.5 shadow-xl shrink-0 mx-auto"
+                className="w-[290px] min-w-[290px] max-w-[290px] rounded-2xl border-2 border-[var(--tinta)] bg-[#EDE7DA] p-5 text-[#171512] flex flex-col items-center text-center space-y-3.5 shadow-xl shrink-0 mx-auto"
               >
                 {/* Logo / Header */}
                 <div className="flex flex-col items-center space-y-1 w-full">
@@ -1849,7 +1920,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   <h3 className="font-black text-base uppercase tracking-tight text-[#171512] leading-tight w-full truncate text-center">
                     {headerTitle || "Menú Digital"}
                   </h3>
-                  <p className="text-[11px] text-[#555047] font-medium leading-tight max-w-[240px] mx-auto text-center">
+                  <p className="text-rotulo text-[#555047] font-medium leading-tight max-w-[240px] mx-auto text-center">
                     {headerSubtitle || "Pide directo desde tu celular"}
                   </p>
                 </div>
@@ -1873,13 +1944,13 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 {/* Instrucciones */}
                 <div className="space-y-0.5 text-xs text-[#171512] w-full text-center">
                   <p className="font-extrabold text-[#171512] text-center text-xs">📱 Escaneá con tu celular</p>
-                  <p className="text-[10.5px] text-[#555047] max-w-[230px] mx-auto leading-tight text-center">
+                  <p className="text-rotulo text-[#555047] max-w-[230px] mx-auto leading-tight text-center">
                     {tarjetaImprimir.subtitulo}
                   </p>
                 </div>
 
                 {/* URL Footer */}
-                <div className="w-full text-[9.5px] font-mono text-[#777063] border-t border-[#C9C2AF] pt-2 text-center truncate">
+                <div className="w-full text-rotulo font-mono text-[#777063] border-t border-[#C9C2AF] pt-2 text-center truncate">
                   {tarjetaImprimir.url}
                 </div>
               </div>
@@ -1997,7 +2068,7 @@ function CampoSecreto({
         placeholder={cargada ? "•••••••• (guardada)" : "Pegá el valor de Factus"}
         className="h-10 text-xs rounded-xl font-mono"
       />
-      <span className="text-[11px] text-muted-foreground block">
+      <span className="text-rotulo text-muted-foreground block">
         {cargada
           ? "Ya está guardada. Dejalo vacío para conservarla."
           : "Todavía no está cargada."}
@@ -2019,7 +2090,7 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
   return (
     <div className="space-y-6">
       {!habilitado ? (
-        <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 space-y-2">
+        <div className="p-5 rounded-2xl bg-warning/10 border border-warning/30 text-warning-soft space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-base font-bold">🚫 Módulo de Facturación Electrónica DIAN Deshabilitado</span>
           </div>
@@ -2037,7 +2108,7 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
           )}
 
           {estado.ok && (
-            <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            <Alert className="border-success/40 bg-success/10 text-success-soft">
               <AlertDescription>¡Configuración DIAN guardada con éxito!</AlertDescription>
             </Alert>
           )}
@@ -2045,16 +2116,16 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
           {/* Tarjeta de Resumen de Paquete */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-4 rounded-xl bg-brand/5 border border-brand/20 space-y-1">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Paquete Total</span>
-              <p className="numeral text-2xl font-bold text-brand dark:text-[#3E9EA2]">{disponibles} <span className="text-xs font-normal">docs</span></p>
+              <span className="text-rotulo font-semibold text-muted-foreground uppercase">Paquete Total</span>
+              <p className="numeral text-2xl font-bold text-brand">{disponibles} <span className="text-xs font-normal">docs</span></p>
             </div>
             <div className="p-4 rounded-xl bg-card border border-border space-y-1">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Emitidos / Consumidos</span>
+              <span className="text-rotulo font-semibold text-muted-foreground uppercase">Emitidos / Consumidos</span>
               <p className="numeral text-2xl font-bold text-foreground">{consumidos} <span className="text-xs font-normal">docs</span></p>
             </div>
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
-              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 uppercase">Remanentes</span>
-              <p className="numeral text-2xl font-bold text-emerald-700 dark:text-emerald-400">{remanentes} <span className="text-xs font-normal">docs</span></p>
+            <div className="p-4 rounded-xl bg-success/10 border border-success/30 space-y-1">
+              <span className="text-rotulo font-semibold text-success-soft uppercase">Remanentes</span>
+              <p className="numeral text-2xl font-bold text-success-soft">{remanentes} <span className="text-xs font-normal">docs</span></p>
             </div>
           </div>
 
@@ -2065,27 +2136,27 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
             className={cn(
               "p-4 rounded-xl border space-y-2",
               listo
-                ? "bg-emerald-500/10 border-emerald-500/30"
-                : "bg-amber-500/10 border-amber-500/30",
+                ? "bg-success/10 border-success/30"
+                : "bg-warning/10 border-warning/30",
             )}
           >
             {listo ? (
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+              <p className="text-sm font-bold text-success-soft">
                 ✅ Listo para facturar · {remanentes} documentos disponibles
               </p>
             ) : (
               <>
-                <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                <p className="text-sm font-bold text-warning-soft">
                   Falta configurar para poder facturar
                 </p>
-                <ul className="list-disc space-y-0.5 pl-5 text-xs text-amber-800 dark:text-amber-200">
+                <ul className="list-disc space-y-0.5 pl-5 text-xs text-warning-soft">
                   {settings.faltantes.map((falta) => (
                     <li key={falta}>{falta}</li>
                   ))}
                 </ul>
               </>
             )}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-rotulo text-muted-foreground">
               Mientras esto no esté completo, el cobro en Caja y en el POS no pide
               datos del cliente y toda venta se factura a consumidor final.
             </p>
@@ -2144,7 +2215,7 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
                   className="h-10 text-xs rounded-xl font-mono"
                   required
                 />
-                <span className="text-[11px] text-muted-foreground block">ID del rango activo obtenido en Factus para tus facturas.</span>
+                <span className="text-rotulo text-muted-foreground block">ID del rango activo obtenido en Factus para tus facturas.</span>
               </div>
 
               <div className="space-y-1.5">
@@ -2157,7 +2228,7 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
                   className="h-10 text-xs rounded-xl font-mono"
                   required
                 />
-                <span className="text-[11px] text-muted-foreground block">Código DANE oficial de 5 dígitos del municipio de la sede.</span>
+                <span className="text-rotulo text-muted-foreground block">Código DANE oficial de 5 dígitos del municipio de la sede.</span>
               </div>
 
               <div className="space-y-1.5">
@@ -2238,7 +2309,7 @@ export function FormularioFactus({ settings }: { settings: FactusSettings }) {
             </Alert>
           )}
           {prueba.ok && prueba.data && (
-            <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            <Alert className="border-success/40 bg-success/10 text-success-soft">
               <AlertDescription>{prueba.data.mensaje}</AlertDescription>
             </Alert>
           )}

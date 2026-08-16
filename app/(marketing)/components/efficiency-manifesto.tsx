@@ -53,7 +53,7 @@ export function EfficiencyManifesto() {
 
           {/* Pilar 2: Rotación de Mesas & Rentabilidad */}
           <div className="rounded-2xl border-2 border-[var(--brasa)] bg-[var(--panel-2)] p-8 flex flex-col justify-between shadow-2xl relative group scale-[1.02]">
-            <div className="absolute -top-3.5 right-6 bg-[var(--brasa)] text-[var(--tinta)] font-mono text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md">
+            <div className="absolute -top-3.5 right-6 bg-[var(--brasa)] text-[var(--tinta)] font-mono text-rotulo font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md">
               IMPACTO DIRECTO EN CAJA
             </div>
 

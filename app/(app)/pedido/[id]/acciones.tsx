@@ -217,7 +217,7 @@ export function PedirCuenta({ orderId, esMesa }: { orderId: string; esMesa?: boo
       <Button
         type="submit"
         variant="outline"
-        className="w-full border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold h-11 shadow-sm gap-2"
+        className="w-full border-warning/50 bg-warning/10 hover:bg-warning/20 text-warning-soft font-bold h-11 shadow-sm gap-2"
         disabled={isPending}
       >
         {isPending ? "Enviando ticket a caja…" : "🧾 Pedir la cuenta (Enviar a caja)"}
@@ -270,7 +270,7 @@ export function Cobrar({
           id="metodo"
           name="method"
           defaultValue={PaymentMethod.EFECTIVO}
-          className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+          className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
         >
           {Object.values(PaymentMethod).map((metodo) => (
             <option key={metodo} value={metodo}>
@@ -325,7 +325,7 @@ export function ConfirmarPedido({
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg gap-2 h-12 text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+        className="w-full bg-success hover:bg-success/90 text-white font-bold shadow-lg gap-2 h-12 text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
         disabled={isPending}
       >
         {isPending

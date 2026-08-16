@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useVistaEnUrl } from "@/lib/vista-en-url";
 import {
   Blocks,
   Building2,
@@ -61,6 +61,7 @@ type PanelConfiguracionProps = {
     qrMenuLogoUrl: string | null;
     qrMenuHeaderTitle: string | null;
     qrMenuHeaderSubtitle: string | null;
+    qrMenuAccent: string;
     facturacionElectronicaHabilitada: boolean;
     paquetesDocumentosDisponibles: number;
     documentosEmitidosConsumidos: number;
@@ -107,7 +108,13 @@ export function PanelConfiguracion({
   slug,
   mesas,
 }: PanelConfiguracionProps) {
-  const [tabActiva, setTabActiva] = useState<TabId>("datos");
+  // La pestaña vive en la URL: es lo que permite que el menú lateral enlace
+  // "Menú digital QR" en vez de dejar al usuario buscarla adentro.
+  const [tabActiva, setTabActiva] = useVistaEnUrl<TabId>(
+    "vista",
+    ["datos", "modulos", "turnero", "qr", "operacion", "factus", "licencia"],
+    "datos",
+  );
 
   const tabs = [
     { id: "datos" as TabId, label: "Datos del negocio", icono: Building2 },
@@ -137,10 +144,10 @@ export function PanelConfiguracion({
               type="button"
               onClick={() => setTabActiva(tab.id)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
+                "inline-flex min-h-11 tableta:min-h-9 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
                 activa
                   ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
-                  : "bg-[var(--panel-2)] text-[var(--muted)] border-[var(--linea-30)] hover:text-[var(--papel)]",
+                  : "bg-[var(--panel-2)] text-muted-foreground border-[var(--linea-30)] hover:text-[var(--papel)]",
               )}
             >
               <Icono className="h-4 w-4 shrink-0" />
@@ -227,6 +234,7 @@ export function PanelConfiguracion({
                 qrMenuLogoUrl: settings.qrMenuLogoUrl,
                 qrMenuHeaderTitle: settings.qrMenuHeaderTitle,
                 qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
+                qrMenuAccent: settings.qrMenuAccent,
                 slug,
                 mesas,
                 deliveryEnabled: settings.deliveryEnabled,

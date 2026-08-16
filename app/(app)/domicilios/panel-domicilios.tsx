@@ -29,11 +29,11 @@ type PanelDomiciliosProps = {
 
 const ESTADOS_DELIVERY = [
   { id: "TODOS", label: "Todos" },
-  { id: "PENDIENTE", label: "🟡 Recibidos", color: "bg-amber-500/10 text-amber-500 border-amber-500/30" },
-  { id: "EN_PREPARACION", label: "🟠 En cocina", color: "bg-orange-500/10 text-orange-500 border-orange-500/30" },
-  { id: "EN_CAMINO", label: "🔵 En reparto", color: "bg-blue-500/10 text-blue-500 border-blue-500/30" },
-  { id: "ENTREGADO", label: "🟢 Entregados", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" },
-  { id: "CANCELADO", label: "🔴 Anulados", color: "bg-red-500/10 text-red-500 border-red-500/30" },
+  { id: "PENDIENTE", label: "🟡 Recibidos", color: "bg-warning/10 text-warning-soft border-warning/30" },
+  { id: "EN_PREPARACION", label: "🟠 En cocina", color: "bg-warning/10 text-warning-soft border-warning/30" },
+  { id: "EN_CAMINO", label: "🔵 En reparto", color: "bg-info/10 text-info-soft border-info/30" },
+  { id: "ENTREGADO", label: "🟢 Entregados", color: "bg-success/10 text-success-soft border-success/30" },
+  { id: "CANCELADO", label: "🔴 Anulados", color: "bg-destructive/10 text-destructive-soft border-destructive/30" },
 ];
 
 export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) {
@@ -95,10 +95,10 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                 type="button"
                 onClick={() => setFiltroEstado(est.id)}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 border",
+                  "inline-flex min-h-11 tableta:min-h-9 items-center rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 border",
                   filtroEstado === est.id
                     ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] shadow-sm font-bold"
-                    : "bg-[var(--panel-2)] text-[var(--muted)] hover:text-[var(--papel)] border-[var(--linea-30)]",
+                    : "bg-[var(--panel-2)] text-muted-foreground hover:text-[var(--papel)] border-[var(--linea-30)]",
                 )}
               >
                 {est.label} ({count})
@@ -132,7 +132,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(20rem,100%),1fr))] gap-4">
           {domiciliosFiltrados.map((pedido) => {
             const esAnulado = pedido.status === "ANULADA" || pedido.deliveryStatus === "CANCELADO";
             const celLimpio = pedido.customerPhone ? pedido.customerPhone.replace(/\D/g, "") : "";
@@ -143,9 +143,9 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                 key={pedido.id}
                 className={cn(
                   "shadow-sm transition-all border flex flex-col justify-between",
-                  pedido.deliveryStatus === "PENDIENTE" && "border-amber-500/50 bg-amber-500/5",
-                  pedido.deliveryStatus === "EN_CAMINO" && "border-blue-500/50 bg-blue-500/5",
-                  pedido.deliveryStatus === "ENTREGADO" && "border-emerald-500/30 bg-emerald-500/5",
+                  pedido.deliveryStatus === "PENDIENTE" && "border-warning/50 bg-warning/5",
+                  pedido.deliveryStatus === "EN_CAMINO" && "border-info/50 bg-info/5",
+                  pedido.deliveryStatus === "ENTREGADO" && "border-success/30 bg-success/5",
                   esAnulado && "opacity-60 bg-muted/20 border-border",
                 )}
               >
@@ -160,7 +160,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                             Turno 0{pedido.turnNumber}
                           </Badge>
                         )}
-                        <Badge variant="secondary" className="font-bold text-[10px] bg-brand/10 text-brand dark:text-brand-accent">
+                        <Badge variant="secondary" className="font-bold text-rotulo bg-brand/10 text-brand-accent">
                           {pedido.channel === "DOMICILIO_QR"
                             ? "🛵 Domicilio QR"
                             : pedido.channel === "MESA_QR"
@@ -182,12 +182,12 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                       </Badge>
                     </div>
 
-                    <div className="text-[11px] text-muted-foreground flex items-center justify-between gap-1">
+                    <div className="text-rotulo text-muted-foreground flex items-center justify-between gap-1">
                       <div className="flex items-center gap-1">
                         <Clock className="size-3.5 shrink-0" />
                         <span>{formatDateTimeInTimeZone(pedido.openedAt, timeZone)}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-muted-foreground">Origen: {pedido.channel}</span>
+                      <span className="text-rotulo font-mono text-muted-foreground">Origen: {pedido.channel}</span>
                     </div>
                   </div>
 
@@ -195,11 +195,11 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                   <div className="rounded-xl border border-border/80 bg-background/80 p-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between font-bold text-foreground">
                       <div className="flex items-center gap-1.5 truncate">
-                        <User className="size-3.5 text-brand dark:text-brand-accent shrink-0" />
+                        <User className="size-3.5 text-brand-accent shrink-0" />
                         <span className="truncate">{pedido.customerName || "Cliente Domicilio"}</span>
                       </div>
                       {pedido.docType && pedido.docNumber && (
-                        <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+                        <span className="text-rotulo font-mono text-muted-foreground shrink-0">
                           {pedido.docType}: {pedido.docNumber}
                         </span>
                       )}
@@ -216,7 +216,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                             href={waUrl}
                             target="_blank"
                             rel="noopener"
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                            className="inline-flex items-center gap-1 text-rotulo font-bold text-success-soft hover:underline"
                           >
                             <MessageSquare className="size-3" /> WhatsApp
                           </a>
@@ -226,7 +226,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
 
                     {pedido.deliveryAddress && (
                       <div className="flex items-start gap-1.5 text-foreground font-medium pt-0.5 border-t border-border/50">
-                        <MapPin className="size-3.5 text-brand dark:text-brand-accent shrink-0 mt-0.5" />
+                        <MapPin className="size-3.5 text-brand-accent shrink-0 mt-0.5" />
                         <span className="leading-snug">{pedido.deliveryAddress}</span>
                       </div>
                     )}
@@ -234,7 +234,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
 
                   {/* Renglones del Pedido */}
                   <div className="space-y-1.5 pt-1">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <h4 className="text-rotulo font-bold uppercase tracking-wider text-muted-foreground">
                       Productos ({pedido.items.reduce((acc, i) => acc + i.quantity, 0)})
                     </h4>
                     <div className="space-y-1 max-h-36 overflow-y-auto pr-1 text-xs">
@@ -245,7 +245,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                               {item.quantity}x {item.nameSnapshot}
                             </span>
                             {item.notes && (
-                              <span className="block text-[11px] text-amber-600 dark:text-amber-400 italic">
+                              <span className="block text-rotulo text-warning-soft italic">
                                 📝 {item.notes}
                               </span>
                             )}
@@ -259,7 +259,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
 
                     <div className="flex justify-between items-center pt-2 font-black text-sm text-foreground border-t border-border">
                       <span>Total</span>
-                      <span className="numeral text-base text-brand dark:text-brand-accent">
+                      <span className="numeral text-base text-brand-accent">
                         {formatCop(pedido.totalCop)}
                       </span>
                     </div>
@@ -275,7 +275,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                             size="sm"
                             disabled={cargandoId === pedido.id}
                             onClick={() => cambiarEstado(pedido.id, "EN_PREPARACION")}
-                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs h-8"
+                            className="bg-warning hover:bg-warning/90 text-white font-bold text-xs h-8"
                           >
                             En preparación
                           </Button>
@@ -286,7 +286,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                             size="sm"
                             disabled={cargandoId === pedido.id}
                             onClick={() => cambiarEstado(pedido.id, "EN_CAMINO")}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-8"
+                            className="bg-info hover:bg-info/90 text-white font-bold text-xs h-8"
                           >
                             En camino
                           </Button>
@@ -297,7 +297,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                             size="sm"
                             disabled={cargandoId === pedido.id}
                             onClick={() => cambiarEstado(pedido.id, "ENTREGADO")}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
+                            className="bg-success hover:bg-success/90 text-white font-bold text-xs h-8"
                           >
                             Entregado
                           </Button>
@@ -309,7 +309,7 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                           size="sm"
                           disabled={cargandoId === pedido.id}
                           onClick={() => cambiarEstado(pedido.id, "CANCELADO")}
-                          className="text-red-500 border-red-500/30 hover:bg-red-500/10 text-xs h-8"
+                          className="text-destructive-soft border-destructive/30 hover:bg-destructive/10 text-xs h-8"
                         >
                           Anular
                         </Button>

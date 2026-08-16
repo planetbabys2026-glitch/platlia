@@ -58,7 +58,7 @@ export default async function ConfiguracionPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Configuración</h1>
         <p className="text-muted-foreground text-sm">
           Todo lo que acá se cambia vale solo para este negocio.
         </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useVistaEnUrl } from "@/lib/vista-en-url";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,12 @@ export function VistaInventario({
   categories?: Array<{ id: string; name: string }>;
   recipesEnabled: boolean;
 }) {
-  const [tabActiva, setTabActiva] = useState("stock");
+  // La pestaña vive en la URL para que el menú lateral pueda enlazar cada vista.
+  const [tabActiva, setTabActiva] = useVistaEnUrl(
+    "vista",
+    ["stock", "bebidas", "facturas", "recetas", "proveedores"] as const,
+    "stock",
+  );
   const [busqueda, setBusqueda] = useState("");
   const [openInsumoModal, setOpenInsumoModal] = useState(false);
   const [openBebidaModal, setOpenBebidaModal] = useState(false);
@@ -187,7 +193,7 @@ export function VistaInventario({
         <Card>
           <CardContent className="p-4 space-y-1">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valor Total del Stock</p>
-            <p className="numeral text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+            <p className="numeral text-2xl font-bold text-success-soft">
               {formatCop(summary.valorTotalCOP)}
             </p>
           </CardContent>
@@ -206,7 +212,7 @@ export function VistaInventario({
           <CardContent className="p-4 space-y-1">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Insumos Bajo Stock Mínimo</p>
             <div className="flex items-center gap-2">
-              <p className={`numeral text-2xl font-bold ${summary.bajoStockCount > 0 ? "text-rose-600 dark:text-rose-400" : "text-foreground"}`}>
+              <p className={`numeral text-2xl font-bold ${summary.bajoStockCount > 0 ? "text-destructive-soft" : "text-foreground"}`}>
                 {summary.bajoStockCount}
               </p>
               {summary.bajoStockCount > 0 && (
@@ -223,9 +229,19 @@ export function VistaInventario({
       {/* ─────────────────────────────────────────────────────────────
           PESTAÑAS DEL MÓDULO DE INVENTARIO
           ───────────────────────────────────────────────────────────── */}
-      <Tabs value={tabActiva} onValueChange={setTabActiva} className="w-full">
+      <Tabs
+        value={tabActiva}
+        // `Tabs` entrega un `string` suelto; la vista es un conjunto cerrado y el
+        // hook ya descarta lo que no pertenece.
+        onValueChange={(v) => setTabActiva(v as typeof tabActiva)}
+        className="w-full"
+      >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-border pb-3">
-          <TabsList className="inline-flex w-full sm:w-auto items-center justify-start overflow-x-auto p-1 bg-muted/60 scrollbar-none rounded-xl border border-border/50 shadow-xs flex-nowrap shrink-0">
+          {/* `min-w-0` y sin `shrink-0`: la tira tiene cinco pestañas y no entra
+              al lado de los botones de acción. Con `shrink-0` no cedía y empujaba
+              la fila 150px fuera de la pantalla en una tablet; ahora se encoge y
+              hace su propio scroll, que es para lo que tiene `overflow-x-auto`. */}
+          <TabsList className="inline-flex w-full min-w-0 sm:w-auto items-center justify-start overflow-x-auto p-1 bg-muted/60 scrollbar-none rounded-xl border border-border/50 shadow-xs flex-nowrap">
             <TabsTrigger value="stock" className="text-xs font-semibold gap-1.5 shrink-0 whitespace-nowrap px-3 py-1.5">
               <Boxes className="size-3.5" />
               <span>Insumos ({summary.totalItems})</span>
@@ -422,12 +438,12 @@ export function VistaInventario({
                 <Card key={sup.id} className="p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold text-sm text-foreground">{sup.name}</span>
-                    {sup.taxId && <Badge variant="outline" className="text-[10px]">{sup.taxId}</Badge>}
+                    {sup.taxId && <Badge variant="outline" className="text-rotulo">{sup.taxId}</Badge>}
                   </div>
                   {sup.phone && <p className="text-xs text-muted-foreground">Tel: {sup.phone}</p>}
                   {sup.email && <p className="text-xs text-muted-foreground">Correo: {sup.email}</p>}
                   {sup.address && <p className="text-xs text-muted-foreground">Dirección: {sup.address}</p>}
-                  <p className="text-[11px] font-semibold text-brand dark:text-[#3E9EA2] pt-1">
+                  <p className="text-rotulo font-semibold text-brand pt-1">
                     {sup._count.invoices} facturas asociadas
                   </p>
                 </Card>
@@ -451,19 +467,19 @@ function TarjetaInsumo({ item }: { item: InsumoItem }) {
   const valorTotalItem = item.stockCurrent * item.costCop;
 
   return (
-    <Card className={`p-4 space-y-3 border ${bajoStock ? "border-rose-500/50 bg-rose-500/5" : "border-border"}`}>
+    <Card className={`p-4 space-y-3 border ${bajoStock ? "border-destructive/50 bg-destructive/5" : "border-border"}`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="font-bold text-sm text-foreground">{item.name}</h4>
-          {item.sku && <p className="text-[11px] text-muted-foreground font-mono">SKU: {item.sku}</p>}
+          {item.sku && <p className="text-rotulo text-muted-foreground font-mono">SKU: {item.sku}</p>}
         </div>
 
         <Badge
           variant="outline"
-          className={`text-[11px] font-semibold ${
+          className={`text-rotulo font-semibold ${
             bajoStock
-              ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              ? "border-destructive/40 bg-destructive/10 text-destructive-soft"
+              : "border-success/40 bg-success/10 text-success-soft"
           }`}
         >
           {bajoStock ? "Bajo Stock" : "Stock Normal"}
@@ -472,26 +488,26 @@ function TarjetaInsumo({ item }: { item: InsumoItem }) {
 
       <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-border/60">
         <div>
-          <span className="text-muted-foreground block text-[11px]">Stock Actual</span>
+          <span className="text-muted-foreground block text-rotulo">Stock Actual</span>
           <span className="numeral font-bold text-sm text-foreground">
             {item.stockCurrent} {item.unit}
           </span>
         </div>
         <div>
-          <span className="text-muted-foreground block text-[11px]">Stock Mínimo</span>
+          <span className="text-muted-foreground block text-rotulo">Stock Mínimo</span>
           <span className="numeral font-medium text-xs text-muted-foreground">
             {item.stockMin} {item.unit}
           </span>
         </div>
         <div>
-          <span className="text-muted-foreground block text-[11px]">Costo Unitario</span>
+          <span className="text-muted-foreground block text-rotulo">Costo Unitario</span>
           <span className="numeral font-medium text-xs text-foreground">
             {formatCop(item.costCop)} / {item.unit}
           </span>
         </div>
         <div>
-          <span className="text-muted-foreground block text-[11px]">Valor Total</span>
-          <span className="numeral font-bold text-xs text-emerald-600 dark:text-emerald-400">
+          <span className="text-muted-foreground block text-rotulo">Valor Total</span>
+          <span className="numeral font-bold text-xs text-success-soft">
             {formatCop(valorTotalItem)}
           </span>
         </div>
@@ -882,7 +898,7 @@ function ModalNuevaFactura({
                           <span className="font-semibold text-xs text-foreground block line-clamp-1">
                             {item.name}
                           </span>
-                          <span className="text-[10px] text-muted-foreground font-mono block">
+                          <span className="text-rotulo text-muted-foreground font-mono block">
                             Unidad: {item.unit} | Costo ref: {formatCop(item.costCop)}
                           </span>
                         </div>
@@ -892,7 +908,7 @@ function ModalNuevaFactura({
                             +{cantStaged}
                           </Badge>
                         ) : (
-                          <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px] font-bold gap-1 px-2">
+                          <Button type="button" size="sm" variant="ghost" className="h-7 text-rotulo font-bold gap-1 px-2">
                             <Plus className="size-3" /> Agregar
                           </Button>
                         )}
@@ -968,7 +984,7 @@ function ModalNuevaFactura({
                 {renglones.length === 0 ? (
                   <div className="p-8 text-center space-y-1 text-muted-foreground">
                     <p className="text-xs font-semibold">No se han agregado insumos</p>
-                    <p className="text-[11px]">Hacé clic en los insumos del panel izquierdo para ir armando el comprobante de compra.</p>
+                    <p className="text-rotulo">Hacé clic en los insumos del panel izquierdo para ir armando el comprobante de compra.</p>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
@@ -976,11 +992,11 @@ function ModalNuevaFactura({
                       <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border border-border text-xs">
                         <div className="flex-1 min-w-0">
                           <strong className="text-foreground block truncate">{r.name}</strong>
-                          <span className="text-[10px] text-muted-foreground font-mono">Unidad: {r.unit}</span>
+                          <span className="text-rotulo text-muted-foreground font-mono">Unidad: {r.unit}</span>
                         </div>
 
                         <div className="w-20">
-                          <label className="text-[9px] text-muted-foreground block font-semibold">Cantidad</label>
+                          <label className="text-rotulo text-muted-foreground block font-semibold">Cantidad</label>
                           <Input
                             type="number"
                             min="1"
@@ -991,7 +1007,7 @@ function ModalNuevaFactura({
                         </div>
 
                         <div className="w-28">
-                          <label className="text-[9px] text-muted-foreground block font-semibold">Costo COP</label>
+                          <label className="text-rotulo text-muted-foreground block font-semibold">Costo COP</label>
                           <Input
                             type="number"
                             min="0"
@@ -1002,7 +1018,7 @@ function ModalNuevaFactura({
                         </div>
 
                         <div className="w-24 text-right pr-1">
-                          <label className="text-[9px] text-muted-foreground block font-semibold">Subtotal</label>
+                          <label className="text-rotulo text-muted-foreground block font-semibold">Subtotal</label>
                           <span className="numeral font-bold text-xs text-foreground">
                             {formatCop(r.quantity * r.unitCostCop)}
                           </span>
@@ -1027,7 +1043,7 @@ function ModalNuevaFactura({
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Total Factura Compra
                   </span>
-                  <span className="numeral text-xl font-extrabold text-brand dark:text-[#3E9EA2]">
+                  <span className="numeral text-xl font-extrabold text-brand">
                     {formatCop(subtotalCOP)}
                   </span>
                 </div>
@@ -1063,7 +1079,7 @@ function TarjetaFacturaCompra({ factura }: { factura: FacturaItem }) {
         <div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-foreground">Factura #{factura.invoiceNumber}</span>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-rotulo">
               {factura.includesTax ? "Con IVA Incluido" : "Sin IVA"}
             </Badge>
           </div>
@@ -1072,7 +1088,7 @@ function TarjetaFacturaCompra({ factura }: { factura: FacturaItem }) {
           </p>
         </div>
 
-        <span className="numeral text-base font-bold text-emerald-600 dark:text-emerald-400">
+        <span className="numeral text-base font-bold text-success-soft">
           {formatCop(factura.totalCop)}
         </span>
       </div>
@@ -1218,7 +1234,7 @@ function TarjetaRecetaProducto({
                         <button
                           type="button"
                           onClick={() => quitarItemReceta(idx)}
-                          className="p-1 text-muted-foreground hover:text-rose-600"
+                          className="p-1 text-muted-foreground hover:text-destructive-soft"
                         >
                           <X className="size-4" />
                         </button>
@@ -1243,18 +1259,18 @@ function TarjetaRecetaProducto({
             {porcionesDisponibles !== null && (
               <span
                 className={cn(
-                  "px-2 py-0.5 rounded-md font-bold text-[11px] border flex items-center gap-1",
+                  "px-2 py-0.5 rounded-md font-bold text-rotulo border flex items-center gap-1",
                   porcionesDisponibles === 0
-                    ? "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400"
+                    ? "bg-destructive/10 text-destructive-soft border-destructive/30 dark:text-destructive-soft"
                     : porcionesDisponibles <= 5
-                    ? "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
-                    : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400"
+                    ? "bg-warning/10 text-warning-soft border-warning/30 dark:text-warning-soft"
+                    : "bg-success/10 text-success-soft border-success/30 dark:text-success-soft"
                 )}
               >
                 📦 {porcionesDisponibles} porción{porcionesDisponibles === 1 ? "" : "es"} preparable{porcionesDisponibles === 1 ? "" : "s"}
               </span>
             )}
-            <span>Costo Alimentos: <strong className="text-emerald-600 dark:text-emerald-400">{formatCop(costoAlimentosCOP)}</strong></span>
+            <span>Costo Alimentos: <strong className="text-success-soft">{formatCop(costoAlimentosCOP)}</strong></span>
           </div>
         </div>
 
@@ -1278,7 +1294,7 @@ function TarjetaRecetaProducto({
               <span className="text-muted-foreground font-medium">Según lo que se elija:</span>
               <Link
                 href="/administracion/carta/modificadores"
-                className="text-brand text-[11px] font-semibold hover:underline"
+                className="text-brand text-rotulo font-semibold hover:underline"
               >
                 Editar modificadores ↗
               </Link>
@@ -1286,7 +1302,7 @@ function TarjetaRecetaProducto({
 
             {producto.modifierGroups.map((asignado) => (
               <div key={asignado.group.id} className="space-y-0.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span className="text-rotulo font-bold uppercase tracking-wider text-muted-foreground">
                   {asignado.group.name}
                   {!asignado.required && " (opcional)"}
                 </span>
@@ -1314,7 +1330,7 @@ function TarjetaRecetaProducto({
             ))}
 
             {producto.recipeNeedsModifiers && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+              <p className="text-rotulo text-warning-soft font-medium">
                 No descuenta nada hasta que se eligen los modificadores al tomar el pedido.
               </p>
             )}
@@ -1459,17 +1475,17 @@ function CardProductoTerminado({
     <Card className="p-4 space-y-3 flex flex-col justify-between hover:border-brand/50 transition-all">
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <Badge variant="outline" className="text-[10px] uppercase font-mono">
+          <Badge variant="outline" className="text-rotulo uppercase font-mono">
             {producto.category.name}
           </Badge>
           <span
             className={cn(
-              "px-2 py-0.5 rounded text-[10px] font-bold font-mono border",
+              "px-2 py-0.5 rounded text-rotulo font-bold font-mono border",
               esSinStock
-                ? "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400"
+                ? "bg-destructive/10 text-destructive-soft border-destructive/30 dark:text-destructive-soft"
                 : esBajoStock
-                ? "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
-                : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400"
+                ? "bg-warning/10 text-warning-soft border-warning/30 dark:text-warning-soft"
+                : "bg-success/10 text-success-soft border-success/30 dark:text-success-soft"
             )}
           >
             {esSinStock ? "AGOTADO" : esBajoStock ? "STOCK BAJO" : "EN STOCK"}
@@ -1481,16 +1497,16 @@ function CardProductoTerminado({
 
           <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
             <div>
-              <span className="text-[10px] text-muted-foreground block font-mono">Costo Compra</span>
+              <span className="text-rotulo text-muted-foreground block font-mono">Costo Compra</span>
               <span className="numeral font-bold text-xs text-muted-foreground">{formatCop(costoCompra)}</span>
             </div>
             <div>
-              <span className="text-[10px] text-muted-foreground block font-mono">Precio Venta</span>
-              <span className="numeral font-bold text-xs text-brand dark:text-[#3E9EA2]">{formatCop(producto.priceCop)}</span>
+              <span className="text-rotulo text-muted-foreground block font-mono">Precio Venta</span>
+              <span className="numeral font-bold text-xs text-brand">{formatCop(producto.priceCop)}</span>
             </div>
           </div>
           {costoCompra > 0 && (
-            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-semibold pt-0.5">
+            <p className="text-rotulo text-success-soft font-mono font-semibold pt-0.5">
               Margen: +{formatCop(gananciaCop)} / und.
             </p>
           )}
@@ -1499,7 +1515,7 @@ function CardProductoTerminado({
 
       <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
         <div>
-          <span className="text-[10px] text-muted-foreground block uppercase font-mono">Stock</span>
+          <span className="text-rotulo text-muted-foreground block uppercase font-mono">Stock</span>
           <span className="numeral font-extrabold text-base text-foreground">
             {producto.stockQty} <span className="text-xs font-normal text-muted-foreground">und.</span>
           </span>
@@ -1565,7 +1581,7 @@ function CardProductoTerminado({
                   required
                   className="text-sm font-bold"
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-rotulo text-muted-foreground">
                   Ingresá el número total de unidades reales disponibles en bodega/refrigerador.
                 </p>
               </div>
@@ -1652,19 +1668,19 @@ function ModalNuevoProductoTerminado({
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">🛒 Costo Compra COP *</label>
               <Input name="costCop" type="number" min="0" defaultValue="2500" required className="text-xs font-bold" />
-              <span className="text-[10px] text-muted-foreground block">¿En cuánto se compró?</span>
+              <span className="text-rotulo text-muted-foreground block">¿En cuánto se compró?</span>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-brand">💰 Precio Venta COP *</label>
               <Input name="priceCop" type="number" min="0" defaultValue="4500" required className="text-xs font-bold" />
-              <span className="text-[10px] text-muted-foreground block">¿En cuánto se vende?</span>
+              <span className="text-rotulo text-muted-foreground block">¿En cuánto se vende?</span>
             </div>
           </div>
 
           <div className="space-y-1">
             <label className="text-xs font-semibold">Stock Inicial Disponible (Unidades) *</label>
             <Input name="stockQty" type="number" min="0" defaultValue="12" required className="text-xs font-bold" />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-rotulo text-muted-foreground">
               Unidades reales iniciales disponibles en refrigerador/bodega.
             </p>
           </div>
@@ -1747,12 +1763,12 @@ function ModalEditarProductoTerminado({
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">🛒 Costo Compra COP *</label>
               <Input name="costCop" type="number" min="0" defaultValue={costoActual} required className="text-xs font-bold" />
-              <span className="text-[10px] text-muted-foreground block">Costo unitario de proveedor</span>
+              <span className="text-rotulo text-muted-foreground block">Costo unitario de proveedor</span>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-brand">💰 Precio Venta COP *</label>
               <Input name="priceCop" type="number" min="0" defaultValue={producto.priceCop} required className="text-xs font-bold" />
-              <span className="text-[10px] text-muted-foreground block">Precio al cliente final</span>
+              <span className="text-rotulo text-muted-foreground block">Precio al cliente final</span>
             </div>
           </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useVistaEnUrl } from "@/lib/vista-en-url";
 import { ArrowDownUp, CreditCard } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCop } from "@/lib/money";
@@ -64,9 +64,18 @@ export function PanelCaja({
   usaMesas,
   timeZone,
 }: PanelCajaProps) {
-  // Píldora inicial: si hay mesas activas y cuentas por cobrar, arranca en "cobros", de lo contrario en "movimientos"
-  const [tabActiva, setTabActiva] = useState<"cobros" | "movimientos">(
-    usaMesas && cuentas.length > 0 ? "cobros" : "movimientos",
+  /**
+   * La pestaña vive en la URL para que el menú lateral pueda enlazarla.
+   *
+   * Se perdió una comodidad al hacerlo: antes arrancaba en "movimientos" cuando
+   * no había cuentas por cobrar. Ahora la vista por defecto es siempre "cobros",
+   * porque una pestaña que cambia sola según los datos no se puede enlazar —el
+   * mismo enlace llevaría a lugares distintos según la hora del día—.
+   */
+  const [tabActiva, setTabActiva] = useVistaEnUrl(
+    "vista",
+    ["cobros", "movimientos"] as const,
+    "cobros",
   );
 
   return (
@@ -80,10 +89,10 @@ export function PanelCaja({
             type="button"
             onClick={() => setTabActiva("cobros")}
             className={cn(
-              "inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
+              "inline-flex min-h-11 tableta:min-h-9 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
               tabActiva === "cobros"
                 ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
-                : "bg-[var(--panel-2)] text-[var(--muted)] border-[var(--linea-30)] hover:text-[var(--papel)]",
+                : "bg-[var(--panel-2)] text-muted-foreground border-[var(--linea-30)] hover:text-[var(--papel)]",
             )}
           >
             <CreditCard className="h-4 w-4 shrink-0" />
@@ -91,7 +100,7 @@ export function PanelCaja({
             {cuentas.length > 0 && (
               <span
                 className={cn(
-                  "ml-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold",
+                  "ml-1 rounded-full px-2 py-0.5 text-rotulo font-extrabold",
                   tabActiva === "cobros"
                     ? "bg-[var(--tinta)] text-[var(--papel)]"
                     : "bg-[var(--brasa)]/20 text-[var(--brasa)]",
@@ -107,10 +116,10 @@ export function PanelCaja({
           type="button"
           onClick={() => setTabActiva("movimientos")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
+            "inline-flex min-h-11 tableta:min-h-9 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all whitespace-nowrap border shrink-0",
             tabActiva === "movimientos"
               ? "bg-[var(--brasa)] text-[var(--tinta)] border-[var(--brasa)] font-bold shadow-md scale-[1.02]"
-              : "bg-[var(--panel-2)] text-[var(--muted)] border-[var(--linea-30)] hover:text-[var(--papel)]",
+              : "bg-[var(--panel-2)] text-muted-foreground border-[var(--linea-30)] hover:text-[var(--papel)]",
           )}
         >
           <ArrowDownUp className="h-4 w-4 shrink-0" />
@@ -222,7 +231,7 @@ export function PanelCaja({
                               >
                                 <span>
                                   <strong className="font-semibold">{metodo.method}</strong>
-                                  <span className="text-muted-foreground ml-2 text-[11px]">
+                                  <span className="text-muted-foreground ml-2 text-rotulo">
                                     ({metodo.cantidad} {metodo.cantidad === 1 ? "cobro" : "cobros"})
                                   </span>
                                 </span>
@@ -256,7 +265,7 @@ export function PanelCaja({
                           {movimientos.map((mov) => (
                             <li key={mov.id} className="flex items-center justify-between p-3 bg-card">
                               <div>
-                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                                <span className="text-rotulo font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground">
                                   {TIPO[mov.type] ?? mov.type}
                                 </span>
                                 <p className="font-semibold text-foreground mt-1">{mov.concept}</p>

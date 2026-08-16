@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
-import { aplicarPagoDeMercadoPago } from "@/lib/billing/aplicar-pago";
+import {
+  aplicarCambioDeAutorizacion,
+  aplicarCobroAutomatico,
+  aplicarPagoDeMercadoPago,
+} from "@/lib/billing/aplicar-pago";
 import { verificarFirma } from "@/lib/billing/firma";
 // eslint-disable-next-line no-restricted-imports
 import { rootDb } from "@/lib/db/root";
@@ -57,8 +61,19 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Solo interesan los avisos de pago; el resto se acepta y se ignora.
-  if (tipo !== "payment") {
+  /**
+   * Tres tipos de aviso interesan:
+   *
+   *  · `payment` — un cobro de Checkout Pro (compra manual).
+   *  · `subscription_authorized_payment` — cada cobro del débito automático.
+   *  · `subscription_preapproval` — la autorización cambió de estado: la
+   *    aprobaron, la pausaron por tarjeta rechazada, o la cancelaron.
+   *
+   * El resto se acepta y se ignora: contestar 200 es lo que hace que MercadoPago
+   * deje de reintentar avisos que no nos incumben.
+   */
+  const TIPOS = ["payment", "subscription_authorized_payment", "subscription_preapproval"];
+  if (!TIPOS.includes(tipo)) {
     return Response.json({ recibido: true, ignorado: tipo });
   }
   if (!dataId) {
@@ -79,7 +94,12 @@ export async function POST(request: NextRequest) {
 
   // ── 3. Aplicación ─────────────────────────────────────────────────────────
   try {
-    const resultado = await aplicarPagoDeMercadoPago(dataId);
+    const resultado =
+      tipo === "subscription_preapproval"
+        ? await aplicarCambioDeAutorizacion(dataId)
+        : tipo === "subscription_authorized_payment"
+          ? await aplicarCobroAutomatico(dataId)
+          : await aplicarPagoDeMercadoPago(dataId);
 
     await rootDb.mpWebhookEvent.update({
       where: { mpEventId: idDelAviso },

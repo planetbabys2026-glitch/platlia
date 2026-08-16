@@ -35,24 +35,34 @@ export type NuevoPeriodo = {
 };
 
 /**
- * Suma un mes de servicio.
+ * Suma los meses de servicio que se pagaron.
  *
- * Si todavía queda período pagado —o prueba sin usar—, el mes nuevo se encadena
+ * Si todavía queda período pagado —o prueba sin usar—, el tiempo nuevo se encadena
  * al final del anterior: quien paga el día 20 con vencimiento el 30 no puede
- * perder esos diez días. Si ya venció, el mes arranca el día del pago y no en la
- * fecha vieja, o el cliente pagaría por tiempo que no tuvo servicio.
+ * perder esos diez días. Si ya venció, arranca el día del pago y no en la fecha
+ * vieja, o el cliente pagaría por tiempo que no tuvo servicio.
+ *
+ * **`meses` no tiene un valor por defecto a propósito.** Antes sumaba siempre uno,
+ * sin parámetro, y como la cantidad no viajaba a ninguna parte, pagar un año daba
+ * un mes sin que nada fallara ni quedara registro. Obligar a pasarlo hace que el
+ * compilador señale a cualquiera que vuelva a olvidarse.
  */
 export function aplicarPagoAprobado(
   sub: PeriodoSuscripcion,
   pagadoEn: Date,
+  meses: number,
   diasDeGracia = DIAS_DE_GRACIA,
 ): NuevoPeriodo {
+  if (!Number.isInteger(meses) || meses < 1) {
+    throw new RangeError(`Un pago tiene que otorgar al menos un mes entero, llegó ${meses}.`);
+  }
+
   const finVigente = sub.currentPeriodEnd ?? sub.trialEndsAt;
   const desde = finVigente && finVigente > pagadoEn ? finVigente : pagadoEn;
 
   // addMonths recorta al último día del mes cuando no existe el día equivalente:
   // el 31 de enero más un mes es el 28 de febrero, no el 3 de marzo.
-  const hasta = addMonths(desde, 1);
+  const hasta = addMonths(desde, meses);
 
   return {
     status: "ACTIVA",

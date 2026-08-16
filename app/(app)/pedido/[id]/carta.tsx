@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { agregarItem } from "@/features/pedidos/actions";
+import { SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { ImagenProducto } from "@/features/pedidos/components/imagen-producto";
 import {
   SelectorModificadores,
@@ -115,13 +116,20 @@ function TarjetaProducto({ orderId, producto }: { orderId: string; producto: Pro
           <input key={opcionId} type="hidden" name="modifierOptionIds" value={opcionId} />
         ))}
 
-        <div className="overflow-hidden">
-          <ImagenProducto
-            nombre={producto.name}
-            imageUrl={producto.imageUrl}
-            className="aspect-square w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-          />
-        </div>
+        {/* Solo si hay foto de verdad. El respaldo con la inicial funciona como
+            avatar chico, pero acá ocupaba un cuadrado del ancho de la tarjeta: en
+            una carta sin fotos daban tres bloques enormes con una "C" cada uno, y
+            el nombre y el precio —lo único que se necesita para tocar— quedaban
+            relegados a un pie de 40px. Sin foto, la tarjeta es el nombre. */}
+        {producto.imageUrl && (
+          <div className="overflow-hidden">
+            <ImagenProducto
+              nombre={producto.name}
+              imageUrl={producto.imageUrl}
+              className="aspect-square w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            />
+          </div>
+        )}
         <Boton
           nombre={producto.name}
           precio={producto.priceCop}
@@ -299,20 +307,36 @@ export function Carta({
         )
       ) : (
         <div className="space-y-6">
-          {categoriasAMostrar.map((categoria) => (
-            <section key={categoria.id} className="space-y-2">
-              {categoriaActiva === null && (
-                <h3 className="text-muted-foreground text-xs font-medium tracking-[0.15em] uppercase">
-                  {categoria.name}
-                </h3>
-              )}
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {categoriasAMostrar.map((categoria) => {
+            const productos = (
+              // Auto-fill, igual que el salón y cocina: la tarjeta mide lo que
+              // tiene que medir en vez de partirse en dos columnas fijas.
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
                 {categoria.products.map((producto) => (
                   <TarjetaProducto key={producto.id} orderId={orderId} producto={producto} />
                 ))}
               </ul>
-            </section>
-          ))}
+            );
+
+            // Con una categoría filtrada no hay nada que plegar: ya es la única.
+            if (categoriaActiva !== null) {
+              return (
+                <section key={categoria.id} className="space-y-2">
+                  {productos}
+                </section>
+              );
+            }
+
+            return (
+              <SeccionPlegable
+                key={categoria.id}
+                titulo={categoria.name}
+                cuenta={categoria.products.length}
+              >
+                {productos}
+              </SeccionPlegable>
+            );
+          })}
         </div>
       )}
     </div>

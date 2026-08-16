@@ -1,7 +1,7 @@
 import { contarComandasVivas } from "@/features/cocina/queries";
 import { contarDomiciliosActivos } from "@/features/domicilios/queries";
 import { getSettings } from "@/features/negocio/queries";
-import { requireBusiness } from "@/lib/auth/dal";
+import { requireActiveLicense } from "@/lib/auth/dal";
 import { createRedisSubscriber } from "@/lib/redis";
 import { currentBusinessDate } from "@/lib/time";
 
@@ -12,7 +12,7 @@ import { currentBusinessDate } from "@/lib/time";
  * persona recorre la aplicación y no depende de estar parado en `/cocina` ni en
  * `/domicilios`.
  *
- * Autoriza con `requireBusiness()` y no con `requireModule()`: lo pide toda
+ * Autoriza con `requireActiveLicense()` y no con `requireModule()`: lo pide toda
  * pantalla del producto, y a quien no tenga el módulo de cocina encendido
  * simplemente no se le pinta la insignia. Pedir el módulo acá dejaría sin
  * domicilios a un negocio que apagó la cocina.
@@ -39,7 +39,7 @@ const KEEP_ALIVE_MS = 20_000;
 
 export async function GET(req: Request) {
   try {
-    const ctx = await requireBusiness();
+    const ctx = await requireActiveLicense();
     const businessId = ctx.business.id;
     const settings = await getSettings(businessId);
 

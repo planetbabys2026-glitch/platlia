@@ -96,13 +96,13 @@ export function Features() {
         
         {/* Encabezado de la sección */}
         <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-          <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+          <span className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
             — Módulos del Sistema Operativo Gastronómico
           </span>
           <h2 className="font-display font-black text-4xl sm:text-6xl uppercase tracking-tight text-[var(--papel)] leading-[0.92]">
             Diseñado para el calor del servicio
           </h2>
-          <p className="text-[var(--muted)] text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
             Platlia combina un POS veloz, Menú QR personalizable, pantalla KDS de cocina, trazabilidad de domicilios y control financiero estricto para Colombia.
           </p>
         </div>
@@ -129,10 +129,10 @@ export function Features() {
                   <h3 className="font-display font-black text-2xl uppercase tracking-tight text-[var(--papel)] mb-1 group-hover:text-[var(--brasa)] transition-colors">
                     {virtud.title}
                   </h3>
-                  <p className="font-mono text-[11px] font-bold text-[var(--brasa)] tracking-wider mb-3">
+                  <p className="font-mono text-rotulo font-bold text-[var(--brasa)] tracking-wider mb-3">
                     {virtud.subtitle}
                   </p>
-                  <p className="text-[var(--muted)] text-xs sm:text-sm leading-relaxed mb-6">
+                  <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed mb-6">
                     {virtud.description}
                   </p>
                 </div>

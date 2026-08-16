@@ -78,7 +78,7 @@ export default async function CartaPage({
                     href={`/administracion/carta?categoria=${categoria.id}`}
                     aria-current={seleccionada ? "true" : undefined}
                     className={cn(
-                      "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                      "flex min-h-11 tableta:min-h-9 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
                       seleccionada
                         ? "bg-primary text-primary-foreground font-medium"
                         : "hover:bg-accent",
@@ -147,14 +147,14 @@ export default async function CartaPage({
 function Encabezado() {
   return (
     <div className="space-y-1">
-      <h1 className="text-2xl font-semibold tracking-tight">Carta</h1>
+      <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Carta</h1>
       <p className="text-muted-foreground text-sm">
         Lo que se archiva sale de la carta pero sigue en los pedidos viejos: un tiquete
         reimpreso no cambia.
       </p>
       <Link
         href="/administracion/carta/modificadores"
-        className="text-brand inline-block pt-1 text-sm font-medium hover:underline"
+        className="text-brand inline-flex min-h-11 tableta:min-h-0 items-center pt-1 text-sm font-medium hover:underline"
       >
         Modificadores (proteína, término, adiciones) ↗
       </Link>

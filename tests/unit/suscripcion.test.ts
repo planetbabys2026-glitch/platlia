@@ -25,6 +25,7 @@ describe("aplicarPagoAprobado", () => {
     const nuevo = aplicarPagoAprobado(
       sub({ currentPeriodEnd: new Date("2026-08-30T00:00:00Z") }),
       new Date("2026-08-20T15:00:00Z"),
+      1,
     );
 
     expect(iso(nuevo.currentPeriodStart)).toBe("2026-08-30");
@@ -36,6 +37,7 @@ describe("aplicarPagoAprobado", () => {
     const nuevo = aplicarPagoAprobado(
       sub({ status: "VENCIDA", currentPeriodEnd: new Date("2026-07-01T00:00:00Z") }),
       new Date("2026-08-20T15:00:00Z"),
+      1,
     );
 
     expect(iso(nuevo.currentPeriodStart)).toBe("2026-08-20");
@@ -46,18 +48,19 @@ describe("aplicarPagoAprobado", () => {
     const nuevo = aplicarPagoAprobado(
       sub({ status: "PRUEBA", trialEndsAt: new Date("2026-08-25T00:00:00Z") }),
       new Date("2026-08-20T00:00:00Z"),
+      1,
     );
     expect(iso(nuevo.currentPeriodEnd)).toBe("2026-09-25");
   });
 
   it("recorta al último día del mes cuando el día no existe", () => {
     // El 31 de enero más un mes es el 28 de febrero, no el 3 de marzo.
-    const nuevo = aplicarPagoAprobado(sub(), new Date("2026-01-31T12:00:00Z"));
+    const nuevo = aplicarPagoAprobado(sub(), new Date("2026-01-31T12:00:00Z"), 1);
     expect(iso(nuevo.currentPeriodEnd)).toBe("2026-02-28");
   });
 
   it("deja la gracia después del vencimiento", () => {
-    const nuevo = aplicarPagoAprobado(sub(), new Date("2026-08-01T00:00:00Z"));
+    const nuevo = aplicarPagoAprobado(sub(), new Date("2026-08-01T00:00:00Z"), 1);
     expect(iso(nuevo.currentPeriodEnd)).toBe("2026-09-01");
     expect(iso(nuevo.graceUntil)).toBe("2026-09-04");
     expect(nuevo.graceUntil > nuevo.currentPeriodEnd).toBe(true);
@@ -65,15 +68,46 @@ describe("aplicarPagoAprobado", () => {
 
   it("un pago siempre deja la licencia activa", () => {
     for (const status of ["PRUEBA", "VENCIDA", "ACTIVA"]) {
-      expect(aplicarPagoAprobado(sub({ status }), new Date()).status).toBe("ACTIVA");
+      expect(aplicarPagoAprobado(sub({ status }), new Date(), 1).status).toBe("ACTIVA");
     }
   });
 
+  it("seis meses suman seis, no uno", () => {
+    // El defecto que existía: `addMonths(desde, 1)` fijo. Alguien pagaba $250.000
+    // por medio año y recibía treinta días, sin que nada fallara ni quedara rastro.
+    const nuevo = aplicarPagoAprobado(sub(), new Date("2026-08-01T00:00:00Z"), 6);
+    expect(iso(nuevo.currentPeriodEnd)).toBe("2027-02-01");
+  });
+
+  it("doce meses suman un año", () => {
+    const nuevo = aplicarPagoAprobado(sub(), new Date("2026-08-01T00:00:00Z"), 12);
+    expect(iso(nuevo.currentPeriodEnd)).toBe("2027-08-01");
+  });
+
+  it("un plan largo también se encadena en vez de pisar lo que queda", () => {
+    // Renovar por un año faltando diez días no puede tirar esos diez días.
+    const nuevo = aplicarPagoAprobado(
+      sub({ currentPeriodEnd: new Date("2026-08-30T00:00:00Z") }),
+      new Date("2026-08-20T00:00:00Z"),
+      12,
+    );
+    expect(iso(nuevo.currentPeriodStart)).toBe("2026-08-30");
+    expect(iso(nuevo.currentPeriodEnd)).toBe("2027-08-30");
+  });
+
+  it("no acepta una cantidad de meses que no sea un entero positivo", () => {
+    const ahora = new Date("2026-08-01T00:00:00Z");
+    expect(() => aplicarPagoAprobado(sub(), ahora, 0)).toThrow(RangeError);
+    expect(() => aplicarPagoAprobado(sub(), ahora, -3)).toThrow(RangeError);
+    expect(() => aplicarPagoAprobado(sub(), ahora, 1.5)).toThrow(RangeError);
+  });
+
   it("pagar dos veces suma dos meses, no uno", () => {
-    const primero = aplicarPagoAprobado(sub(), new Date("2026-08-01T00:00:00Z"));
+    const primero = aplicarPagoAprobado(sub(), new Date("2026-08-01T00:00:00Z"), 1);
     const segundo = aplicarPagoAprobado(
       sub({ currentPeriodEnd: primero.currentPeriodEnd }),
       new Date("2026-08-02T00:00:00Z"),
+      1,
     );
     expect(iso(segundo.currentPeriodEnd)).toBe("2026-10-01");
   });

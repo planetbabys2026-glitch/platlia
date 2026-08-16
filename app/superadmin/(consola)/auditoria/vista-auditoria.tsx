@@ -186,13 +186,13 @@ export function VistaAuditoria({
               label="Extensiones de Licencia"
               activo={filtroAccion === "EXTENDER"}
               onClick={() => setFiltroAccion("EXTENDER")}
-              colorActive="bg-emerald-600 text-white"
+              colorActive="bg-success text-white"
             />
             <FiltroBoton
               label="Suspensiones / Reactivaciones"
               activo={filtroAccion === "SUSPENDER"}
               onClick={() => setFiltroAccion("SUSPENDER")}
-              colorActive="bg-amber-600 text-white"
+              colorActive="bg-warning text-white"
             />
             <FiltroBoton
               label="Gestión de Equipo"
@@ -232,15 +232,15 @@ export function VistaAuditoria({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Card>
               <CardContent className="p-3.5 space-y-1">
-                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Recaudado</p>
-                <p className="numeral text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                <p className="text-rotulo text-muted-foreground font-medium uppercase tracking-wider">Recaudado</p>
+                <p className="numeral text-xl font-bold text-success-soft">
                   {formatCop(resumenPagos.totalCOP)}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3.5 space-y-1">
-                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Pagos Aprobados</p>
+                <p className="text-rotulo text-muted-foreground font-medium uppercase tracking-wider">Pagos Aprobados</p>
                 <p className="numeral text-xl font-bold text-foreground">
                   {resumenPagos.aprobados}
                 </p>
@@ -248,16 +248,16 @@ export function VistaAuditoria({
             </Card>
             <Card>
               <CardContent className="p-3.5 space-y-1">
-                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Intentos Fallidos</p>
-                <p className="numeral text-xl font-bold text-rose-600 dark:text-rose-400">
+                <p className="text-rotulo text-muted-foreground font-medium uppercase tracking-wider">Intentos Fallidos</p>
+                <p className="numeral text-xl font-bold text-destructive-soft">
                   {resumenPagos.fallidos}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3.5 space-y-1">
-                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Errores Webhook</p>
-                <p className="numeral text-xl font-bold text-amber-600 dark:text-amber-400">
+                <p className="text-rotulo text-muted-foreground font-medium uppercase tracking-wider">Errores Webhook</p>
+                <p className="numeral text-xl font-bold text-warning-soft">
                   {resumenPagos.webhooksConError}
                 </p>
               </CardContent>
@@ -276,13 +276,13 @@ export function VistaAuditoria({
               label="Aprobados / Licencia Otorgada"
               activo={filtroPago === "APROBADO"}
               onClick={() => setFiltroPago("APROBADO")}
-              colorActive="bg-emerald-600 text-white"
+              colorActive="bg-success text-white"
             />
             <FiltroBoton
               label="Rechazados / Fallidos"
               activo={filtroPago === "FALLIDO"}
               onClick={() => setFiltroPago("FALLIDO")}
-              colorActive="bg-rose-600 text-white"
+              colorActive="bg-destructive text-white"
             />
           </div>
 
@@ -356,14 +356,14 @@ function TarjetaAuditLog({ log }: { log: AuditItem }) {
         <div className="flex items-center gap-2 flex-wrap">
           <Badge
             variant="outline"
-            className={`text-[11px] font-semibold ${
+            className={`text-rotulo font-semibold ${
               esExtension
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                ? "border-success/40 bg-success/10 text-success-soft"
                 : esSuspension
-                ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                ? "border-destructive/40 bg-destructive/10 text-destructive-soft"
                 : esReactivacion
-                ? "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300"
-                : "border-brand/40 bg-brand/10 text-brand dark:text-[#3E9EA2]"
+                ? "border-info/40 bg-info/10 text-info-soft"
+                : "border-brand/40 bg-brand/10 text-brand"
             }`}
           >
             {log.action}
@@ -371,9 +371,9 @@ function TarjetaAuditLog({ log }: { log: AuditItem }) {
 
           {log.business && (
             <span className="flex items-center gap-1 text-xs font-bold text-foreground">
-              <Store className="size-3.5 text-brand dark:text-[#3E9EA2]" />
+              <Store className="size-3.5 text-brand" />
               <span>{log.business.name}</span>
-              <span className="font-mono text-[11px] text-muted-foreground">({log.business.slug})</span>
+              <span className="font-mono text-rotulo text-muted-foreground">({log.business.slug})</span>
             </span>
           )}
         </div>
@@ -386,12 +386,12 @@ function TarjetaAuditLog({ log }: { log: AuditItem }) {
       {/* Superadmin ejecutor y detalle */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">
-          <User className="size-3.5 text-brand shrink-0 dark:text-[#3E9EA2]" />
+          <User className="size-3.5 text-brand shrink-0" />
           <span>Ejecutado por: <strong className="text-foreground">{log.user?.name ?? "SuperAdmin"}</strong> ({log.user?.email})</span>
         </div>
 
         {esExtension && meta.dias && (
-          <div className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
+          <div className="flex items-center gap-1.5 font-semibold text-success-soft">
             <Clock className="size-3.5 shrink-0" />
             <span>Extensión otorgada: +{meta.dias} días {meta.hasta ? `(Hasta ${formatDayInTimeZone(new Date(meta.hasta), "America/Bogota")})` : ""}</span>
           </div>
@@ -401,7 +401,7 @@ function TarjetaAuditLog({ log }: { log: AuditItem }) {
       {/* Motivo registrado */}
       {meta.motivo && (
         <div className="p-2.5 rounded-xl bg-muted/60 border border-border/70 text-xs space-y-0.5">
-          <span className="text-[11px] font-semibold text-brand-accent uppercase tracking-wider block">
+          <span className="text-rotulo font-semibold text-brand-accent uppercase tracking-wider block">
             Motivo obligatorio registrado en la bitácora:
           </span>
           <p className="text-foreground italic font-medium">
@@ -437,8 +437,8 @@ function TarjetaPago({ pago }: { pago: PagoItem }) {
             variant="outline"
             className={`text-xs font-semibold ${
               aprobado
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                : "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                ? "border-success/40 bg-success/10 text-success-soft"
+                : "border-destructive/40 bg-destructive/10 text-destructive-soft"
             }`}
           >
             {aprobado ? (
@@ -474,7 +474,7 @@ function TarjetaPago({ pago }: { pago: PagoItem }) {
 
       {/* Periodo Otorgado si se Aprobó */}
       {aprobado && pago.periodEnd && (
-        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1.5">
+        <div className="p-2 rounded-lg bg-success/10 border border-success/20 text-xs text-success-soft font-medium flex items-center gap-1.5">
           <CheckCircle2 className="size-3.5 shrink-0" />
           <span>
             Licencia activada con éxito hasta el {formatDayInTimeZone(pago.periodEnd, "America/Bogota")}

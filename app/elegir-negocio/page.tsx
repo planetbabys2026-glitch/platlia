@@ -52,7 +52,7 @@ export default async function ElegirNegocioPage() {
           }))}
         />
 
-        <div className="pt-4 text-center font-mono text-[10.5px] text-muted-foreground/60 tracking-wider">
+        <div className="pt-4 text-center font-mono text-rotulo text-muted-foreground/60 tracking-wider">
           PLATLIA MULTI-TENANT ARCHITECTURE · COLOMBIA
         </div>
       </div>

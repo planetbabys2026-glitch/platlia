@@ -77,23 +77,23 @@ function FormularioCobro({
       <PantallaCargando forcePending={isPending} />
 
       {/* Botón de impresión de pre-cuenta para entregar a la mesera antes de cobrar */}
-      <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5">
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-warning/10 border border-warning/30 p-2.5">
         <div className="space-y-0.5">
-          <p className="text-xs font-bold text-amber-300">Ticket de Pre-cuenta</p>
-          <p className="text-[11px] text-[var(--muted)]">Imprimir factura para llevar a la mesa</p>
+          <p className="text-xs font-bold text-warning-soft">Ticket de Pre-cuenta</p>
+          <p className="text-rotulo text-muted-foreground">Imprimir factura para llevar a la mesa</p>
         </div>
         <a
           href={`/imprimir/pedido/${cuenta.id}`}
           target="_blank"
           rel="noopener"
-          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-[#171512] font-bold px-3 py-1.5 text-xs shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          className="inline-flex min-h-11 tableta:min-h-8 items-center gap-1.5 rounded-md bg-warning hover:bg-warning/90 text-warning-foreground font-bold px-3 py-1.5 text-xs shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
         >
           🖨️ Imprimir ticket
         </a>
       </div>
 
       <div className="space-y-2">
-        <Label className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--muted)]">
+        <Label className="font-mono text-rotulo uppercase tracking-wider text-muted-foreground">
           Método de pago
         </Label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -156,7 +156,7 @@ function FormularioCobro({
         type="submit"
         size="lg"
         disabled={isPending}
-        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 text-sm shadow-md gap-2"
+        className="w-full bg-success hover:bg-success/90 text-white font-bold h-11 text-sm shadow-md gap-2"
       >
         {isPending ? "Procesando cobro…" : `💳 Confirmar pago de ${formatCop(faltanteCop)}`}
       </Button>
@@ -230,7 +230,7 @@ export function CuentasPorCobrar({
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
           <span>💳 Cuentas por cobrar</span>
-          <Badge variant="default" className="bg-emerald-600 text-white">
+          <Badge variant="default" className="bg-success text-white">
             {cuentas.length}
           </Badge>
         </h2>
@@ -273,7 +273,7 @@ export function CuentasPorCobrar({
                   key={cuenta.id}
                   className={cn(
                     "transition-all duration-200 border-border/80",
-                    cuenta.status === "CUENTA_PEDIDA" && "border-amber-500/50 bg-amber-500/5 ring-1 ring-amber-500/20",
+                    cuenta.status === "CUENTA_PEDIDA" && "border-warning/50 bg-warning/5 ring-1 ring-warning/20",
                   )}
                 >
                   <CardContent className="p-4 space-y-3">
@@ -286,14 +286,14 @@ export function CuentasPorCobrar({
                             variant={cuenta.status === "CUENTA_PEDIDA" ? "default" : "outline"}
                             className={cn(
                               cuenta.status === "CUENTA_PEDIDA"
-                                ? "bg-amber-500 text-[#171512] font-bold"
-                                : "border-[var(--linea-30)] text-[var(--muted)]",
+                                ? "bg-warning text-warning-foreground font-bold"
+                                : "border-[var(--linea-30)] text-muted-foreground",
                             )}
                           >
                             {cuenta.status === "CUENTA_PEDIDA" ? "CUENTA PEDIDA 🧾" : "Abierta"}
                           </Badge>
                         </div>
-                        <p className="text-xs text-[var(--muted)]">
+                        <p className="text-xs text-muted-foreground">
                           Pedido #{cuenta.code} · Abrió {cuenta.openedBy.name}
                           {cuenta.customerName && ` · ${cuenta.customerName}`}
                         </p>
@@ -303,7 +303,7 @@ export function CuentasPorCobrar({
                         <span className="numeral text-xl font-extrabold text-[var(--papel)] block font-display">
                           {formatCop(cuenta.totalCop)}
                         </span>
-                        <span className="text-[11px] text-[var(--muted)] font-mono">
+                        <span className="text-rotulo text-muted-foreground font-mono">
                           {cuenta.items.length} {cuenta.items.length === 1 ? "producto" : "productos"}
                         </span>
                       </div>
@@ -317,7 +317,7 @@ export function CuentasPorCobrar({
                             <strong className="text-[var(--brasa)] font-semibold">{item.quantity}x</strong>{" "}
                             {item.nameSnapshot}
                           </span>
-                          <span className="numeral text-[var(--muted)] font-medium shrink-0 font-mono">
+                          <span className="numeral text-muted-foreground font-medium shrink-0 font-mono">
                             {formatCop(item.lineTotalCop)}
                           </span>
                         </div>
@@ -331,14 +331,14 @@ export function CuentasPorCobrar({
                           href={`/imprimir/pedido/${cuenta.id}`}
                           target="_blank"
                           rel="noopener"
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-warning/40 bg-warning/15 hover:bg-warning/25 text-warning-soft font-bold px-3 h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
                         >
                           🖨️ Pre-cuenta
                         </a>
                         <Button
                           type="button"
                           onClick={() => setCuentaExpandida(cuenta.id)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs shadow-sm"
+                          className="flex-1 bg-success hover:bg-success/90 text-white font-bold h-10 text-xs shadow-sm"
                         >
                           Cobrar en caja →
                         </Button>

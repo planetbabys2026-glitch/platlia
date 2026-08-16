@@ -350,6 +350,21 @@ export const crearNegocioPropio = definePublicAction({
     const sesion = await readSession("APP");
     if (!sesion) redirect("/ingresar");
 
+    // El onboarding es para quien todavía no tiene ningún negocio, y hasta acá eso
+    // se verificaba SOLO en la página, que redirige si ya tenés membresías. Pero
+    // una Server Action es un POST alcanzable con curl sin pasar por ninguna
+    // página: cualquiera con sesión podía fabricarse negocios en serie, cada uno
+    // con siete días de prueba nuevos. Quien quiere una sede más pasa por
+    // `crearSucursalAdicional`, que sí cobra y respeta el cupo.
+    const yaTiene = await rootDb.membership.count({
+      where: { userId: sesion.userId, active: true, business: { deletedAt: null } },
+    });
+    if (yaTiene > 0) {
+      throw new ErrorDeUsuario(
+        "Ya tenés un negocio. Para abrir otra sede usá «Crear nueva sucursal» desde el selector de negocios.",
+      );
+    }
+
     const negocio = await crearNegocio(input.nombreNegocio, sesion.userId);
     await setSessionBusiness(sesion.sessionId, negocio.id);
     redirect("/panel");

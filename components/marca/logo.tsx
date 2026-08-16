@@ -104,7 +104,7 @@ export function Logotipo({
       <Isotipo size={size} />
       <div className="flex flex-col leading-none">
         {eyebrow && (
-          <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-brand font-semibold mb-0.5">
+          <span className="font-mono text-rotulo uppercase tracking-[0.16em] text-brand font-semibold mb-0.5">
             {eyebrow}
           </span>
         )}
@@ -142,14 +142,14 @@ export function Logo({
       <Isotipo size={size} />
       <div className="flex flex-col leading-none">
         {eyebrow && (
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-brand font-bold mb-1">
+          <span className="font-mono text-rotulo uppercase tracking-[0.18em] text-brand font-bold mb-1">
             {eyebrow}
           </span>
         )}
         <span className="font-display font-black text-3xl sm:text-4xl tracking-tight uppercase leading-none text-foreground">
           PLATLIA
         </span>
-        <span className="font-sans text-[11px] tracking-wide text-muted-foreground mt-1 font-medium">
+        <span className="font-sans text-rotulo tracking-wide text-muted-foreground mt-1 font-medium">
           Gestión de Restaurantes y Bares
         </span>
       </div>

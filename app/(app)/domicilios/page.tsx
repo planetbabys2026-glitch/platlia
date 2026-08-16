@@ -2,14 +2,18 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DOMICILIOS_EN_CURSO, getDomicilios } from "@/features/domicilios/queries";
 import { getSettings, getTimeSettings } from "@/features/negocio/queries";
-import { requireBusiness } from "@/lib/auth/dal";
+import { requireActiveLicense } from "@/lib/auth/dal";
 import { PanelDomicilios } from "./panel-domicilios";
 
 export const metadata: Metadata = { title: "Domicilios en Vivo · Platlia" };
 export const dynamic = "force-dynamic";
 
 export default async function DomiciliosPage() {
-  const ctx = await requireBusiness();
+  // Con licencia vencida esto mandaba a `/bloqueado` en todas las pantallas menos
+  // en ésta, que usaba `requireBusiness` —el único helper que no mira licencia—.
+  // No había comentario que lo justificara: era un olvido, y dejaba operar
+  // domicilios entero sin pagar.
+  const ctx = await requireActiveLicense();
 
   const settings = await getSettings(ctx.business.id);
   if (!settings.deliveryEnabled) {
@@ -31,10 +35,10 @@ export default async function DomiciliosPage() {
   ).length;
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
         <div>
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-foreground leading-[0.95]">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
             Domicilios
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1.5 font-sans">

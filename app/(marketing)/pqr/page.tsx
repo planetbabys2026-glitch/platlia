@@ -75,15 +75,15 @@ export default function PqrPage() {
           {/* Definiciones Legales de PQR */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="p-4 rounded-xl bg-card border border-border space-y-1">
-              <span className="font-bold text-brand dark:text-[#3E9EA2] text-sm">Petición</span>
+              <span className="font-bold text-brand text-sm">Petición</span>
               <p className="text-muted-foreground">Solicitud formal de información, documentación o prestación de un servicio.</p>
             </div>
             <div className="p-4 rounded-xl bg-card border border-border space-y-1">
-              <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">Queja</span>
+              <span className="font-bold text-warning-soft text-sm">Queja</span>
               <p className="text-muted-foreground">Manifiesto de inconformidad por la conducta o atención recibida del personal.</p>
             </div>
             <div className="p-4 rounded-xl bg-card border border-border space-y-1">
-              <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">Reclamo</span>
+              <span className="font-bold text-destructive-soft text-sm">Reclamo</span>
               <p className="text-muted-foreground">Exigencia de corrección por fallas o cobros indebidos en el servicio contratado.</p>
             </div>
             <div className="p-4 rounded-xl bg-card border border-border space-y-1">
@@ -96,7 +96,7 @@ export default function PqrPage() {
           <div className="rounded-3xl border border-border bg-card p-6 sm:p-10 shadow-sm">
             {radicado ? (
               <div className="py-12 text-center space-y-6">
-                <div className="size-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                <div className="size-16 rounded-full bg-success/60 text-success-soft flex items-center justify-center mx-auto">
                   <CheckCircle2 className="size-8" />
                 </div>
 
@@ -105,7 +105,7 @@ export default function PqrPage() {
                   <p className="text-muted-foreground text-sm">
                     Guarda tu número de radicado oficial para consultar el estado de tu trámite:
                   </p>
-                  <div className="inline-flex items-center gap-2 bg-brand/10 border border-brand/30 text-brand dark:text-[#3E9EA2] px-6 py-3 rounded-2xl font-mono text-2xl font-bold">
+                  <div className="inline-flex items-center gap-2 bg-brand/10 border border-brand/30 text-brand px-6 py-3 rounded-2xl font-mono text-2xl font-bold">
                     <Hash className="size-6" />
                     <span>{radicado}</span>
                   </div>
@@ -261,7 +261,7 @@ export default function PqrPage() {
                     value={formData.correo}
                     onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-rotulo text-muted-foreground">
                     A este buzón se remitirá el acto administrativo o respuesta motivada formal.
                   </p>
                 </div>

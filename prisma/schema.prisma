@@ -292,12 +292,18 @@ model BusinessSettings {
   /// Configuración del Menú Digital QR
   qrMenuEnabled        Boolean @default(true)
   qrMenuBgMode         String  @default("SOLID")
-  qrMenuBgColor        String  @default("#101416")
-  qrMenuBgGradient     String  @default("linear-gradient(135deg, #101416 0%, #1D4E51 100%)")
+  /// El negro tibio de la marca (--tinta). Antes era #101416, un negro azulado
+  /// que no sale de ninguna parte de la paleta.
+  qrMenuBgColor        String  @default("#171512")
+  qrMenuBgGradient     String  @default("linear-gradient(135deg, #171512 0%, #3A3733 100%)")
   qrMenuBgImageUrl     String?
   qrMenuLogoUrl        String?
   qrMenuHeaderTitle    String?
   qrMenuHeaderSubtitle String?
+  /// El color con el que el menú pinta botones, precios y totales. Cada tema de
+  /// marca ya traía el suyo, pero no había dónde guardarlo: los seis presets se
+  /// veían distintos de fondo y todos con el naranja Platlia encima.
+  qrMenuAccent         String  @default("#FF4E1F")
 
   /// Módulo Opcional de Facturación Electrónica DIAN (Factus)
   facturacionElectronicaHabilitada Boolean @default(false)
@@ -509,6 +515,19 @@ model Subscription {
   graceUntil         DateTime? @db.Timestamptz(3)
   canceledAt         DateTime? @db.Timestamptz(3)
 
+  /// Cada cuánto cobra el débito automático: "MENSUAL" o "ANUAL". Null si está
+  /// apagado. Se guarda porque el monto depende de esto y hay que poder
+  /// reconstruir qué se autorizó.
+  cobroAutomatico String?
+
+  /// La última clave de aviso de vencimiento que se mandó, como
+  /// "2026-09-03T00:00:00.000Z:3". Es una sola columna en vez de una por umbral:
+  /// incluye la fecha de corte, así que al renovarse la licencia la clave cambia
+  /// sola y los avisos del período nuevo vuelven a salir sin tener que limpiar
+  /// nada. El cron corre todos los días y sin esto mandaría el mismo correo cada
+  /// mañana durante tres días seguidos.
+  ultimoAvisoClave String?
+
   /// Suscripción automática de MercadoPago, cuando el cliente la autoriza.
   mpPreapprovalId String? @unique
   mpPayerId       String?
@@ -531,6 +550,15 @@ model SubscriptionPayment {
 
   amountCop Int
   status    PaymentStatus @default(PENDIENTE)
+
+  /// Cuántos meses de servicio compró este pago. Sin esto, el webhook sumaba
+  /// siempre uno: pagar un año daba un mes y no había forma de notarlo.
+  mesesOtorgados Int    @default(1)
+  /// "MENSUAL" | "SEMESTRAL" | "ANUAL". Se guarda para poder reconstruir qué se
+  /// vendió aunque la lista de precios haya cambiado después.
+  periodicidad   String @default("MENSUAL")
+  /// Cuántas sedes cubría el cobro cuando se hizo.
+  sedes          Int    @default(1)
 
   /// Único: es la llave de idempotencia contra los reenvíos del webhook, que
   /// MercadoPago hace varias veces por el mismo pago.
@@ -568,6 +596,38 @@ model MpWebhookEvent {
   receivedAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([type, receivedAt])
+}
+
+/// La lista de precios de la plataforma. No es de un negocio: es de Platlia, y la
+/// edita el superadministrador.
+///
+/// Existe porque el precio estaba escrito a mano en seis archivos y ya habían
+/// divergido entre sí. Guardar filas en vez de columnas sueltas deja además el
+/// historial de qué se cobraba en cada momento, que es lo que se necesita cuando
+/// un cliente pregunta por qué le cobraron lo que le cobraron.
+///
+/// Una fila sin fechas es la lista base y rige siempre. Una fila con fechas es una
+/// promoción y le gana a la base mientras esté dentro de su ventana.
+model ListaDePrecios {
+  id     String @id @default(cuid())
+  nombre String
+
+  precioSedePrincipalCop Int @default(50000)
+  precioSedeAdicionalCop Int @default(30000)
+
+  /// El descuento son meses de regalo, no un porcentaje: "un mes va de regalo" se
+  /// entiende sin calculadora y no deja centavos que redondear.
+  mesesGratisSemestral Int @default(1)
+  mesesGratisAnual     Int @default(2)
+
+  desde  DateTime? @db.Timestamptz(3)
+  hasta  DateTime? @db.Timestamptz(3)
+  activa Boolean   @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([activa, desde, hasta])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

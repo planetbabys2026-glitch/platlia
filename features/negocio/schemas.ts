@@ -101,12 +101,19 @@ export const turneroSchema = z.object({
 export const qrMenuSchema = z.object({
   qrMenuEnabled: casilla,
   qrMenuBgMode: z.enum(["SOLID", "GRADIENT", "PATTERN_IMAGE"]),
-  qrMenuBgColor: z.string().trim().default("#101416"),
-  qrMenuBgGradient: z.string().trim().default("linear-gradient(135deg, #101416 0%, #1D4E51 100%)"),
+  qrMenuBgColor: z.string().trim().default("#171512"),
+  qrMenuBgGradient: z.string().trim().default("linear-gradient(135deg, #171512 0%, #3A3733 100%)"),
   qrMenuBgImageUrl: textoOpcional(500),
   qrMenuLogoUrl: textoOpcional(500),
   qrMenuHeaderTitle: textoOpcional(120),
   qrMenuHeaderSubtitle: textoOpcional(200),
+  // Hex de 6 dígitos y nada más: este valor termina dentro de un `style` en
+  // una página pública, así que no puede aceptar texto libre.
+  qrMenuAccent: z
+    .string()
+    .trim()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "El acento tiene que ser un color en formato #RRGGBB")
+    .default("#FF4E1F"),
 });
 
 export const crearSucursalSchema = z.object({

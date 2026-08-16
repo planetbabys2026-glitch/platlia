@@ -47,11 +47,11 @@ export function PantallaCocina({
   const total = estaciones.reduce((n, e) => n + e.comandas.length, 0);
 
   return (
-    <div className="space-y-8 max-w-7xl">
+    <div className="space-y-8">
       {/* ─── Header Cocina KDS Dark Kitchen-Fire ─── */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
         <div>
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-foreground leading-[0.95]">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
             Cocina KDS
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1.5 font-sans">
@@ -69,14 +69,20 @@ export function PantallaCocina({
 
       {estaciones.map((estacion) => (
         <section key={estacion.nombre} className="space-y-4">
-          <div className="flex items-center gap-3 font-mono text-[11px] tracking-[0.16em] uppercase text-muted-foreground">
+          <div className="flex items-center gap-3 font-mono text-rotulo tracking-[0.16em] uppercase text-muted-foreground">
             <span>
               ESTACIÓN: {estacion.nombre.toUpperCase()} · <span className="numeral font-bold text-foreground">{estacion.comandas.length}</span> COMANDAS
             </span>
             <span className="flex-1 border-t border-dashed border-border/80" />
           </div>
 
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {/* `auto-fill` con mínimo de 22rem, como el export. Con la escalera de
+              `grid-cols-N` la tarjeta quedaba en ~240px y "Cerveza nacional
+              (Botella)" se partía en dos líneas: en una pantalla que se lee de
+              lejos y de reojo, un nombre partido es un nombre que hay que leer.
+              `auto-fill` y no `auto-fit` a propósito: con una sola comanda, la
+              tarjeta se queda en su ancho en vez de estirarse a lo ancho del salón. */}
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] gap-4">
             {estacion.comandas.map((comanda) => (
               <li key={comanda.id}>
                 <Comanda comanda={comanda} />

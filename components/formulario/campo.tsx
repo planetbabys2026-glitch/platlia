@@ -33,7 +33,7 @@ export function Campo({
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">
+      <Label htmlFor={id} className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground font-semibold">
         {label}
       </Label>
       <Input

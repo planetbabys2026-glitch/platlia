@@ -218,7 +218,7 @@ export function PantallaTurnero({
   const posClass = isTopLeft ? "top-6 left-6" : "top-6 right-6";
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-neutral-950 text-white font-sans select-none">
+    <div className="relative min-h-screen w-full overflow-hidden bg-[var(--tinta)] text-white font-sans select-none">
       <PantallaSiempreEncendida />
       <PantallaSiempreEncendida />
 
@@ -262,8 +262,8 @@ export function PantallaTurnero({
 
       {/* C: Fondo Oscuro por Defecto (Platlia Dark Kitchen-Fire) */}
       {(mediaMode === "NONE" || (mediaMode === "IMAGES" && images.length === 0) || (mediaMode === "YOUTUBE" && !youtubeId)) && (
-        <div className="absolute inset-0 z-0 bg-[#171512]">
-          <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#ff4e1f_1px,transparent_1px)] [background-size:32px_32px]" />
+        <div className="absolute inset-0 z-0 bg-[var(--tinta)]">
+          <div className="absolute inset-0 opacity-15 bg-[radial-gradient(var(--brasa)_1px,transparent_1px)] [background-size:32px_32px]" />
         </div>
       )}
 
@@ -279,7 +279,7 @@ export function PantallaTurnero({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md cursor-pointer transition-all duration-700 ease-in-out"
         >
           <div
-            className={`flex flex-col items-center justify-center rounded-3xl border-4 border-brand bg-[#171512] p-10 text-center shadow-2xl shadow-brand/40 transition-all duration-700 ease-in-out ${
+            className={`flex flex-col items-center justify-center rounded-3xl border-4 border-brand bg-[var(--tinta)] p-10 text-center shadow-2xl shadow-brand/40 transition-all duration-700 ease-in-out ${
               animandoHaciaEsquina
                 ? `scale-30 opacity-0 translate-y-[-200px] ${isTopLeft ? "-translate-x-[400px]" : "translate-x-[400px]"}`
                 : "scale-100 opacity-100 animate-pulse"
@@ -301,7 +301,7 @@ export function PantallaTurnero({
               </span>
             )}
 
-            <p className="mt-4 text-base font-medium text-neutral-400 sm:text-xl">
+            <p className="mt-4 text-base font-medium text-muted-foreground sm:text-xl">
               Por favor acérquese a retirar su pedido
             </p>
           </div>
@@ -312,12 +312,12 @@ export function PantallaTurnero({
           capa 3: RECUADRO SOBREPUESTO EN ESQUINA (Turnos Listos)
           ───────────────────────────────────────────────────────────── */}
       <div className={`fixed z-30 ${posClass} max-w-md sm:max-w-lg w-full`}>
-        <div className="rounded-3xl border border-white/15 bg-neutral-950/90 backdrop-blur-2xl p-6 shadow-2xl space-y-4">
+        <div className="rounded-3xl border border-white/15 bg-[var(--tinta)] backdrop-blur-2xl p-6 shadow-2xl space-y-4">
           
           {/* Header con Logotipo y Nombre del Negocio */}
           <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
             <Logotipo className="h-7 opacity-90" />
-            <span className="truncate text-sm font-semibold tracking-wider text-neutral-300 uppercase">
+            <span className="truncate text-sm font-semibold tracking-wider text-foreground uppercase">
               {businessName}
             </span>
           </div>
@@ -332,7 +332,7 @@ export function PantallaTurnero({
 
           {/* Lista de Números Listos (Hasta 4 pedidos perfectamente ajustados sin scrollbar) */}
           {listos.length === 0 ? (
-            <div className="py-8 text-center text-neutral-500 font-medium text-sm">
+            <div className="py-8 text-center text-muted-foreground font-medium text-sm">
               Esperando pedidos listos...
             </div>
           ) : (
@@ -344,7 +344,7 @@ export function PantallaTurnero({
                     className={`flex flex-col items-center justify-center rounded-2xl p-4 sm:p-5 transition-all duration-300 ${
                       idx === 0
                         ? "bg-brand text-white shadow-xl shadow-brand/30 ring-2 ring-brand"
-                        : "bg-neutral-900/95 text-neutral-200 border border-white/10"
+                        : "bg-[var(--tinta)] text-foreground border border-white/10"
                     }`}
                   >
                     <span className="numeral text-4xl font-black leading-none tracking-tight sm:text-5xl font-display">

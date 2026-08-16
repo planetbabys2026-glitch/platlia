@@ -1,4 +1,4 @@
-import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
+import { Invoice, MercadoPagoConfig, Payment, Preference } from "mercadopago";
 import { env, requireEnv } from "@/lib/env";
 
 /**
@@ -30,7 +30,15 @@ export async function crearPreferenciaDePago(args: {
   businessId: string;
   subscriptionId: string;
   nombreNegocio: string;
+  /** El TOTAL a cobrar de una vez, ya con el descuento aplicado. */
   precioCop: number;
+  /** Meses de servicio que compra este pago. */
+  meses: number;
+  sedes: number;
+  /** Cómo se le dice al plan en el resumen de MercadoPago. */
+  detallePlan: string;
+  /** Qué se está comprando. Por defecto, tiempo de licencia. */
+  tipo?: "LICENCIA" | "SEDE_ADICIONAL";
 }): Promise<PreferenciaCreada> {
   const config = cliente("cobrar la suscripción");
   const volverA = env.MP_BACK_URL ?? `${env.APP_URL}/facturacion`;
@@ -41,7 +49,10 @@ export async function crearPreferenciaDePago(args: {
         {
           id: args.subscriptionId,
           title: `Platlia · ${args.nombreNegocio}`,
-          description: "Suscripción mensual",
+          description: args.detallePlan,
+          // `quantity: 1` a propósito: el ítem es "el plan", no "un mes". Si los
+          // meses fueran la cantidad, MercadoPago mostraría el precio unitario y
+          // el cliente vería el mensual donde espera el total.
           quantity: 1,
           currency_id: "COP",
           unit_price: args.precioCop,
@@ -54,6 +65,13 @@ export async function crearPreferenciaDePago(args: {
       metadata: {
         business_id: args.businessId,
         subscription_id: args.subscriptionId,
+        // Cuántos meses se compraron. Lo escribe el servidor al crear la
+        // preferencia, así que el cliente no puede pedir doce y pagar uno.
+        meses: args.meses,
+        sedes: args.sedes,
+        // Qué se compró. Un prorrateo de sede no suma tiempo de licencia: habilita
+        // un cupo. Sin esto el webhook trataría los dos pagos igual.
+        tipo: args.tipo ?? "LICENCIA",
       },
       back_urls: {
         success: volverA,
@@ -87,6 +105,11 @@ export type PagoDeMercadoPago = {
   externalReference: string | null;
   businessId: string | null;
   subscriptionId: string | null;
+  /** Meses comprados, según la metadata que escribió el servidor. */
+  meses: number | null;
+  sedes: number | null;
+  /** "LICENCIA" (tiempo) o "SEDE_ADICIONAL" (cupo). */
+  tipo: string | null;
   aprobadoEn: Date | null;
 };
 
@@ -106,6 +129,14 @@ export async function consultarPago(mpPaymentId: string): Promise<PagoDeMercadoP
     const valor = metadata[clave];
     return typeof valor === "string" && valor ? valor : null;
   };
+  // MercadoPago devuelve los números de la metadata unas veces como number y
+  // otras como string, según por dónde venga el evento. Se acepta cualquiera de
+  // las dos y se descarta lo que no sea un entero positivo.
+  const leerEntero = (clave: string) => {
+    const valor = metadata[clave];
+    const n = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor) : NaN;
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
 
   return {
     id: String(pago.id),
@@ -117,6 +148,9 @@ export async function consultarPago(mpPaymentId: string): Promise<PagoDeMercadoP
     externalReference: pago.external_reference ?? null,
     businessId: leer("business_id"),
     subscriptionId: leer("subscription_id") ?? pago.external_reference ?? null,
+    meses: leerEntero("meses"),
+    sedes: leerEntero("sedes"),
+    tipo: leer("tipo"),
     aprobadoEn: pago.date_approved ? new Date(pago.date_approved) : null,
   };
 }
@@ -137,4 +171,33 @@ export function traducirEstado(estado: string): "PENDIENTE" | "APROBADO" | "RECH
       // in_process, pending, authorized: todavía no es plata en la cuenta.
       return "PENDIENTE";
   }
+}
+
+export type FacturaDeSuscripcion = {
+  id: string;
+  /** El pago real que generó este cobro recurrente. */
+  paymentId: string | null;
+  preapprovalId: string | null;
+  status: string;
+};
+
+/**
+ * Una "factura" del débito automático (`authorized_payment`).
+ *
+ * Es la pieza que une el aviso recurrente con un pago normal: MercadoPago avisa
+ * con el id de la factura, no con el del pago, y sin este paso el webhook estaría
+ * consultando un id que la API de pagos no conoce.
+ */
+export async function consultarFacturaDeSuscripcion(
+  invoiceId: string,
+): Promise<FacturaDeSuscripcion> {
+  const config = cliente("verificar un cobro automático");
+  const factura = await new Invoice(config).get({ id: invoiceId });
+
+  return {
+    id: String(factura.id ?? invoiceId),
+    paymentId: factura.payment?.id ? String(factura.payment.id) : null,
+    preapprovalId: factura.preapproval_id ?? null,
+    status: factura.status ?? "unknown",
+  };
 }

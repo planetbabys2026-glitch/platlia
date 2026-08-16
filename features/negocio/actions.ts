@@ -191,6 +191,7 @@ export const guardarQrMenuSettings = defineAction({
         qrMenuLogoUrl: input.qrMenuLogoUrl ?? null,
         qrMenuHeaderTitle: input.qrMenuHeaderTitle ?? null,
         qrMenuHeaderSubtitle: input.qrMenuHeaderSubtitle ?? null,
+        qrMenuAccent: input.qrMenuAccent,
       },
     });
 
@@ -265,7 +266,8 @@ export const crearSucursalAdicional = defineAction({
 
     const cantActual = sucursalesDelUsuario.length;
 
-    // 2. Consultar suscripción principal para verificar maxBranches y periodos
+    // 2. La suscripción de la cuenta: la más vieja es la que cobra y la que
+    //    lleva el cupo de sedes.
     const subPrincipal = await rootDb.subscription.findFirst({
       where: { businessId: { in: sucursalesDelUsuario.map((s) => s.businessId) } },
       orderBy: { createdAt: "asc" },
@@ -280,17 +282,24 @@ export const crearSucursalAdicional = defineAction({
       );
     }
 
-    // Si ya tiene 2 o más sucursales y no ha recibido autorización especial del superadmin para 3+
-    if (cantActual >= maxPermitidas && maxPermitidas >= 2) {
+    /**
+     * El cupo se compra antes de crear la sede.
+     *
+     * La condición anterior era `cantActual >= maxPermitidas && maxPermitidas >= 2`:
+     * con el `maxBranches` de fábrica en 1, la segunda parte era falsa y **la
+     * segunda sede salía gratis**. Ahora se pide cupo siempre, y el cupo lo da un
+     * pago (`comprarSedeAdicional`) o el superadministrador para las cadenas.
+     */
+    if (cantActual >= maxPermitidas) {
       throw new ErrorDeUsuario(
-        `Tu cuenta cuenta con un límite de ${maxPermitidas} sucursal(es). Para habilitar 3 o más sucursales (Plan Cadena Empresarial), comunícate con nuestro equipo comercial desde el botón de soporte para coordinar tu tarifa preferencial.`,
+        maxPermitidas >= 2
+          ? `Tu plan cubre ${maxPermitidas} sedes. Para sumar otra, escribinos y coordinamos la tarifa de cadena.`
+          : "Todavía no tenés una sede adicional habilitada. Compralá desde Licencia y volvé acá para crearla.",
       );
     }
 
     // 3. Crear la nueva sucursal independiente
     const slug = await slugSucursalLibre(input.name);
-    const DIA_MS = 24 * 60 * 60 * 1000;
-    const finPrueba = new Date(Date.now() + 7 * DIA_MS);
 
     const sucursal = await rootDb.business.create({
       data: {
@@ -313,28 +322,24 @@ export const crearSucursalAdicional = defineAction({
             { name: "Exento", kind: TaxKind.EXENTO, rateBp: 0 },
           ],
         },
+        // La sede nueva hereda las fechas de la cuenta: la licencia es una sola y
+        // ya está paga. Antes nacía con siete días de prueba propios —o sea que
+        // vencía en otro momento que el resto— y con un `priceCop` de 30.000 que
+        // se cobraba aparte, duplicando el cobro.
         subscription: {
           create: {
-            status: SubscriptionStatus.PRUEBA,
-            priceCop: 30000,
-            maxBranches: Math.max(2, maxPermitidas),
-            trialEndsAt: finPrueba,
-            currentPeriodStart: new Date(),
-            currentPeriodEnd: finPrueba,
-            graceUntil: finPrueba,
+            status: subPrincipal.status,
+            priceCop: 0,
+            maxBranches: maxPermitidas,
+            trialEndsAt: subPrincipal.trialEndsAt,
+            currentPeriodStart: subPrincipal.currentPeriodStart,
+            currentPeriodEnd: subPrincipal.currentPeriodEnd,
+            graceUntil: subPrincipal.graceUntil,
           },
         },
       },
       select: { id: true, name: true, slug: true },
     });
-
-    // Actualizar maxBranches en la suscripción principal si pasa a 2
-    if (subPrincipal && subPrincipal.maxBranches < 2) {
-      await rootDb.subscription.update({
-        where: { id: subPrincipal.id },
-        data: { maxBranches: 2 },
-      });
-    }
 
     revalidatePath("/elegir-negocio");
     revalidatePath("/administracion/configuracion");

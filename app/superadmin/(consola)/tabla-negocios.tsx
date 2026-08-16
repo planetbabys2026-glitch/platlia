@@ -61,11 +61,11 @@ type NegocioItem = {
 };
 
 const ESTADO_LICENCIA: Record<string, { texto: string; color: string }> = {
-  PRUEBA: { texto: "En prueba", color: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-  ACTIVA: { texto: "Al día", color: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  VENCIDA: { texto: "Vencida", color: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300" },
-  SUSPENDIDA: { texto: "Suspendida", color: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  CANCELADA: { texto: "Cancelada", color: "border-gray-500/40 bg-gray-500/10 text-gray-700 dark:text-gray-300" },
+  PRUEBA: { texto: "En prueba", color: "border-warning/40 bg-warning/10 text-warning-soft" },
+  ACTIVA: { texto: "Al día", color: "border-success/40 bg-success/10 text-success-soft" },
+  VENCIDA: { texto: "Vencida", color: "border-destructive/40 bg-destructive/10 text-destructive-soft" },
+  SUSPENDIDA: { texto: "Suspendida", color: "border-destructive/40 bg-destructive/10 text-destructive-soft" },
+  CANCELADA: { texto: "Cancelada", color: "border-[var(--panel-3)] bg-[var(--panel-3)] text-muted-foreground dark:text-foreground" },
 };
 
 export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
@@ -190,25 +190,25 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
             label={`En prueba (${conteos.enPrueba})`}
             activo={filtroEstado === "PRUEBA"}
             onClick={() => setFiltroEstado("PRUEBA")}
-            colorActive="bg-amber-600 text-white"
+            colorActive="bg-warning text-white"
           />
           <FilterPill
             label={`Al día (${conteos.alDia})`}
             activo={filtroEstado === "ACTIVA"}
             onClick={() => setFiltroEstado("ACTIVA")}
-            colorActive="bg-emerald-600 text-white"
+            colorActive="bg-success text-white"
           />
           <FilterPill
             label={`Vencidos (${conteos.vencidos})`}
             activo={filtroEstado === "VENCIDA"}
             onClick={() => setFiltroEstado("VENCIDA")}
-            colorActive="bg-rose-600 text-white"
+            colorActive="bg-destructive text-white"
           />
           <FilterPill
             label={`Suspendidos (${conteos.suspendidos})`}
             activo={filtroEstado === "SUSPENDIDO"}
             onClick={() => setFiltroEstado("SUSPENDIDO")}
-            colorActive="bg-red-600 text-white"
+            colorActive="bg-destructive text-white"
           />
         </div>
 
@@ -297,17 +297,17 @@ function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
         {/* Badges de Licencia y Estado */}
         <div className="flex items-center gap-2 shrink-0">
           {negocio.status !== "ACTIVO" && (
-            <Badge variant="destructive" className="text-[11px] font-semibold">
+            <Badge variant="destructive" className="text-rotulo font-semibold">
               Suspendido
             </Badge>
           )}
 
           {sub ? (
-            <Badge variant="outline" className={`text-[11px] font-semibold border ${infoEstado?.color}`}>
+            <Badge variant="outline" className={`text-rotulo font-semibold border ${infoEstado?.color}`}>
               {infoEstado?.texto ?? sub.status}
             </Badge>
           ) : (
-            <Badge variant="secondary" className="text-[11px]">
+            <Badge variant="secondary" className="text-rotulo">
               Sin suscripción
             </Badge>
           )}
@@ -316,12 +316,12 @@ function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
           {dias !== null && (
             <Badge
               variant="outline"
-              className={`text-[11px] font-mono font-bold ${
+              className={`text-rotulo font-mono font-bold ${
                 dias <= 0
-                  ? "border-red-500 bg-red-500/10 text-red-600 dark:text-red-400"
+                  ? "border-destructive-soft bg-destructive/10 text-destructive-soft"
                   : dias <= 3
-                  ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                  : "border-brand/40 bg-brand/10 text-brand dark:text-[#3E9EA2]"
+                  ? "border-warning-soft bg-warning/10 text-warning-soft"
+                  : "border-brand/40 bg-brand/10 text-brand"
               }`}
             >
               <Clock className="size-3 mr-1" />
@@ -339,19 +339,19 @@ function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
         {/* Estadísticas de Uso */}
         <div className="flex flex-wrap items-center gap-4">
           <span className="flex items-center gap-1 font-medium text-foreground">
-            <Users className="size-3.5 text-brand dark:text-[#3E9EA2]" />
+            <Users className="size-3.5 text-brand" />
             <span>{negocio._count.memberships} equipo</span>
           </span>
           <span className="flex items-center gap-1 font-medium text-foreground">
-            <LayoutGrid className="size-3.5 text-brand dark:text-[#3E9EA2]" />
+            <LayoutGrid className="size-3.5 text-brand" />
             <span>{negocio._count.tables} mesas</span>
           </span>
           <span className="flex items-center gap-1 font-medium text-foreground">
-            <Boxes className="size-3.5 text-brand dark:text-[#3E9EA2]" />
+            <Boxes className="size-3.5 text-brand" />
             <span>{negocio._count.products} productos</span>
           </span>
           <span className="flex items-center gap-1 font-medium text-foreground">
-            <Receipt className="size-3.5 text-brand dark:text-[#3E9EA2]" />
+            <Receipt className="size-3.5 text-brand" />
             <span>{negocio._count.orders} pedidos</span>
           </span>
         </div>
@@ -584,7 +584,7 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
                 <p className="font-semibold text-foreground">
                   Estado actual: {suspendido ? "SUSPENDIDO" : "ACTIVO"}
                 </p>
-                <p className="text-muted-foreground text-[11px]">
+                <p className="text-muted-foreground text-rotulo">
                   {suspendido
                     ? "Al reactivar, los usuarios de este negocio podrán ingresar nuevamente a su panel POS."
                     : "Al suspender, se bloqueará el acceso al POS y comanda para todos los miembros de este negocio."}
@@ -625,10 +625,10 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
           <TabsContent value="sucursales" className="space-y-4 pt-3">
             <form onSubmit={handleActualizarSucursales} className="space-y-4">
               <div className="p-3 rounded-xl bg-brand/10 border border-brand/20 text-xs space-y-1">
-                <span className="font-bold text-brand dark:text-[#3E9EA2] block">
+                <span className="font-bold text-brand block">
                   Control de Sucursales (Plan Cadena Empresarial)
                 </span>
-                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                <p className="text-muted-foreground text-rotulo leading-relaxed">
                   Define cuántas sucursales puede administrar este propietario (1 por defecto, 2 self-service con prorrateo, 3+ mediante negociación en superadmin).
                 </p>
               </div>
@@ -677,10 +677,10 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
           <TabsContent value="factus" className="space-y-4 pt-3">
             <form onSubmit={handleGestionarFacturacion} className="space-y-4">
               <div className="p-3 rounded-xl bg-brand/10 border border-brand/20 text-xs space-y-1.5">
-                <span className="font-bold text-brand dark:text-[#3E9EA2] block">
+                <span className="font-bold text-brand block">
                   Facturación Electrónica DIAN (Factus API)
                 </span>
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-rotulo">
                   <span>Disponibles: <strong>{negocio.settings?.paquetesDocumentosDisponibles ?? 0} doc.</strong></span>
                   <span>Consumidos: <strong>{negocio.settings?.documentosEmitidosConsumidos ?? 0} doc.</strong></span>
                 </div>
@@ -695,7 +695,7 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
                     type="button"
                     variant={facturacionHabilitada ? "default" : "outline"}
                     onClick={() => setFacturacionHabilitada(true)}
-                    className={`h-9 text-xs font-bold flex-1 ${facturacionHabilitada ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+                    className={`h-9 text-xs font-bold flex-1 ${facturacionHabilitada ? "bg-success hover:bg-success/90 text-white" : ""}`}
                   >
                     ✅ Habilitado
                   </Button>

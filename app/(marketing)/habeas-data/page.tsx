@@ -30,7 +30,7 @@ export default function HabeasDataPage() {
 
           {/* Encabezado */}
           <div className="space-y-4 pb-8 border-b border-border">
-            <Badge variant="outline" className="border-brand/40 bg-brand/10 text-brand dark:text-[#3E9EA2] px-3.5 py-1 text-xs font-medium">
+            <Badge variant="outline" className="border-brand/40 bg-brand/10 text-brand px-3.5 py-1 text-xs font-medium">
               Protección de Datos Personales · Colombia 🇨🇴
             </Badge>
             <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-foreground">
@@ -47,7 +47,7 @@ export default function HabeasDataPage() {
           {/* Pilares de Privacidad */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
-              <Lock className="size-6 text-brand dark:text-[#3E9EA2] shrink-0 mt-0.5" />
+              <Lock className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-sm text-foreground">Seguridad de la Información</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -57,7 +57,7 @@ export default function HabeasDataPage() {
             </div>
 
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
-              <Eye className="size-6 text-brand dark:text-[#3E9EA2] shrink-0 mt-0.5" />
+              <Eye className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-sm text-foreground">Uso Estrictamente Operativo</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -67,7 +67,7 @@ export default function HabeasDataPage() {
             </div>
 
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
-              <RefreshCw className="size-6 text-brand dark:text-[#3E9EA2] shrink-0 mt-0.5" />
+              <RefreshCw className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-sm text-foreground">Derechos ARCO</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -77,7 +77,7 @@ export default function HabeasDataPage() {
             </div>
 
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
-              <ShieldCheck className="size-6 text-brand dark:text-[#3E9EA2] shrink-0 mt-0.5" />
+              <ShieldCheck className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-sm text-foreground">Canal de Protección</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -149,7 +149,7 @@ export default function HabeasDataPage() {
               <p>
                 Los titulares de los datos pueden ejercer sus derechos enviando una solicitud por escrito al correo electrónico oficial:
               </p>
-              <div className="p-4 rounded-xl bg-brand/10 border border-brand/20 text-brand dark:text-[#3E9EA2] flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-brand/10 border border-brand/20 text-brand flex items-center justify-between">
                 <span className="font-semibold">protecciondatos@platlia.com</span>
                 <span className="text-xs bg-brand text-brand-foreground px-2.5 py-1 rounded-md font-sans">Canal Oficial</span>
               </div>

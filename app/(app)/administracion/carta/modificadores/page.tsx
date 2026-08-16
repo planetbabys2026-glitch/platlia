@@ -21,7 +21,7 @@ export default async function ModificadoresPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Modificadores</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Modificadores</h1>
         <p className="text-muted-foreground max-w-2xl text-sm">
           Lo que se elige al pedir un plato: la proteína del menú del día, el término de la
           carne, las adiciones. Se crean una vez acá y se asignan a los productos que los

@@ -14,7 +14,7 @@ export function Footer() {
             <Link href="/" className="inline-block">
               <Logotipo size="lg" eyebrow="SISTEMA GASTRONÓMICO" />
             </Link>
-            <p className="text-[var(--muted)] text-sm leading-relaxed max-w-sm">
+            <p className="text-muted-foreground text-sm leading-relaxed max-w-sm">
               SaaS de gestión multi-tenant para bares y restaurantes. Control de salón, comandas digitales, caja, inventario e informes de negocio en tiempo real.
             </p>
             <div className="pt-2 font-mono text-xs text-[var(--linea-55)] tracking-wider">
@@ -27,7 +27,7 @@ export function Footer() {
             <h4 className="font-display font-black text-lg text-[var(--papel)] uppercase tracking-tight">
               Platlia POS
             </h4>
-            <ul className="space-y-2 text-sm text-[var(--muted)]">
+            <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <Link href="/#virtudes" className="hover:text-[var(--papel)] transition-colors">
                   Virtudes del Sistema
@@ -56,7 +56,7 @@ export function Footer() {
             <h4 className="font-display font-black text-lg text-[var(--papel)] uppercase tracking-tight">
               Atención & Marco Legal
             </h4>
-            <ul className="space-y-2.5 text-sm text-[var(--muted)]">
+            <ul className="space-y-2.5 text-sm text-muted-foreground">
               <li>
                 <Link href="/habeas-data" className="hover:text-[var(--papel)] transition-colors flex items-center gap-2">
                   <ShieldCheck className="size-4 text-[var(--brasa)]" />
@@ -69,11 +69,11 @@ export function Footer() {
                   <span>Canal de Radicación de PQR</span>
                 </Link>
               </li>
-              <li className="pt-1 font-mono text-xs text-[var(--muted)] flex items-center gap-2">
+              <li className="pt-1 font-mono text-xs text-muted-foreground flex items-center gap-2">
                 <Mail className="size-3.5 text-[var(--brasa)]" />
                 <span>Atención: <strong className="text-[var(--papel)] font-sans">contacto@platlia.com</strong></span>
               </li>
-              <li className="font-mono text-xs text-[var(--muted)] flex items-center gap-2">
+              <li className="font-mono text-xs text-muted-foreground flex items-center gap-2">
                 <Phone className="size-3.5 text-[var(--brasa)]" />
                 <span>WhatsApp: <strong className="text-[var(--papel)] font-sans">+57 (310) 574-2111</strong></span>
               </li>

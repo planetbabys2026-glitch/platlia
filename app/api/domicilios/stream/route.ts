@@ -1,11 +1,11 @@
-import { requireBusiness } from "@/lib/auth/dal";
+import { requireActiveLicense } from "@/lib/auth/dal";
 import { createRedisSubscriber } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    const ctx = await requireBusiness();
+    const ctx = await requireActiveLicense();
     const businessId = ctx.business.id;
 
     const stream = new ReadableStream({

@@ -59,7 +59,7 @@ export default function Error({
   return (
     <main className="flex flex-1 items-center justify-center p-6">
       <div className="w-full max-w-md space-y-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Algo salió mal</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Algo salió mal</h1>
         <p className="text-muted-foreground text-sm">
           Tuvimos un problema al cargar esta pantalla. Podés reintentar; si sigue
           fallando, avisale al administrador del negocio.

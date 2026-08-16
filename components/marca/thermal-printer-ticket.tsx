@@ -124,20 +124,20 @@ function ActiveTicket({ order, onNext }: { order: OrderDemo; onNext: () => void 
         )}
 
         {/* Cuerpo del Ticket de Papel Térmico */}
-        <div className="w-full bg-[var(--papel)] text-[var(--tinta)] font-mono text-[12px] leading-relaxed p-6 shadow-[0_30px_70px_rgba(0,0,0,0.6),0_4px_14px_rgba(0,0,0,0.4)] relative">
+        <div className="w-full bg-[var(--papel)] text-[var(--tinta)] font-mono text-xs leading-relaxed p-6 shadow-[0_30px_70px_rgba(0,0,0,0.6),0_4px_14px_rgba(0,0,0,0.4)] relative">
           
           {/* Header */}
           <div className="text-center pb-2 border-b border-dashed border-[var(--tinta)]/40">
             <p className="font-display font-black text-2xl tracking-tight uppercase leading-none">
               PLATLIA
             </p>
-            <p className="text-[10px] opacity-75 tracking-wider uppercase mt-1">
+            <p className="text-rotulo opacity-75 tracking-wider uppercase mt-1">
               COMANDA EN VIVO · TURNO NOCHE
             </p>
           </div>
 
           {/* Meta del pedido */}
-          <div className="py-2 space-y-1 text-[11px] border-b border-dashed border-[var(--tinta)]/40">
+          <div className="py-2 space-y-1 text-rotulo border-b border-dashed border-[var(--tinta)]/40">
             <div className="flex justify-between">
               <span className="font-bold">Nº {order.id}</span>
               <span className="opacity-80">5:00 A.M. CORTE</span>
@@ -162,7 +162,7 @@ function ActiveTicket({ order, onNext }: { order: OrderDemo; onNext: () => void 
                     </span>
                     <span>${price.toLocaleString("es-CO")}</span>
                   </div>
-                  <div className="text-[10px] opacity-75 pl-3">
+                  <div className="text-rotulo opacity-75 pl-3">
                     ↳ Estación: {route}
                   </div>
                 </div>
@@ -170,7 +170,7 @@ function ActiveTicket({ order, onNext }: { order: OrderDemo; onNext: () => void 
             })}
 
             {lineIndex < 5 + order.items.length * 2 && (
-              <div className="flex items-center gap-1.5 text-[10.5px] opacity-70 italic pt-1 animate-pulse">
+              <div className="flex items-center gap-1.5 text-rotulo opacity-70 italic pt-1 animate-pulse">
                 <span className="size-1.5 rounded-full bg-[var(--brasa)]" />
                 <span>Imprimiendo en tiempo real...</span>
               </div>
@@ -183,7 +183,7 @@ function ActiveTicket({ order, onNext }: { order: OrderDemo; onNext: () => void 
               <span>TOTAL</span>
               <span>${order.total.toLocaleString("es-CO")} COP</span>
             </div>
-            <div className="text-center text-[10px] opacity-75 uppercase pt-1">
+            <div className="text-center text-rotulo opacity-75 uppercase pt-1">
               MÉTODO: {order.pago} · TRANSACCIÓN SEGURA
             </div>
           </div>

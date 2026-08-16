@@ -39,7 +39,7 @@ export default async function MesaPage({ params }: { params: Promise<{ id: strin
     <div className="max-w-4xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
         <div className="space-y-1">
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight leading-[0.95]">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
             Mesa {mesa.name}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm">

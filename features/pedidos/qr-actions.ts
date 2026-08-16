@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { OrderChannel, OrderItemStatus, OrderStatus, OrderType } from "@/generated/prisma/enums";
+import { licenciaVigente } from "@/lib/auth/reglas";
 import { getSettings } from "@/features/negocio/queries";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
 import { recalcularTotales } from "@/features/pedidos/totales";
@@ -39,11 +40,32 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
     // 1. Buscar negocio por slug
     const business = await rootDb.business.findFirst({
       where: { slug: input.businessSlug, status: "ACTIVO", deletedAt: null },
-      select: { id: true, name: true, slug: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        subscription: {
+          select: { status: true, trialEndsAt: true, currentPeriodEnd: true, graceUntil: true },
+        },
+      },
     });
 
     if (!business) {
       return { ok: false, error: "Este establecimiento no está disponible o fue suspendido." };
+    }
+
+    // La licencia también manda acá. Esta acción no pasa por `defineAction` —es
+    // pública, la usa un comensal sin sesión— así que el chequeo que el wrapper
+    // hace por todos hay que hacerlo a mano. Sin esto, un negocio vencido seguía
+    // recibiendo pedidos por QR indefinidamente: era la única forma de usar
+    // Platlia para siempre sin pagar.
+    if (!licenciaVigente(business.subscription).vigente) {
+      return {
+        ok: false,
+        // No se dice "la licencia venció": el comensal no tiene nada que ver con
+        // eso y enterarlo expone al negocio delante de su propio cliente.
+        error: "Este menú no está recibiendo pedidos en este momento. Pedile al mesero que te atienda.",
+      };
     }
 
     const settings = await getSettings(business.id);

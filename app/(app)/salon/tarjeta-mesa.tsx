@@ -48,7 +48,10 @@ function Cuadro({
       type={props.type ?? "button"}
       {...props}
       className={cn(
-        "group relative flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-2xl border border-border/80 bg-card p-2 text-center overflow-hidden",
+        // `min-h` y no `aspect-square`: cuadrada, la mesa crecía con el ancho de
+        // la columna, y en un teléfono terminaba midiendo 180px de alto para
+        // mostrar un número de dos cifras.
+        "group relative flex min-h-28 w-full flex-col items-center justify-center gap-1 rounded-2xl border border-border/80 bg-card p-3 text-center overflow-hidden",
         "transition-all duration-300 ease-out hover:border-brand/50 hover:shadow-xl hover:shadow-brand/10 hover:-translate-y-1.5 hover:scale-[1.04] active:scale-[0.96]",
         "focus-visible:ring-ring focus-visible:ring-3 focus-visible:outline-none",
         "disabled:pointer-events-none disabled:opacity-50",

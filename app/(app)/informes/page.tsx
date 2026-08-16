@@ -35,10 +35,22 @@ const DIA_MS = 86_400_000;
 export default async function InformesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ jornada?: string }>;
+  searchParams: Promise<{ jornada?: string; vista?: string }>;
 }) {
   const ctx = await requireModule(AppModule.INFORMES);
-  const { jornada } = await searchParams;
+  const { jornada, vista } = await searchParams;
+
+  /**
+   * Qué sección de informes se está mirando.
+   *
+   * Era una sola página con cinco bloques uno debajo del otro: para llegar a las
+   * anulaciones había que pasar de largo todo lo demás. Ahora cada bloque es una
+   * entrada del menú, y la sección viaja en la URL —igual que la jornada— así que
+   * se puede enlazar y compartir.
+   */
+  const seccion = ["productos", "anulaciones", "inventario"].includes(vista ?? "")
+    ? (vista as "productos" | "anulaciones" | "inventario")
+    : "ventas";
   const settings = await getSettings(ctx.business.id);
 
   let dia: Date;
@@ -66,11 +78,11 @@ export default async function InformesPage({
   const esHoy = dia.getTime() === hoy.getTime();
 
   return (
-    <div className="space-y-8 max-w-7xl">
+    <div className="space-y-8">
       {/* ─── Header Informes Dark Kitchen-Fire ─── */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
         <div>
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-foreground leading-[0.95]">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
             Informes & Ventas
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1.5 font-sans">
@@ -82,14 +94,14 @@ export default async function InformesPage({
         <nav className="flex items-center gap-2">
           <Link
             href={`/informes?jornada=${formatBusinessDate(anterior)}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex min-h-11 tableta:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-3.5" /> Día anterior
           </Link>
           {!esHoy && (
             <Link
               href="/informes"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/50 bg-brand/10 text-xs font-mono text-brand font-bold hover:bg-brand/20 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/50 bg-brand/10 text-xs font-bold text-brand hover:bg-brand/20 transition-colors"
             >
               Ver hoy <ArrowRight className="size-3.5" />
             </Link>
@@ -97,7 +109,7 @@ export default async function InformesPage({
         </nav>
       </div>
 
-      {/* ─── KPIs Gastronómicos Principales ─── */}
+      {seccion === "ventas" && (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Indicador
           titulo="VENTAS FACTURADAS"
@@ -111,7 +123,8 @@ export default async function InformesPage({
         />
         <Indicador
           titulo="TOTAL COMANDAS"
-          valor={`${resumen.pedidos} pedidos`}
+          valor={resumen.pedidos}
+          unidad={resumen.pedidos === 1 ? "pedido" : "pedidos"}
           detalle="Comandas de salón, mostrador y domicilios"
         />
         <Indicador
@@ -126,7 +139,9 @@ export default async function InformesPage({
         />
       </div>
 
-      {/* ─── Medios de Pago & Impuestos ─── */}
+      )}
+
+      {seccion === "ventas" && (
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="border-border/80 bg-card">
           <CardContent className="space-y-4 pt-5">
@@ -134,7 +149,7 @@ export default async function InformesPage({
               <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
                 Medios de Pago
               </h2>
-              <span className="font-mono text-[10px] text-muted-foreground">RECAUDO</span>
+              <span className="font-mono text-rotulo text-muted-foreground">RECAUDO</span>
             </div>
 
             {porMetodo.length === 0 ? (
@@ -165,7 +180,7 @@ export default async function InformesPage({
               <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
                 Impuestos & Tarifas
               </h2>
-              <span className="font-mono text-[10px] text-muted-foreground">IMPOCONSUMO (ICO) / IVA</span>
+              <span className="font-mono text-rotulo text-muted-foreground">IMPOCONSUMO (ICO) / IVA</span>
             </div>
 
             {porTarifa.length === 0 ? (
@@ -197,14 +212,16 @@ export default async function InformesPage({
         </Card>
       </div>
 
-      {/* ─── Lo Más Vendido ─── */}
+      )}
+
+      {seccion === "productos" && (
       <Card className="border-border/80 bg-card">
         <CardContent className="space-y-4 pt-5">
           <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
             <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
               Ranking de Platos y Bebidas Más Vendidos
             </h2>
-            <span className="font-mono text-[10px] text-muted-foreground">TOP DE LA JORNADA</span>
+            <span className="font-mono text-rotulo text-muted-foreground">TOP DE LA JORNADA</span>
           </div>
 
           {top.length === 0 ? (
@@ -232,15 +249,16 @@ export default async function InformesPage({
         </CardContent>
       </Card>
 
-      {/* ─── Anulaciones ─── */}
-      {(anulaciones.renglones.length > 0 || anulaciones.pedidosAnulados > 0) && (
+      )}
+
+      {seccion === "anulaciones" && (anulaciones.renglones.length > 0 || anulaciones.pedidosAnulados > 0) && (
         <Card className="border-border/80 bg-card">
           <CardContent className="space-y-4 pt-5">
             <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
               <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
                 Auditoría de Anulaciones
               </h2>
-              <span className="font-mono text-[10px] text-brand font-bold">SEGURIDAD FISCAL</span>
+              <span className="font-mono text-rotulo text-brand font-bold">SEGURIDAD FISCAL</span>
             </div>
 
             <ul className="divide-border/60 divide-y divide-dashed text-sm">
@@ -269,26 +287,32 @@ export default async function InformesPage({
         </Card>
       )}
 
-      {/* ─── Alertas de Inventario & Abastecimiento (Dos Inventarios) ─── */}
+      {seccion === "anulaciones" && anulaciones.renglones.length === 0 && anulaciones.pedidosAnulados === 0 && (
+        <p className="rounded-lg border border-dashed border-[var(--linea-30)] p-8 text-center text-sm text-muted-foreground">
+          No hubo anulaciones en esta jornada. Es la mejor noticia que puede dar esta pantalla.
+        </p>
+      )}
+
+      {seccion === "inventario" && (
       <Card className="border-border/80 bg-card overflow-hidden">
         <CardContent className="space-y-4 pt-6">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-border/80 pb-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="size-5 text-amber-500" />
+              <AlertTriangle className="size-5 text-warning-soft" />
               <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
                 Alertas de Inventario & Abastecimiento
               </h2>
             </div>
             <Link
               href="/inventario"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/40 bg-brand/10 text-xs font-mono text-brand font-bold hover:bg-brand/20 transition-colors"
+              className="inline-flex min-h-11 tableta:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/40 bg-brand/10 text-xs font-bold text-brand hover:bg-brand/20 transition-colors"
             >
-              <Boxes className="size-3.5" /> Ir a Cargar Compras / Ajustar Inventario <ArrowRight className="size-3.5" />
+              <Boxes className="size-3.5" /> Ir a cargar compras o ajustar inventario <ArrowRight className="size-3.5" />
             </Link>
           </div>
 
           {alertasStock.length === 0 ? (
-            <div className="p-4 text-center text-xs text-muted-foreground font-mono bg-emerald-500/5 rounded-xl border border-emerald-500/20">
+            <div className="p-4 text-center text-xs text-muted-foreground font-mono bg-success/5 rounded-xl border border-success/20">
               🟢 Todos los inventarios (Productos Terminados e Insumos de Receta) cuentan con stock saludable.
             </div>
           ) : (
@@ -296,7 +320,7 @@ export default async function InformesPage({
               {/* Columna Insumos / Materias Primas */}
               <div className="space-y-2 p-3.5 rounded-xl bg-muted/40 border border-border">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Boxes className="size-3.5 text-amber-500" />
+                  <Boxes className="size-3.5 text-warning-soft" />
                   <span>Insumos / Materias Primas de Receta ({alertasStock.filter(a => a.tipo === "INSUMO").length})</span>
                 </h3>
 
@@ -308,9 +332,9 @@ export default async function InformesPage({
                       <li key={a.id} className="p-2 rounded-lg bg-background border border-border flex items-center justify-between gap-2">
                         <div>
                           <strong className="text-foreground block">{a.nombre}</strong>
-                          <span className="text-[11px] text-muted-foreground font-mono">{a.mensaje}</span>
+                          <span className="text-rotulo text-muted-foreground font-mono">{a.mensaje}</span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${a.nivel === "CRITICO" ? "bg-rose-500/10 text-rose-600 border border-rose-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"}`}>
+                        <span className={`px-2 py-0.5 rounded text-rotulo font-bold font-mono ${a.nivel === "CRITICO" ? "bg-destructive/10 text-destructive-soft border border-destructive/20" : "bg-warning/10 text-warning-soft border border-warning/20"}`}>
                           {a.nivel}
                         </span>
                       </li>
@@ -322,7 +346,7 @@ export default async function InformesPage({
               {/* Columna Productos Terminados y Platos por Receta */}
               <div className="space-y-2 p-3.5 rounded-xl bg-muted/40 border border-border">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <ShoppingBag className="size-3.5 text-amber-500" />
+                  <ShoppingBag className="size-3.5 text-warning-soft" />
                   <span>Productos Terminados & Platos ({alertasStock.filter(a => a.tipo !== "INSUMO").length})</span>
                 </h3>
 
@@ -333,10 +357,10 @@ export default async function InformesPage({
                     {alertasStock.filter(a => a.tipo !== "INSUMO").map((a) => (
                       <li key={a.id} className="p-2 rounded-lg bg-background border border-border flex items-center justify-between gap-2">
                         <div>
-                          <strong className="text-foreground block">{a.nombre} <span className="text-[10px] text-muted-foreground">({a.categoria})</span></strong>
-                          <span className="text-[11px] text-muted-foreground font-mono">{a.mensaje}</span>
+                          <strong className="text-foreground block">{a.nombre} <span className="text-rotulo text-muted-foreground">({a.categoria})</span></strong>
+                          <span className="text-rotulo text-muted-foreground font-mono">{a.mensaje}</span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${a.nivel === "CRITICO" ? "bg-rose-500/10 text-rose-600 border border-rose-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"}`}>
+                        <span className={`px-2 py-0.5 rounded text-rotulo font-bold font-mono ${a.nivel === "CRITICO" ? "bg-destructive/10 text-destructive-soft border border-destructive/20" : "bg-warning/10 text-warning-soft border border-warning/20"}`}>
                           {a.nivel}
                         </span>
                       </li>
@@ -348,6 +372,7 @@ export default async function InformesPage({
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
@@ -355,25 +380,36 @@ export default async function InformesPage({
 function Indicador({
   titulo,
   valor,
+  unidad,
   detalle,
   isPositive,
 }: {
   titulo: string;
   valor: string | number;
+  /** La palabra que acompaña a la cifra. Va aparte porque NO es monoespaciada. */
+  unidad?: string;
   detalle?: string;
   isPositive?: boolean;
 }) {
   return (
     <Card className="border-border/80 bg-card">
       <CardContent className="space-y-2 pt-5">
-        <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground">
           {titulo}
         </p>
-        <p className="font-display font-black text-3xl numeral text-foreground leading-none">
-          {valor}
+        {/* Solo `numeral`: `font-display` y `numeral` declaran los dos la familia
+            y se estaban pisando. La plata va en Space Mono —lo dice el manual— y
+            además es lo que alinea las cifras cuando hay cuatro tarjetas en fila. */}
+        <p className="text-3xl font-bold leading-none text-foreground">
+          <span className="numeral">{valor}</span>
+          {/* La unidad en General Sans: en mono, el ancho fijo de cada letra hace
+              que "pedidos" se lea separado de su número, como si fueran dos datos. */}
+          {unidad && <span className="ml-2.5 text-lg font-semibold text-muted-foreground">{unidad}</span>}
         </p>
         {detalle && (
-          <p className={`font-mono text-[11px] ${isPositive ? "text-brand font-bold" : "text-muted-foreground"}`}>
+          // En General Sans, no en mono: es una frase, no una cifra. Una oración
+          // en monoespaciada se lee letra por letra.
+          <p className={`text-xs ${isPositive ? "font-bold text-brand" : "text-muted-foreground"}`}>
             {detalle}
           </p>
         )}

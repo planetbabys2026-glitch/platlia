@@ -70,7 +70,7 @@ function SelectRol({
       id={id}
       name={name}
       defaultValue={defaultValue}
-      className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+      className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
     >
       {roles.map((rol) => (
         <option key={rol} value={rol}>
@@ -166,7 +166,7 @@ export function AccionesMiembro({
             defaultValue={role}
             roles={roles}
           />
-          <Enviar variant="outline" size="sm" className="h-9">
+          <Enviar variant="outline" size="sm" className="h-11 tableta:h-10">
             Cambiar
           </Enviar>
         </form>
@@ -188,9 +188,9 @@ export function AccionesMiembro({
           required
           placeholder="Contraseña nueva"
           aria-label="Contraseña nueva"
-          className="h-8 w-44 text-xs"
+          className="h-11 tableta:h-8 w-44 text-xs"
         />
-        <Enviar variant="ghost" size="sm" className="h-8 text-xs">
+        <Enviar variant="ghost" size="sm" className="h-11 tableta:h-8 text-xs">
           Restablecer
         </Enviar>
       </form>

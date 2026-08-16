@@ -1,86 +1,78 @@
+import type { ListaDePrecios } from "@/lib/billing/precios";
+
 /**
- * Cálculo de Prorrateo para Adición de Sucursales (2ª Sucursal).
+ * Cuánto cuesta sumar una sede a mitad de un período ya pagado.
  *
- * Precios oficiales en COP:
- * - 1 Sucursal Mensual: $50.000 COP / mes
- * - 2 Sucursales Mensual: $80.000 COP / mes ($30.000 COP / mes por la 2ª sucursal)
+ * Cobrar el mes entero a quien agrega una sede el día 25 es cobrarle cinco días
+ * de servicio a precio de treinta, y cobrarle cero es regalarlos: se cobra la
+ * parte proporcional de lo que falta y desde la renovación siguiente la licencia
+ * ya vale lo que vale con la sede nueva.
  *
- * - 1 Sucursal 6 Meses (10% desc): $270.000 COP ($45.000 COP / mes)
- * - 2 Sucursales 6 Meses (10% desc): $432.000 COP ($72.000 COP / mes -> $162.000 COP adicionales por 6 meses)
+ * Antes este módulo tenía su propia matriz de ocho precios escritos a mano —que
+ * no coincidía con ninguna otra del repo— y una rama por cada periodicidad. Ahora
+ * sale de la lista de precios y de las fechas reales del período, así que funciona
+ * igual para un plan mensual que para uno anual sin saber cuál es.
  *
- * - 1 Sucursal 12 Meses (20% desc): $480.000 COP ($40.000 COP / mes)
- * - 2 Sucursales 12 Meses (20% desc): $768.000 COP ($64.000 COP / mes -> $288.000 COP adicionales por 12 meses)
+ * Módulo puro, con tests.
  */
 
-export type FrecuenciaPago = "mensual" | "6meses" | "12meses";
+const MS_POR_DIA = 86_400_000;
 
-export type ParametrosProrrateo = {
-  frecuencia: FrecuenciaPago;
-  inicioPeriodo: Date;
-  finPeriodo: Date;
-  ahora?: Date;
-};
-
-export type ResultadoProrrateo = {
-  montoProrrateoCop: number;
+export type Prorrateo = {
+  /** Lo que se cobra ahora por lo que queda del período. */
+  montoCop: number;
   diasRestantes: number;
   diasTotales: number;
-  precioSiguienteCicloCop: number;
-  costoAdicionalMensualCop: number;
+  /** Lo que costaba la licencia por mes antes de sumar la sede. */
+  mensualAntesCop: number;
+  /** Lo que va a costar por mes desde la próxima renovación. */
+  mensualDesdeAhoraCop: number;
 };
 
-export function calcularProrrateoSegundaSucursal({
-  frecuencia,
+export function prorratearSedeNueva({
+  lista,
+  sedesActuales,
   inicioPeriodo,
   finPeriodo,
   ahora = new Date(),
-}: ParametrosProrrateo): ResultadoProrrateo {
-  const MS_POR_DIA = 86_400_000;
+}: {
+  lista: ListaDePrecios;
+  /** Cuántas sedes tiene hoy, antes de sumar la nueva. */
+  sedesActuales: number;
+  inicioPeriodo: Date | null;
+  finPeriodo: Date | null;
+  ahora?: Date;
+}): Prorrateo {
+  const mensualAntesCop =
+    lista.precioSedePrincipalCop + lista.precioSedeAdicionalCop * Math.max(0, sedesActuales - 1);
+  const mensualDesdeAhoraCop = mensualAntesCop + lista.precioSedeAdicionalCop;
 
-  const inicioMs = inicioPeriodo.getTime();
-  const finMs = finPeriodo.getTime();
-  const ahoraMs = ahora.getTime();
-
-  const diasTotales = Math.max(1, Math.ceil((finMs - inicioMs) / MS_POR_DIA));
-  const diasRestantes = Math.max(0, Math.ceil((finMs - ahoraMs) / MS_POR_DIA));
-
-  let costoAdicionalPeriodoCop = 30000;
-  let precioSiguienteCicloCop = 80000;
-  let costoAdicionalMensualCop = 30000;
-
-  if (frecuencia === "6meses") {
-    costoAdicionalPeriodoCop = 162000; // 432.000 - 270.000
-    precioSiguienteCicloCop = 432000;
-    costoAdicionalMensualCop = 27000;
-  } else if (frecuencia === "12meses") {
-    costoAdicionalPeriodoCop = 288000; // 768.000 - 480.000
-    precioSiguienteCicloCop = 768000;
-    costoAdicionalMensualCop = 24000;
-  } else {
-    // mensual
-    costoAdicionalPeriodoCop = 30000; // 80.000 - 50.000
-    precioSiguienteCicloCop = 80000;
-    costoAdicionalMensualCop = 30000;
-  }
-
-  if (diasRestantes === 0) {
+  // Sin período no hay nada que prorratear: se cobra el mes de la sede nueva.
+  if (!inicioPeriodo || !finPeriodo) {
     return {
-      montoProrrateoCop: 0,
+      montoCop: lista.precioSedeAdicionalCop,
       diasRestantes: 0,
-      diasTotales,
-      precioSiguienteCicloCop,
-      costoAdicionalMensualCop,
+      diasTotales: 0,
+      mensualAntesCop,
+      mensualDesdeAhoraCop,
     };
   }
 
-  const proporcion = diasRestantes / diasTotales;
-  const montoProrrateoCop = Math.round(costoAdicionalPeriodoCop * proporcion);
+  const diasTotales = Math.max(1, Math.ceil((finPeriodo.getTime() - inicioPeriodo.getTime()) / MS_POR_DIA));
+  const diasRestantes = Math.max(0, Math.ceil((finPeriodo.getTime() - ahora.getTime()) / MS_POR_DIA));
 
-  return {
-    montoProrrateoCop,
-    diasRestantes,
-    diasTotales,
-    precioSiguienteCicloCop,
-    costoAdicionalMensualCop,
-  };
+  // Ya venció: no se cobra prorrateo. Lo que corresponde es renovar, y ahí la
+  // sede nueva ya entra en el precio del período completo. Cobrar acá sería
+  // cobrar por días que no existen.
+  if (diasRestantes === 0) {
+    return { montoCop: 0, diasRestantes: 0, diasTotales, mensualAntesCop, mensualDesdeAhoraCop };
+  }
+
+  // El costo del período completo por la sede que se agrega, proporcional a lo
+  // que falta. Se calcula sobre el período real —no sobre "un mes"— así que un
+  // plan anual prorratea sobre sus 365 días sin ningún caso especial.
+  const costoDelPeriodoCop = Math.round((lista.precioSedeAdicionalCop * diasTotales) / 30);
+  const montoCop = Math.round((costoDelPeriodoCop * diasRestantes) / diasTotales);
+
+  return { montoCop, diasRestantes, diasTotales, mensualAntesCop, mensualDesdeAhoraCop };
 }

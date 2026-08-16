@@ -204,7 +204,7 @@ function CuerpoSelector({
                 </h4>
                 <span
                   className={cn(
-                    "shrink-0 text-[10px] font-bold uppercase",
+                    "shrink-0 text-rotulo font-bold uppercase",
                     minimo > 0 && !completo ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
@@ -254,12 +254,12 @@ function CuerpoSelector({
                         {opcion.name}
                       </span>
                       {opcion.priceDeltaCop > 0 && (
-                        <span className="numeral text-brand text-[11px] font-bold">
+                        <span className="numeral text-brand text-rotulo font-bold">
                           +{formatCop(opcion.priceDeltaCop)}
                         </span>
                       )}
                       {agotada && (
-                        <span className="text-destructive text-[10px] font-medium">Sin insumos</span>
+                        <span className="text-destructive text-rotulo font-medium">Sin insumos</span>
                       )}
                     </button>
                   );

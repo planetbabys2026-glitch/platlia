@@ -443,7 +443,7 @@ function CamposProducto({
             id={`tarifa-${idBase}`}
             name="taxRateId"
             defaultValue={producto?.taxRateId}
-            className="border-input bg-card focus-visible:ring-ring h-9 w-full rounded-lg border px-3 text-sm focus-visible:ring-3 focus-visible:outline-none"
+            className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
           >
             {tarifas.map((tarifa) => (
               <option key={tarifa.id} value={tarifa.id}>

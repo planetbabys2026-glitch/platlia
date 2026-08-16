@@ -152,6 +152,7 @@ export default async function MenuQrPublicPage({
         qrMenuLogoUrl: settings.qrMenuLogoUrl,
         qrMenuHeaderTitle: settings.qrMenuHeaderTitle,
         qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
+        qrMenuAccent: settings.qrMenuAccent,
         turnNumberMax: settings.turnNumberMax,
       }}
       categorias={categorias}

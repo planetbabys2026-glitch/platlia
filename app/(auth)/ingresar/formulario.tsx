@@ -42,7 +42,7 @@ export function FormularioIngreso({ desde }: { desde?: string }) {
       {desde && <input type="hidden" name="desde" value={desde} />}
 
       {!estado.ok && estado.error && (
-        <Alert variant="destructive" role="alert" className="animate-shake border-destructive/40 bg-destructive/15 text-rose-300 rounded-xl">
+        <Alert variant="destructive" role="alert" className="animate-shake border-destructive/40 bg-destructive/15 text-destructive-soft rounded-xl">
           <AlertDescription>{estado.error}</AlertDescription>
         </Alert>
       )}

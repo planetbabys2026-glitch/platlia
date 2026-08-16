@@ -20,7 +20,7 @@ export default async function EquipoPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Equipo</h1>
         <p className="text-muted-foreground text-sm">
           {activos.length} {activos.length === 1 ? "persona activa" : "personas activas"}. Cada
           rol ve solo lo suyo: el mesero no entra a caja ni a administración.

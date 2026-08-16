@@ -138,7 +138,7 @@ function ActiveHeroTicket({ order, onNext }: { order: OrderDemo; onNext: () => v
             PLATLIA EN VIVO
           </span>
         </div>
-        <span className="font-mono text-[11px] text-[var(--linea)]">
+        <span className="font-mono text-rotulo text-[var(--linea)]">
           COMANDA #{order.id} · {order.origen}
         </span>
       </div>
@@ -162,11 +162,11 @@ function ActiveHeroTicket({ order, onNext }: { order: OrderDemo; onNext: () => v
                 <span className="font-bold text-[var(--papel)]">
                   {qty}x {name}
                 </span>
-                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-[var(--panel-3)] text-[var(--linea)] font-bold">
+                <span className="text-rotulo px-1.5 py-0.2 rounded bg-[var(--panel-3)] text-[var(--linea)] font-bold">
                   {area}
                 </span>
               </div>
-              {notes && <p className="text-[11px] text-[var(--linea)] italic pl-2">· {notes}</p>}
+              {notes && <p className="text-rotulo text-[var(--linea)] italic pl-2">· {notes}</p>}
             </div>
             <span className="text-[var(--papel)] font-semibold shrink-0 pl-2">
               ${price.toLocaleString("es-CO")}
@@ -214,7 +214,7 @@ function ActiveHeroTicket({ order, onNext }: { order: OrderDemo; onNext: () => v
           <Flame className="size-3" />
           {ticketStamped ? "DESPACHADO A MESA" : "EN COCINA (KDS)"}
         </span>
-        <span className="text-[11px] font-mono text-[var(--linea)]">
+        <span className="text-rotulo font-mono text-[var(--linea)]">
           PAGO: {order.pago}
         </span>
       </div>

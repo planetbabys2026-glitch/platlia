@@ -56,6 +56,9 @@ export const GLOBAL_MODELS: ReadonlySet<string> = new Set([
   "VerificationToken",
   "MpWebhookEvent",
   "PlaceholderImage",
+  // La lista de precios es de Platlia, no de un negocio: la edita el
+  // superadministrador y la leen todos por igual.
+  "ListaDePrecios",
 ]);
 
 /**

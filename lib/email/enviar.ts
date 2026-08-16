@@ -1,6 +1,14 @@
-import "server-only";
 import { Resend } from "resend";
 import { env, requireEnv } from "@/lib/env";
+
+// OJO: este módulo NO importa "server-only", por la misma razón que `lib/env.ts`.
+// El paquete lanza cuando se resuelve fuera de la condición `react-server`, y el
+// barrido diario de suscripciones —que es Node plano— necesita mandar los avisos
+// de vencimiento. La protección equivalente es la guarda de abajo, que es lo que
+// de verdad importa: que la clave de Resend nunca llegue al navegador.
+if (typeof window !== "undefined") {
+  throw new Error("lib/email/enviar.ts es solo de servidor y nunca debe llegar al cliente.");
+}
 
 /**
  * Envío de correo con Resend.

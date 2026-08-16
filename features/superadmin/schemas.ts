@@ -77,3 +77,48 @@ export const gestionFacturacionElectronicaSchema = sobreEmpresa.extend({
   sumarDocumentos: z.preprocess((v) => Number(v), z.number().int().min(0).max(100000)),
   motivo,
 });
+
+// ─── Precios de la plataforma ────────────────────────────────────────────────
+
+const pesos = (max: number) =>
+  z.preprocess((v) => Number(v), z.number().int().min(0).max(max));
+
+/** Meses de regalo: 0 es válido (sin descuento) y más de 11 vaciaría el plan. */
+const mesesGratis = z.preprocess((v) => Number(v) || 0, z.number().int().min(0).max(11));
+
+/**
+ * Una fecha de un `<input type="date">`, que llega vacía cuando no se puso.
+ * Vacía significa "sin límite", no "hoy".
+ */
+const fechaOpcional = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? new Date(v) : null),
+  z.date().nullable(),
+);
+
+export const guardarListaBaseSchema = z.object({
+  precioSedePrincipalCop: pesos(10_000_000),
+  precioSedeAdicionalCop: pesos(10_000_000),
+  mesesGratisSemestral: mesesGratis,
+  mesesGratisAnual: mesesGratis,
+  motivo,
+});
+
+export const guardarPromocionSchema = z.object({
+  /** Vacío = promoción nueva. */
+  id: z.string().trim().optional(),
+  nombre: z.string().trim().min(3, "Ponele un nombre a la promoción.").max(80),
+  precioSedePrincipalCop: pesos(10_000_000),
+  precioSedeAdicionalCop: pesos(10_000_000),
+  mesesGratisSemestral: mesesGratis,
+  mesesGratisAnual: mesesGratis,
+  desde: fechaOpcional,
+  hasta: fechaOpcional,
+  activa: z.preprocess((v) => v === "true" || v === true || v === "on", z.boolean()),
+  motivo,
+});
+
+/** El precio pactado con UNA empresa, que es lo que se le respeta al renovar. */
+export const cambiarPrecioEmpresaSchema = sobreEmpresa.extend({
+  priceCop: pesos(10_000_000),
+  motivo,
+});

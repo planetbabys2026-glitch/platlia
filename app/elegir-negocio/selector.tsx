@@ -46,7 +46,7 @@ function Opcion({ negocio }: { negocio: NegocioElegible }) {
 
       <div className="flex items-center gap-2">
         {negocio.activo ? (
-          <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs font-semibold">
+          <Badge className="bg-success/10 text-success-soft border-success/20 text-xs font-semibold">
             Entrar
           </Badge>
         ) : (
@@ -129,7 +129,7 @@ export function SelectorNegocio({ negocios }: { negocios: NegocioElegible[] }) {
               type="button"
               variant="outline"
               onClick={() => setMostrarModalCrear(true)}
-              className="w-full h-12 rounded-2xl border-dashed border-brand/50 text-brand dark:text-brand-accent hover:bg-brand/10 font-bold gap-2 text-xs sm:text-sm"
+              className="w-full h-12 rounded-2xl border-dashed border-brand/50 text-brand-accent hover:bg-brand/10 font-bold gap-2 text-xs sm:text-sm"
             >
               <Plus className="size-4" />
               ➕ Crear / Solicitar Nueva Sucursal
@@ -141,10 +141,10 @@ export function SelectorNegocio({ negocios }: { negocios: NegocioElegible[] }) {
             >
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <div className="flex items-center gap-2">
-                  <Building2 className="size-4 text-brand dark:text-brand-accent" />
+                  <Building2 className="size-4 text-brand-accent" />
                   <h3 className="font-bold text-sm text-foreground">Nueva Sucursal Independiente</h3>
                 </div>
-                <Badge variant="outline" className="text-[10px] bg-brand/10 text-brand font-bold">
+                <Badge variant="outline" className="text-rotulo bg-brand/10 text-brand font-bold">
                   7 Días de Prueba
                 </Badge>
               </div>

@@ -38,11 +38,11 @@ export default async function SalonPage() {
   );
 
   return (
-    <div className="space-y-8 max-w-7xl">
+    <div className="space-y-8">
       {/* ─── Header Salón Dark Kitchen-Fire ─── */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
         <div>
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-foreground leading-[0.95]">
+          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
             Salón en Vivo
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1.5 font-sans">
@@ -98,14 +98,18 @@ export default async function SalonPage() {
       {/* ─── Zonas y Mesas ─── */}
       {areas.map((area) => (
         <section key={area.id} className="space-y-3.5">
-          <div className="flex items-center gap-3 font-mono text-[11px] tracking-[0.16em] uppercase text-muted-foreground">
+          <div className="flex items-center gap-3 font-mono text-rotulo tracking-[0.16em] uppercase text-muted-foreground">
             <span>
               {area.name} · <span className="numeral font-bold text-foreground">{area.mesas.length}</span> MESAS
             </span>
             <span className="flex-1 border-t border-dashed border-border/80" />
           </div>
 
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
+          {/* Auto-fill como el export, en vez de una escalera de `grid-cols-N`: la
+              mesa mide lo que tiene que medir y entran las que entren. Con columnas
+              fijas, un teléfono de 390px daba dos tarjetas cuadradas de 180px y solo
+              se veían dos mesas del salón por pantalla. */}
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3">
             {area.mesas.map((mesa) => (
               <li key={mesa.id}>
                 <Mesa mesa={mesa} />
