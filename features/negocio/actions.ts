@@ -157,6 +157,7 @@ export const guardarModulos = defineAction({
       where: { businessId: ctx.business.id },
       data: {
         deliveryEnabled: input.deliveryEnabled,
+        deliveryFeeCop: input.deliveryFeeCop,
         inventoryEnabled: input.inventoryEnabled,
         recipesEnabled: input.recipesEnabled,
       },

@@ -170,6 +170,7 @@ type ModuloPosInteractiveProps = {
   settings: {
     inventoryEnabled: boolean;
     deliveryEnabled: boolean;
+    deliveryFeeCop?: number;
     requireOpenCashSession: boolean;
     cashRoundingCop: number;
     pricesIncludeTax: boolean;
@@ -462,11 +463,12 @@ export function ModuloPosInteractive({
 
   // ── Cálculos del Carrito ───────────────────────────────────────────────────
   const subtotalCart = cart.reduce((acc, item) => acc + precioUnitario(item) * item.quantity, 0);
-  const totalCart = subtotalCart;
+  const costoDomicilio = tipoConsumo === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0;
+  const totalCart = subtotalCart + costoDomicilio;
 
   // La propina se sugiere sobre el consumo completo —lo que el cliente ve— y no
   // lleva impuesto: entra al pedido aparte de los renglones.
-  const propinaSugeridaCop = computeSuggestedTip(totalCart, settings.tipSuggestionRateBp);
+  const propinaSugeridaCop = computeSuggestedTip(subtotalCart, settings.tipSuggestionRateBp);
   const totalConPropina = totalCart + propinaCop;
 
   // Cálculo devuelta / cambio para pago en efectivo
@@ -1457,6 +1459,13 @@ export function ModuloPosInteractive({
                       </Alert>
                     )}
 
+                    {tipoConsumo === "DOMICILIO" && costoDomicilio > 0 && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                        <span>Servicio de domicilio</span>
+                        <span className="numeral font-bold text-foreground">+{formatCop(costoDomicilio)}</span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between p-3 rounded-xl bg-brand/5 border border-brand/20">
                       <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
                         Total
@@ -1540,12 +1549,15 @@ export function ModuloPosInteractive({
                     <p className="numeral text-3xl font-extrabold text-brand">
                       {formatCop(totalConPropina)}
                     </p>
-                    {propinaCop > 0 && (
-                      <p className="text-rotulo text-muted-foreground">
-                        Consumo {formatCop(totalCart)} + propina{" "}
-                        <span className="numeral">{formatCop(propinaCop)}</span>
-                      </p>
-                    )}
+                    <div className="text-rotulo text-muted-foreground space-x-1">
+                      <span>Productos {formatCop(subtotalCart)}</span>
+                      {costoDomicilio > 0 && (
+                        <span>+ Domicilio {formatCop(costoDomicilio)}</span>
+                      )}
+                      {propinaCop > 0 && (
+                        <span>+ Propina {formatCop(propinaCop)}</span>
+                      )}
+                    </div>
                   </div>
 
                   <SelectorDePropina

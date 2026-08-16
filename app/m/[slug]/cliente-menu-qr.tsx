@@ -86,6 +86,8 @@ type ClienteMenuQrProps = {
     qrMenuHeaderSubtitle: string | null;
     qrMenuAccent: string;
     turnNumberMax: number;
+    deliveryEnabled?: boolean;
+    deliveryFeeCop?: number;
     /** Si el negocio sugiere propina, y con qué tarifa. */
     tipSuggestionEnabled: boolean;
     tipSuggestionRateBp: number;
@@ -391,10 +393,13 @@ export function ClienteMenuQr({
 
   const [propinaCop, setPropinaCop] = useState(0);
 
-  const totalCop = useMemo(
+  const totalConsumoCop = useMemo(
     () => cartList.reduce((acc, i) => acc + precioUnitarioQR(i) * i.quantity, 0),
     [cartList],
   );
+
+  const costoDomicilioCop = !esMesa ? (settings.deliveryFeeCop ?? 0) : 0;
+  const totalConDomicilioCop = totalConsumoCop + costoDomicilioCop;
 
   /**
    * La propina que elige el propio comensal.
@@ -405,8 +410,8 @@ export function ClienteMenuQr({
    *
    * Va sobre el consumo completo y no lleva impuesto.
    */
-  const propinaSugeridaCop = computeSuggestedTip(totalCop, settings.tipSuggestionRateBp);
-  const totalConPropinaCop = totalCop + propinaCop;
+  const propinaSugeridaCop = computeSuggestedTip(totalConsumoCop, settings.tipSuggestionRateBp);
+  const totalFinalCop = totalConDomicilioCop + propinaCop;
 
   // Enviar pedido al backend
   const enviarPedido = async () => {
@@ -987,7 +992,7 @@ export function ClienteMenuQr({
                         <ShoppingBag className="size-5" />
                         <span>Ver mi pedido ({totalItems})</span>
                       </span>
-                      <span className="numeral text-base font-black">{formatCop(totalCop)}</span>
+                      <span className="numeral text-base font-black">{formatCop(totalFinalCop)}</span>
                     </Button>
                   </div>
                 </div>
@@ -1025,18 +1030,14 @@ export function ClienteMenuQr({
                     </div>
                   )}
 
-                  {/* En la mesa, el nombre es lo que hace identificable el pedido:
-                      cada envío abre su propia cuenta, así que varias personas
-                      sentadas juntas pueden pedir cada una lo suyo y pagar por
-                      separado. Sin nombre, a la cocina le llegan comandas
-                      idénticas de la misma mesa. */}
-                  {esMesa && (
+                  {/* Datos del Cliente */}
+                  {esMesa ? (
                     <div className="space-y-2 p-3 rounded-xl bg-white/5 border border-white/10">
                       <label
                         htmlFor="nombre-cuenta-qr"
                         className="block font-bold text-[color:var(--qr-texto)] text-xs uppercase tracking-wider"
                       >
-                        ¿A nombre de quién?
+                        ¿A nombre de quién? *
                       </label>
                       <Input
                         id="nombre-cuenta-qr"
@@ -1047,15 +1048,12 @@ export function ClienteMenuQr({
                         maxLength={120}
                         className="h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] text-sm"
                       />
-                      <p className="text-sm text-[color:var(--qr-texto-2)] leading-snug">
+                      <p className="text-xs text-[color:var(--qr-texto-2)] leading-snug">
                         Tu pedido va a la cocina a tu nombre y se cobra aparte.
                         Cada quien en la mesa puede pedir lo suyo desde su celular.
                       </p>
                     </div>
-                  )}
-
-                  {/* Formulario Domicilio si no es Mesa */}
-                  {!esMesa && (
+                  ) : (
                     <div className="space-y-3 p-3 rounded-xl bg-white/5 border border-white/10 text-xs">
                       <h3 className="font-bold text-[color:var(--qr-texto)] text-xs uppercase tracking-wider">
                         Datos de Entrega (Domicilio)
@@ -1106,7 +1104,7 @@ export function ClienteMenuQr({
                     </div>
                   )}
 
-                  {/* Renglones de productos agregados */}
+                  {/* Lista de Productos del Carrito */}
                   <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
                     {cartList.map((item) => (
                       <div
@@ -1175,16 +1173,30 @@ export function ClienteMenuQr({
                       id="qr"
                     />
 
-                    {propinaCop > 0 && (
-                      <div className="flex justify-between items-center text-xs text-[color:var(--qr-texto-2)]">
-                        <span>Consumo</span>
-                        <span className="numeral">{formatCop(totalCop)}</span>
+                    {(costoDomicilioCop > 0 || propinaCop > 0) && (
+                      <div className="space-y-1.5 border-b border-white/10 pb-2 text-xs text-[color:var(--qr-texto-2)]">
+                        <div className="flex justify-between items-center">
+                          <span>Productos</span>
+                          <span className="numeral font-medium text-[color:var(--qr-texto)]">{formatCop(totalConsumoCop)}</span>
+                        </div>
+                        {costoDomicilioCop > 0 && (
+                          <div className="flex justify-between items-center">
+                            <span>Servicio a domicilio</span>
+                            <span className="numeral font-bold text-[color:var(--qr-texto)]">+{formatCop(costoDomicilioCop)}</span>
+                          </div>
+                        )}
+                        {propinaCop > 0 && (
+                          <div className="flex justify-between items-center">
+                            <span>Propina voluntaria</span>
+                            <span className="numeral font-bold text-[color:var(--qr-texto)]">+{formatCop(propinaCop)}</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     <div className="flex justify-between items-center text-base font-extrabold text-[color:var(--qr-texto)]">
                       <span>Total a Pagar</span>
-                      <span className="numeral text-xl text-[color:var(--qr-acento-texto)]">{formatCop(totalConPropinaCop)}</span>
+                      <span className="numeral text-xl text-[color:var(--qr-acento-texto)]">{formatCop(totalFinalCop)}</span>
                     </div>
 
                     <Button

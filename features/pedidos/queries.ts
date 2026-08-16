@@ -25,6 +25,7 @@ export async function getPedido(businessId: string, orderId: string) {
       taxCop: true,
       discountCop: true,
       tipCop: true,
+      deliveryFeeCop: true,
       totalCop: true,
       paidCop: true,
       canceledReason: true,
@@ -105,6 +106,7 @@ export async function getPedidoParaTiquete(businessId: string, orderId: string) 
       subtotalCop: true,
       discountCop: true,
       tipCop: true,
+      deliveryFeeCop: true,
       totalCop: true,
       paidCop: true,
       // La tirilla de una venta facturada tiene que llevar el número, el CUFE y

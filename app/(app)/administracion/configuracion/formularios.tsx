@@ -278,16 +278,19 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
 export function FormularioModulos({
   mesasHabilitado,
   deliveryEnabled,
+  deliveryFeeCop = 0,
   inventoryEnabled,
   recipesEnabled,
 }: {
   mesasHabilitado: boolean;
   deliveryEnabled: boolean;
+  deliveryFeeCop?: number;
   inventoryEnabled: boolean;
   recipesEnabled: boolean;
 }) {
   const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
   const [invChecked, setInvChecked] = useState(inventoryEnabled);
+  const [delivChecked, setDelivChecked] = useState(deliveryEnabled);
 
   return (
     <form action={accion} className="space-y-4">
@@ -304,12 +307,36 @@ export function FormularioModulos({
         }
       />
 
-      <Casilla
-        name="deliveryEnabled"
-        label="Este negocio reparte a domicilio"
-        defaultChecked={deliveryEnabled}
-        ayuda="Si lo apagás, 'Domicilio' deja de ofrecerse como tipo de pedido."
-      />
+      <div className="space-y-3 rounded-lg border border-[var(--linea-20)] bg-[var(--tarjeta-fondo)] p-3">
+        <label className="flex items-start gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            name="deliveryEnabled"
+            checked={delivChecked}
+            onChange={(e) => setDelivChecked(e.target.checked)}
+            className="accent-primary mt-0.5 size-4 cursor-pointer"
+          />
+          <div className="space-y-0.5">
+            <span className="font-semibold text-sm block">Este negocio reparte a domicilio</span>
+            <span className="text-muted-foreground text-xs block">
+              Si lo apagás, &apos;Domicilio&apos; deja de ofrecerse como tipo de pedido en el POS y en el Menú QR.
+            </span>
+          </div>
+        </label>
+
+        {delivChecked && (
+          <div className="pt-2 pl-6 border-t border-[var(--linea-15)]">
+            <Campo
+              name="deliveryFeeCop"
+              label="Valor o tarifa fija del domicilio"
+              defaultValue={deliveryFeeCop > 0 ? formatCop(deliveryFeeCop, { symbol: false }) : "0"}
+              inputMode="numeric"
+              placeholder="0"
+              ayuda="Se sumará de forma automática al total del pedido cuando sea a domicilio a través del POS o del menú QR."
+            />
+          </div>
+        )}
+      </div>
 
       <div className="space-y-2">
         <label className="flex items-start gap-3 cursor-pointer">

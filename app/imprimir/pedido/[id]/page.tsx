@@ -151,6 +151,9 @@ export default async function TiquetePage({
   if (pedido.discountCop > 0) {
     push(lineaDoble("Descuento", `-${formatCop(pedido.discountCop)}`, ancho));
   }
+  if (pedido.deliveryFeeCop > 0) {
+    push(lineaDoble("Domicilio", formatCop(pedido.deliveryFeeCop), ancho));
+  }
   if (pedido.tipCop > 0) push(lineaDoble("Propina", formatCop(pedido.tipCop), ancho));
   push(separador(ancho, "="));
   push(lineaDoble("TOTAL", formatCop(pedido.totalCop), ancho));

@@ -45,6 +45,7 @@ export type DomicilioPedido = {
   notes: string | null;
   subtotalCop: number;
   taxCop: number;
+  deliveryFeeCop: number;
   totalCop: number;
   paidCop: number;
   openedAt: Date;
@@ -80,6 +81,7 @@ export async function getDomicilios(businessId: string): Promise<DomicilioPedido
       notes: true,
       subtotalCop: true,
       taxCop: true,
+      deliveryFeeCop: true,
       totalCop: true,
       paidCop: true,
       openedAt: true,

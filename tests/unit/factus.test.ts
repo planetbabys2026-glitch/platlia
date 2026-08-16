@@ -61,7 +61,8 @@ function pedido(
   extra: Partial<DatosFacturaPlatlia["order"]> = {},
 ): DatosFacturaPlatlia {
   const tipCop = extra.tipCop ?? 0;
-  const totalCop = renglones.reduce((s, r) => s + r.lineTotalCop, 0) + tipCop;
+  const deliveryFeeCop = extra.deliveryFeeCop ?? 0;
+  const totalCop = renglones.reduce((s, r) => s + r.lineTotalCop, 0) + tipCop + deliveryFeeCop;
 
   return {
     order: {
@@ -69,6 +70,7 @@ function pedido(
       code: 42,
       totalCop,
       tipCop,
+      deliveryFeeCop,
       items: renglones,
       payments: [{ id: "pay1", method: "EFECTIVO", amountCop: totalCop }],
       ...extra,
@@ -207,6 +209,23 @@ describe("los totales cierran contra lo que el cliente pagó", () => {
     );
     const totales = totalesDeFactura(datos);
     expect(Math.abs(totales.ajusteCentavos)).toBeLessThan(AJUSTE_MAXIMO_CENTAVOS);
+  });
+
+  it("con servicio de domicilio cuadra dentro de la tolerancia y crea el renglón correspondiente", () => {
+    const datos = pedido(
+      [
+        renglon({ nombre: "Hamburguesa", precioCarta: 25000, cantidad: 2, bp: 800, kind: TaxKind.IMPOCONSUMO }),
+      ],
+      { deliveryFeeCop: 6000, tipCop: 2000 },
+    );
+    const totales = totalesDeFactura(datos);
+    expect(Math.abs(totales.ajusteCentavos)).toBeLessThan(AJUSTE_MAXIMO_CENTAVOS);
+
+    const payload = construirPayloadFactus(datos);
+    const itemDomicilio = payload.items.find((it) => it.code_reference === "DOMICILIO");
+    expect(itemDomicilio).toBeDefined();
+    expect(itemDomicilio?.name).toBe("Servicio de domicilio");
+    expect(itemDomicilio?.price).toBe("6000.00");
   });
 
   it("el ajuste que se manda es exactamente pagado menos total", () => {

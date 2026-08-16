@@ -257,6 +257,13 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                       ))}
                     </div>
 
+                    {pedido.deliveryFeeCop > 0 && (
+                      <div className="flex justify-between items-center text-xs text-muted-foreground pt-1.5 border-t border-border/40">
+                        <span>Servicio de domicilio</span>
+                        <span className="numeral font-semibold text-foreground">+{formatCop(pedido.deliveryFeeCop)}</span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center pt-2 font-black text-sm text-foreground border-t border-border">
                       <span>Total</span>
                       <span className="numeral text-base text-brand-accent">

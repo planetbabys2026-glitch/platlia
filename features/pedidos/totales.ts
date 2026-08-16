@@ -31,13 +31,17 @@ export async function recalcularTotales(
       where: { orderId, voidedAt: null },
       _sum: { amountCop: true },
     }),
-    tx.order.findFirstOrThrow({ where: { id: orderId }, select: { tipCop: true } }),
+    tx.order.findFirstOrThrow({
+      where: { id: orderId },
+      select: { tipCop: true, deliveryFeeCop: true, type: true },
+    }),
   ]);
 
   const subtotalCop = items.reduce((t, i) => t + i.lineSubtotalCop, 0);
   const taxCop = items.reduce((t, i) => t + i.lineTaxCop, 0);
   const discountCop = items.reduce((t, i) => t + i.discountCop, 0);
   const consumoCop = items.reduce((t, i) => t + i.lineTotalCop, 0);
+  const deliveryFeeCop = pedido.type === "DOMICILIO" ? (pedido.deliveryFeeCop ?? 0) : 0;
 
   return tx.order.update({
     where: { id: orderId },
@@ -45,7 +49,8 @@ export async function recalcularTotales(
       subtotalCop,
       taxCop,
       discountCop,
-      totalCop: consumoCop + pedido.tipCop,
+      deliveryFeeCop,
+      totalCop: consumoCop + pedido.tipCop + deliveryFeeCop,
       paidCop: pagos._sum.amountCop ?? 0,
     },
     select: {
@@ -54,6 +59,7 @@ export async function recalcularTotales(
       taxCop: true,
       discountCop: true,
       tipCop: true,
+      deliveryFeeCop: true,
       totalCop: true,
       paidCop: true,
       status: true,

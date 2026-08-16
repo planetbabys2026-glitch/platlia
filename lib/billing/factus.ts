@@ -151,6 +151,7 @@ export type PedidoParaFacturar = {
   notes?: string | null;
   totalCop: number;
   tipCop: number;
+  deliveryFeeCop?: number;
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
@@ -366,9 +367,30 @@ export function totalesDeFactura(datos: DatosFacturaPlatlia): TotalesDeFactura {
   };
 }
 
+function renglonDeDomicilio(deliveryFeeCop: number): RenglonCalculado {
+  const baseCentavos = aCentavos(deliveryFeeCop);
+  return {
+    baseCentavos,
+    impuestoCentavos: 0,
+    item: {
+      code_reference: "DOMICILIO",
+      name: "Servicio de domicilio",
+      quantity: "1.00",
+      discount_rate: "0.00",
+      price: comoMonto(baseCentavos),
+      unit_measure_code: "94",
+      standard_code: "999",
+      taxes: [{ code: "01", rate: "0.00" }],
+    },
+  };
+}
+
 function calcularRenglones(order: PedidoParaFacturar): RenglonCalculado[] {
   const renglones = order.items.map(calcularRenglon);
   if (order.tipCop > 0) renglones.push(renglonDePropina(order.tipCop));
+  if (order.deliveryFeeCop && order.deliveryFeeCop > 0) {
+    renglones.push(renglonDeDomicilio(order.deliveryFeeCop));
+  }
   return renglones;
 }
 

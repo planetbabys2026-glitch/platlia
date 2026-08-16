@@ -37,6 +37,7 @@ export default async function PosPage({
       settings={{
         inventoryEnabled: settings.inventoryEnabled,
         deliveryEnabled: settings.deliveryEnabled,
+        deliveryFeeCop: settings.deliveryFeeCop,
         requireOpenCashSession: settings.requireOpenCashSession,
         cashRoundingCop: settings.cashRoundingCop,
         pricesIncludeTax: settings.pricesIncludeTax,

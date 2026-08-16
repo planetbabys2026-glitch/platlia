@@ -264,6 +264,8 @@ model BusinessSettings {
   /// apaga aparte, como AppModule: es una pantalla entera (/salon), no un tipo
   /// de pedido dentro de otra pantalla.
   deliveryEnabled Boolean @default(true)
+  /// Valor o tarifa fija del servicio de domicilio en COP.
+  deliveryFeeCop  Int     @default(0)
 
   /// Impresión térmica. El ancho decide el @page de app/imprimir.
   receiptWidth  ReceiptWidth @default(MM80)
@@ -903,11 +905,12 @@ model Order {
   /// Totales denormalizados. Se recalculan enteros en cada cambio de ítem, dentro
   /// de la misma transacción: los informes no pueden depender de sumar renglones
   /// en el momento de leer.
-  subtotalCop Int @default(0)
-  discountCop Int @default(0)
-  taxCop      Int @default(0)
-  tipCop      Int @default(0)
-  totalCop    Int @default(0)
+  subtotalCop    Int @default(0)
+  discountCop    Int @default(0)
+  taxCop         Int @default(0)
+  tipCop         Int @default(0)
+  deliveryFeeCop Int @default(0)
+  totalCop       Int @default(0)
   paidCop     Int @default(0)
 
   openedById String

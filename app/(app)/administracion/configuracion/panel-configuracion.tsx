@@ -25,6 +25,7 @@ type PanelConfiguracionProps = {
   };
   settings: {
     deliveryEnabled: boolean;
+    deliveryFeeCop: number;
     inventoryEnabled: boolean;
     recipesEnabled: boolean;
     turneroMediaMode: string;
@@ -130,6 +131,7 @@ export function PanelConfiguracion({
             <FormularioModulos
               mesasHabilitado={mesasHabilitado}
               deliveryEnabled={settings.deliveryEnabled}
+              deliveryFeeCop={settings.deliveryFeeCop}
               inventoryEnabled={settings.inventoryEnabled}
               recipesEnabled={settings.recipesEnabled}
             />

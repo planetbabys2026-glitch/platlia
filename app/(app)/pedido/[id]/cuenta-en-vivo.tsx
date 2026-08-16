@@ -49,6 +49,7 @@ export type TotalesDeLaCuenta = {
   subtotalCop: number;
   taxCop: number;
   tipCop: number;
+  deliveryFeeCop?: number;
   totalCop: number;
   paidCop: number;
 };
@@ -57,7 +58,6 @@ export type TotalesDeLaCuenta = {
 export type RenglonNuevo = {
   nombre: string;
   precioUnitarioCop: number;
-  /** La tarifa del producto, la misma que el servidor va a congelar en el renglón. */
   taxRateBp: number;
   cantidad: number;
   modificadores: { nombre: string; precioCop: number }[];
@@ -86,10 +86,19 @@ export function useCuentaObligatoria(): Cuenta {
   return cuenta;
 }
 
-function totalesDe(
+/**
+ * Reconstruye los totales sumando renglón por renglón con la misma aritmética de
+ * lib/tax.ts que corre el servidor.
+ *
+ * El total NO es `subtotal + impuesto`: es la suma de los `lineTotalCop` más la
+ * propina y el domicilio. Sumar las bases y los impuestos acumulados daría
+ * centavos de diferencia con la suma de las líneas por el redondeo por renglón.
+ */
+function totalesSegunRenglones(
   renglones: readonly RenglonDeLaCuenta[],
   taxIncluded: boolean,
   tipCop: number,
+  deliveryFeeCop: number,
   paidCop: number,
 ): TotalesDeLaCuenta {
   const lineas = renglones.map((r) =>
@@ -101,7 +110,14 @@ function totalesDe(
     }),
   );
   const { subtotalCop, taxCop, totalCop } = sumTaxLines(lineas);
-  return { subtotalCop, taxCop, tipCop, totalCop: totalCop + tipCop, paidCop };
+  return {
+    subtotalCop,
+    taxCop,
+    tipCop,
+    deliveryFeeCop,
+    totalCop: totalCop + tipCop + deliveryFeeCop,
+    paidCop,
+  };
 }
 
 export function CuentaEnVivo({
@@ -156,7 +172,13 @@ export function CuentaEnVivo({
   // empobrecería.
   const hayOptimistas = optimistas.some((r) => r.optimista);
   const totalesVivos = hayOptimistas
-    ? totalesDe(optimistas, pricesIncludeTax, totales.tipCop, totales.paidCop)
+    ? totalesSegunRenglones(
+        optimistas,
+        pricesIncludeTax,
+        totales.tipCop,
+        totales.deliveryFeeCop ?? 0,
+        totales.paidCop,
+      )
     : totales;
 
   return (
@@ -264,6 +286,9 @@ export function TotalesEnVivo() {
     <dl className="border-border space-y-1 border-t pt-3 text-sm">
       <Fila termino="Base gravable" valor={totales.subtotalCop} />
       <Fila termino="Impuesto" valor={totales.taxCop} />
+      {totales.deliveryFeeCop !== undefined && totales.deliveryFeeCop > 0 && (
+        <Fila termino="Domicilio" valor={totales.deliveryFeeCop} />
+      )}
       {totales.tipCop > 0 && <Fila termino="Propina" valor={totales.tipCop} />}
       <div className="flex items-baseline justify-between pt-1">
         <dt className="font-medium">Total</dt>

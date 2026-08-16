@@ -315,6 +315,7 @@ export default async function PedidoPage({
           subtotalCop: pedido.subtotalCop,
           taxCop: pedido.taxCop,
           tipCop: pedido.tipCop,
+          deliveryFeeCop: pedido.deliveryFeeCop,
           totalCop: pedido.totalCop,
           paidCop: pedido.paidCop,
         }}

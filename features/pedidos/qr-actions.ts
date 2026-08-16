@@ -164,6 +164,7 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           docNumber: puedeFacturar ? (input.docNumber ?? null) : null,
           deliveryStatus: "PENDIENTE",
           deliveryAddress: input.customerAddress ?? null,
+          deliveryFeeCop: input.type === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0,
           notes: input.customerAddress ? `Domicilio: ${input.customerAddress}` : null,
           subtotalCop: 0,
           taxCop: 0,
