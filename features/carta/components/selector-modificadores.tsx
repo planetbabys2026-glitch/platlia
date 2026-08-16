@@ -42,6 +42,8 @@ import { cn } from "@/lib/utils";
 export type ProductoConModificadores = {
   id: string;
   name: string;
+  shortDescription?: string | null;
+  description?: string | null;
   priceCop: number;
   imageUrl?: string | null;
   hasRecipe?: boolean;

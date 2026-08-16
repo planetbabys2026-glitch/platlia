@@ -33,6 +33,7 @@ export type GrupoDisponible = {
 export type ProductoAdmin = {
   id: string;
   name: string;
+  shortDescription: string | null;
   description: string | null;
   sku: string | null;
   imageUrl: string | null;
@@ -432,6 +433,22 @@ function CamposProducto({
           />
           {campos?.priceCop && <p className="text-destructive text-xs">{campos.priceCop[0]}</p>}
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor={`desc-corta-${idBase}`} className="text-xs">
+          Descripción corta <span className="text-muted-foreground font-normal">(visible en menú QR)</span>
+        </Label>
+        <Input
+          id={`desc-corta-${idBase}`}
+          name="shortDescription"
+          placeholder="Ej. Carne 150g, queso cheddar, tocineta y papas"
+          maxLength={200}
+          defaultValue={producto?.shortDescription ?? undefined}
+        />
+        {campos?.shortDescription && (
+          <p className="text-destructive text-xs">{campos.shortDescription[0]}</p>
+        )}
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">

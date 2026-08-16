@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 type Producto = ProductoConModificadores & {
   id: string;
   name: string;
+  shortDescription: string | null;
   description: string | null;
   priceCop: number;
   imageUrl: string | null;
@@ -295,6 +296,7 @@ export function ClienteMenuQr({
       const coincideBusqueda =
         !busqueda ||
         p.name.toLowerCase().includes(busqueda.toLowerCase()) ||
+        (p.shortDescription && p.shortDescription.toLowerCase().includes(busqueda.toLowerCase())) ||
         (p.description && p.description.toLowerCase().includes(busqueda.toLowerCase()));
       return coincideCat && coincideBusqueda;
     });
@@ -524,9 +526,9 @@ export function ClienteMenuQr({
                             </h3>
                           </div>
 
-                          {producto.description && (
+                          {(producto.shortDescription || producto.description) && (
                             <p className="text-sm text-[color:var(--qr-texto-2)] line-clamp-2 leading-relaxed">
-                              {producto.description}
+                              {producto.shortDescription ?? producto.description}
                             </p>
                           )}
 

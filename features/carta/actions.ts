@@ -145,6 +145,7 @@ export const guardarProducto = defineAction({
       categoryId: input.categoryId,
       taxRateId,
       name: input.name,
+      shortDescription: input.shortDescription ?? null,
       description: input.description ?? null,
       sku: input.sku ?? null,
       imageUrl: input.imageUrl ?? null,

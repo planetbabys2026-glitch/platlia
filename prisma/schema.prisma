@@ -692,10 +692,11 @@ model Product {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
-  name        String
-  description String?
-  sku         String?
-  imageUrl    String?
+  name             String
+  shortDescription String?
+  description      String?
+  sku              String?
+  imageUrl         String?
 
   /// Precio de lista. Si BusinessSettings.pricesIncludeTax es true, ya incluye
   /// el impuesto y lib/tax.ts lo desagrega.

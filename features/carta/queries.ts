@@ -21,6 +21,7 @@ export async function getCartaAdmin(businessId: string) {
         select: {
           id: true,
           name: true,
+          shortDescription: true,
           description: true,
           sku: true,
           imageUrl: true,

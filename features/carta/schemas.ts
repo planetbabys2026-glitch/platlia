@@ -35,6 +35,7 @@ export const productoSchema = z.object({
   id: id.optional(),
   categoryId: id,
   name: nombre,
+  shortDescription: textoOpcional(200),
   description: textoOpcional(500),
   sku: textoOpcional(40),
   // La llena el widget de subida (subirImagenProducto) con la URL que devuelve
