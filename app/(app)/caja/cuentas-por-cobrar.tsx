@@ -1,6 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import {
+  Banknote,
+  Bike,
+  CreditCard,
+  Landmark,
+  MoreHorizontal,
+  Printer,
+  Receipt,
+  Smartphone,
+} from "lucide-react";
 import { PaymentMethod } from "@/generated/prisma/enums";
 import { registrarPago } from "@/features/pedidos/actions";
 import {
@@ -21,16 +31,16 @@ import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 
-const METODOS: Record<string, string> = {
-  EFECTIVO: "Efectivo",
-  TARJETA_DEBITO: "Tarjeta débito",
-  TARJETA_CREDITO: "Tarjeta crédito",
-  NEQUI: "Nequi",
-  DAVIPLATA: "Daviplata",
-  TRANSFERENCIA: "Transferencia",
-  BONO: "Bono",
-  OTRO: "Otro",
-};
+const METODOS_PAGO = [
+  { clave: PaymentMethod.EFECTIVO, etiqueta: "Efectivo", icono: Banknote },
+  { clave: PaymentMethod.NEQUI, etiqueta: "Nequi", icono: Smartphone },
+  { clave: PaymentMethod.DAVIPLATA, etiqueta: "Daviplata", icono: Smartphone },
+  { clave: PaymentMethod.TARJETA_DEBITO, etiqueta: "T. Débito", icono: CreditCard },
+  { clave: PaymentMethod.TARJETA_CREDITO, etiqueta: "T. Crédito", icono: CreditCard },
+  { clave: PaymentMethod.TRANSFERENCIA, etiqueta: "Transferencia", icono: Landmark },
+  { clave: PaymentMethod.BONO, etiqueta: "Bono", icono: Receipt },
+  { clave: PaymentMethod.OTRO, etiqueta: "Otro", icono: MoreHorizontal },
+] as const;
 
 type Cuenta = {
   id: string;
@@ -43,6 +53,7 @@ type Cuenta = {
   subtotalCop: number;
   taxCop: number;
   tipCop: number;
+  deliveryFeeCop?: number | null;
   customerName: string | null;
   docType: string | null;
   docNumber: string | null;
@@ -73,6 +84,7 @@ function FormularioCobro({
   const [fiscal, setFiscal] = useState(() => valorFiscalInicial(cuenta));
   // Arranca con lo que ya tuviera el pedido, que normalmente es 0.
   const [propinaCop, setPropinaCop] = useState(cuenta.tipCop);
+  const [montoEntregado, setMontoEntregado] = useState("");
   const [estado, accion, isPending] = useActionState(registrarPago, ESTADO_INICIAL);
 
   // La sugerencia va sobre el consumo COMPLETO con impuesto —el número que el
@@ -88,61 +100,98 @@ function FormularioCobro({
     cuenta.totalCop - cuenta.paidCop + (propinaCop - cuenta.tipCop),
   );
 
+  const numEntregado = parseInt(montoEntregado.replace(/\D/g, "") || "0", 10);
+  const cambioDevuelta = metodo === "EFECTIVO" && numEntregado > faltanteCop ? numEntregado - faltanteCop : 0;
+
+  const tieneDomicilio = cuenta.type === "DOMICILIO" || (cuenta.deliveryFeeCop != null && cuenta.deliveryFeeCop > 0);
+  const valorDomicilio = cuenta.deliveryFeeCop ?? 0;
+
   return (
-    <form action={accion} className="space-y-4 pt-3 border-t border-border/80">
+    <form action={accion} className="space-y-4 pt-3.5 border-t border-border">
       <input type="hidden" name="orderId" value={cuenta.id} />
       <input type="hidden" name="method" value={metodo} />
       <input type="hidden" name="tipCop" value={propinaCop} />
       <PantallaCargando forcePending={isPending} />
 
-      {/* Botón de impresión de pre-cuenta para entregar a la mesera antes de cobrar */}
-      <div className="flex items-center justify-between gap-2 rounded-lg bg-warning/10 border border-warning/30 p-2.5">
+      {/* Barra sobria de pre-cuenta */}
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 border border-border p-3">
         <div className="space-y-0.5">
-          <p className="text-xs font-bold text-warning-soft">Ticket de Pre-cuenta</p>
-          <p className="text-rotulo text-muted-foreground">Imprimir factura para llevar a la mesa</p>
+          <p className="text-xs font-semibold text-foreground">Ticket de pre-cuenta</p>
+          <p className="text-rotulo text-muted-foreground">Imprimir resumen para llevar a la mesa antes de cobrar</p>
         </div>
-        <a
-          href={`/imprimir/pedido/${cuenta.id}`}
-          target="_blank"
-          rel="noopener"
-          className="inline-flex min-h-11 tableta:min-h-8 items-center gap-1.5 rounded-md bg-warning hover:bg-warning/90 text-warning-foreground font-bold px-3 py-1.5 text-xs shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+        <Button
+          asChild
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-medium gap-1.5 shrink-0 border-border hover:bg-muted"
         >
-          🖨️ Imprimir ticket
-        </a>
+          <a href={`/imprimir/pedido/${cuenta.id}`} target="_blank" rel="noopener">
+            <Printer className="size-3.5" />
+            Imprimir
+          </a>
+        </Button>
       </div>
 
-      <div className="space-y-2">
-        <Label className="font-mono text-rotulo uppercase tracking-wider text-muted-foreground">
+      {/* Desglose de totales antes de cobrar */}
+      <div className="rounded-xl bg-muted/30 border border-border p-3 space-y-1.5">
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Subtotal productos ({cuenta.items.reduce((acc, i) => acc + i.quantity, 0)})</span>
+          <span className="numeral">{formatCop(cuenta.subtotalCop)}</span>
+        </div>
+        {tieneDomicilio && (
+          <div className="flex justify-between text-xs font-medium text-brand">
+            <span className="flex items-center gap-1.5">
+              <Bike className="size-3.5" /> Servicio de domicilio
+            </span>
+            <span className="numeral font-bold">
+              {valorDomicilio > 0 ? `+${formatCop(valorDomicilio)}` : "Gratis ($0)"}
+            </span>
+          </div>
+        )}
+        {propinaCop > 0 && (
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Propina voluntaria</span>
+            <span className="numeral font-medium">+{formatCop(propinaCop)}</span>
+          </div>
+        )}
+        <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-border font-bold text-foreground">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">Total a cobrar</span>
+          <span className="numeral text-lg text-brand font-extrabold">{formatCop(faltanteCop)}</span>
+        </div>
+      </div>
+
+      {/* Selector de Método de Pago */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold text-foreground">
           Método de pago
         </Label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-          {Object.entries(METODOS).map(([clave, etiqueta]) => (
+          {METODOS_PAGO.map(({ clave, etiqueta, icono: Icono }) => (
             <button
               key={clave}
               type="button"
               onClick={() => setMetodo(clave)}
               className={cn(
-                "rounded-lg border px-2.5 py-2 text-xs font-medium transition-all text-center",
+                "flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium transition-all text-center",
                 metodo === clave
-                  ? "border-[var(--brasa)] bg-[var(--brasa)]/15 text-[var(--brasa)] font-bold ring-1 ring-[var(--brasa)]/30"
-                  : "border-[var(--linea-30)] bg-[var(--panel-2)] hover:bg-[var(--panel-3)] text-[var(--papel)]",
+                  ? "border-brand bg-brand/10 text-brand font-bold shadow-xs"
+                  : "border-border bg-background hover:bg-muted text-foreground",
               )}
             >
-              {etiqueta}
+              <Icono className="size-3.5 shrink-0 opacity-80" />
+              <span>{etiqueta}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Campos de Cobro y Efectivo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor={`monto-${cuenta.id}`} className="text-xs font-medium">
-            Valor a cobrar
+          <Label htmlFor={`monto-${cuenta.id}`} className="text-xs font-medium text-foreground">
+            Valor a registrar ($ COP)
           </Label>
-          {/* `key` y no `defaultValue` a secas: al cambiar la propina cambia el
-              faltante, y un campo no controlado no se entera. Remontarlo lo deja
-              con el valor nuevo y sigue permitiendo escribir un monto distinto
-              para un pago parcial. */}
           <Input
             key={faltanteCop}
             id={`monto-${cuenta.id}`}
@@ -150,24 +199,57 @@ function FormularioCobro({
             inputMode="numeric"
             defaultValue={faltanteCop}
             required
-            className="h-9 text-sm font-semibold numeral"
+            className="h-9 text-sm font-semibold numeral font-mono"
           />
         </div>
+
         {metodo === "EFECTIVO" && (
           <div className="space-y-1">
-            <Label htmlFor={`entregado-${cuenta.id}`} className="text-xs font-medium">
-              Con cuánto paga (vuelto)
+            <Label htmlFor={`entregado-${cuenta.id}`} className="text-xs font-medium text-foreground">
+              Efectivo recibido (calcula devuelta)
             </Label>
             <Input
               id={`entregado-${cuenta.id}`}
               name="tenderedCop"
               inputMode="numeric"
-              placeholder="opcional"
-              className="h-9 text-sm numeral"
+              value={montoEntregado}
+              onChange={(e) => setMontoEntregado(e.target.value)}
+              placeholder={faltanteCop.toString()}
+              className="h-9 text-sm numeral font-mono"
             />
           </div>
         )}
       </div>
+
+      {/* Presets de Efectivo y Devuelta */}
+      {metodo === "EFECTIVO" && (
+        <div className="space-y-2 p-3 rounded-xl bg-muted/40 border border-border">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            {[
+              { label: "Exacto", val: faltanteCop },
+              { label: "$20k", val: 20000 },
+              { label: "$50k", val: 50000 },
+              { label: "$100k", val: 100000 },
+            ].map((b) => (
+              <button
+                key={b.label}
+                type="button"
+                onClick={() => setMontoEntregado(b.val.toString())}
+                className="px-2.5 py-1 rounded-lg bg-background border border-border text-rotulo font-bold hover:bg-brand hover:text-brand-foreground transition-colors"
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-border text-xs">
+            <span className="font-medium text-muted-foreground">Cambio / Devuelta:</span>
+            <span className="numeral text-sm font-bold text-success-soft">
+              {formatCop(cambioDevuelta)}
+            </span>
+          </div>
+        </div>
+      )}
 
       <SelectorDePropina
         habilitado={propina.habilitada}
@@ -189,9 +271,9 @@ function FormularioCobro({
         type="submit"
         size="lg"
         disabled={isPending}
-        className="w-full bg-success hover:bg-success/90 text-white font-bold h-11 text-sm shadow-md gap-2"
+        className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-sm rounded-xl shadow-sm gap-2"
       >
-        {isPending ? "Procesando cobro…" : `💳 Confirmar pago de ${formatCop(faltanteCop)}`}
+        {isPending ? "Procesando cobro…" : `Confirmar pago de ${formatCop(faltanteCop)}`}
       </Button>
 
       {!estado.ok && estado.error && (
@@ -206,11 +288,6 @@ function FormularioCobro({
 /**
  * Agrupa las cuentas por mesa, conservando el orden de prioridad que trae la
  * consulta (primero las que pidieron la cuenta).
- *
- * Sin esto, las tres cuentas separadas de la mesa 12 se ven como tres pedidos
- * sueltos entre los de otras mesas, y el cajero termina cobrándole a una persona
- * la cuenta de otra. Lo que no es de mesa —para llevar, domicilio— queda suelto,
- * porque ahí cada pedido es de una persona distinta.
  */
 function agruparPorMesa(cuentas: Cuenta[]) {
   const grupos: { clave: string; mesa: string | null; cuentas: Cuenta[] }[] = [];
@@ -250,10 +327,14 @@ export function CuentasPorCobrar({
 
   if (cuentas.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center space-y-2">
-          <p className="text-sm text-muted-foreground">
-            No hay cuentas ni tickets pendientes por cobrar en este momento.
+      <Card className="border-border shadow-xs">
+        <CardContent className="py-10 text-center space-y-2">
+          <Receipt className="size-8 text-muted-foreground mx-auto opacity-60" />
+          <p className="text-sm font-medium text-foreground">
+            No hay cuentas pendientes por cobrar
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Los pedidos enviados a caja desde el salón aparecerán en esta lista listos para el pago.
           </p>
         </CardContent>
       </Card>
@@ -263,79 +344,84 @@ export function CuentasPorCobrar({
   return (
     <section className="space-y-4" aria-label="Cuentas por cobrar">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <span>💳 Cuentas por cobrar</span>
-          <Badge variant="default" className="bg-success text-white">
-            {cuentas.length}
+        <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2.5">
+          <span>Cuentas por cobrar</span>
+          <Badge variant="secondary" className="font-mono text-rotulo font-semibold">
+            {cuentas.length} {cuentas.length === 1 ? "pendiente" : "pendientes"}
           </Badge>
         </h2>
       </div>
 
       {agruparPorMesa(cuentas).map((grupo) => (
         <div key={grupo.clave} className="space-y-3">
-          {/* Encabezado solo cuando la mesa trae varias cuentas: si es una sola,
-              el título de la tarjeta ya dice de qué mesa es. */}
+          {/* Encabezado solo cuando la mesa trae varias cuentas */}
           {grupo.cuentas.length > 1 && (
-            <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-dashed border-border/80 bg-card/60 px-3 py-2">
-              <span className="text-sm font-bold">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-dashed border-border/80 bg-muted/30 px-3.5 py-2">
+              <span className="text-xs font-bold text-foreground">
                 Mesa {grupo.mesa}
-                <span className="text-muted-foreground ml-2 text-xs font-normal">
+                <span className="text-muted-foreground ml-2 text-rotulo font-normal">
                   {grupo.cuentas.length} cuentas separadas
                 </span>
               </span>
-              <span className="numeral text-sm font-semibold">
+              <span className="numeral text-sm font-bold text-brand">
                 {formatCop(grupo.cuentas.reduce((suma, c) => suma + c.totalCop, 0))}
               </span>
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-2">
             {grupo.cuentas.map((cuenta) => {
-              const destino = cuenta.table
-                ? `Mesa ${cuenta.table.name}`
-                : cuenta.turnNumber !== null
-                  ? `Turno ${formatTurno(cuenta.turnNumber, 99, false)}`
-                  : `Pedido #${cuenta.code}`;
-              // Con varias cuentas en la misma mesa, el nombre es lo único que
-              // distingue a quién se le está cobrando.
+              const esDomicilio = cuenta.type === "DOMICILIO";
               const nombre = cuenta.customerName?.trim();
-              const titulo = nombre && cuenta.table ? `${destino} · ${nombre}` : destino;
+
+              const destino = esDomicilio
+                ? (nombre ? `Domicilio · ${nombre}` : `Domicilio #${cuenta.code}`)
+                : cuenta.table
+                  ? (nombre ? `Mesa ${cuenta.table.name} · ${nombre}` : `Mesa ${cuenta.table.name}`)
+                  : cuenta.turnNumber !== null
+                    ? (nombre ? `Turno ${formatTurno(cuenta.turnNumber, 99, false)} · ${nombre}` : `Turno ${formatTurno(cuenta.turnNumber, 99, false)}`)
+                    : (nombre ? `Pedido #${cuenta.code} · ${nombre}` : `Pedido #${cuenta.code}`);
 
               const expandida = cuentaExpandida === cuenta.id || cuentas.length === 1;
+              const tieneDomicilio = esDomicilio || (cuenta.deliveryFeeCop != null && cuenta.deliveryFeeCop > 0);
+              const valorDomicilio = cuenta.deliveryFeeCop ?? 0;
 
               return (
                 <Card
                   key={cuenta.id}
                   className={cn(
-                    "transition-all duration-200 border-border/80",
-                    cuenta.status === "CUENTA_PEDIDA" && "border-warning/50 bg-warning/5 ring-1 ring-warning/20",
+                    "transition-all duration-200 border-border shadow-xs",
+                    cuenta.status === "CUENTA_PEDIDA" && "border-warning/40 bg-warning/[0.02]",
                   )}
                 >
                   <CardContent className="p-4 space-y-3">
                     {/* Header de la tarjeta de cuenta */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-base">{titulo}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-base text-foreground flex items-center gap-1.5">
+                            {esDomicilio && <Bike className="size-4 text-brand shrink-0" />}
+                            <span>{destino}</span>
+                          </h3>
                           <Badge
-                            variant={cuenta.status === "CUENTA_PEDIDA" ? "default" : "outline"}
+                            variant="outline"
                             className={cn(
+                              "text-rotulo font-bold uppercase tracking-wider px-2 py-0.5",
                               cuenta.status === "CUENTA_PEDIDA"
-                                ? "bg-warning text-warning-foreground font-bold"
-                                : "border-[var(--linea-30)] text-muted-foreground",
+                                ? "bg-warning/15 text-warning-soft border-warning/30"
+                                : "text-muted-foreground border-border",
                             )}
                           >
-                            {cuenta.status === "CUENTA_PEDIDA" ? "CUENTA PEDIDA 🧾" : "Abierta"}
+                            {cuenta.status === "CUENTA_PEDIDA" ? "Cuenta pedida" : "Abierta"}
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           Pedido #{cuenta.code} · Abrió {cuenta.openedBy.name}
-                          {cuenta.customerName && ` · ${cuenta.customerName}`}
                         </p>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <span className="numeral text-xl font-extrabold text-[var(--papel)] block font-display">
+                        <span className="numeral text-xl font-bold text-foreground block">
                           {formatCop(cuenta.totalCop)}
                         </span>
                         <span className="text-rotulo text-muted-foreground font-mono">
@@ -344,12 +430,12 @@ export function CuentasPorCobrar({
                       </div>
                     </div>
 
-                    {/* Resumen de items del ticket */}
-                    <div className="rounded-lg bg-[var(--panel-2)] border border-[var(--linea-16)] p-2.5 space-y-1 text-xs">
+                    {/* Resumen de items del ticket con desglose explícito de domicilio */}
+                    <div className="rounded-xl bg-muted/40 border border-border/70 p-3 space-y-1.5 text-xs">
                       {cuenta.items.map((item) => (
-                        <div key={item.id} className="flex justify-between gap-2">
-                          <span className="truncate">
-                            <strong className="text-[var(--brasa)] font-semibold">{item.quantity}x</strong>{" "}
+                        <div key={item.id} className="flex justify-between items-baseline gap-2">
+                          <span className="truncate text-foreground">
+                            <span className="font-semibold text-muted-foreground mr-1.5">{item.quantity}x</span>
                             {item.nameSnapshot}
                           </span>
                           <span className="numeral text-muted-foreground font-medium shrink-0 font-mono">
@@ -357,25 +443,49 @@ export function CuentasPorCobrar({
                           </span>
                         </div>
                       ))}
+
+                      {/* Línea explícita de Domicilio */}
+                      {tieneDomicilio && (
+                        <div className="flex justify-between items-baseline gap-2 pt-1.5 mt-1 border-t border-border/50 text-xs">
+                          <span className="font-semibold text-brand flex items-center gap-1.5">
+                            <Bike className="size-3.5 shrink-0" /> Servicio de domicilio
+                          </span>
+                          <span className="numeral font-bold text-foreground">
+                            {valorDomicilio > 0 ? `+${formatCop(valorDomicilio)}` : "Gratis ($0)"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Línea de Propina */}
+                      {cuenta.tipCop > 0 && (
+                        <div className="flex justify-between items-baseline gap-2 text-xs text-muted-foreground">
+                          <span>Propina</span>
+                          <span className="numeral font-medium">+{formatCop(cuenta.tipCop)}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Botón para desplegar / cobrar */}
                     {!expandida ? (
                       <div className="flex items-center gap-2 pt-1">
-                        <a
-                          href={`/imprimir/pedido/${cuenta.id}`}
-                          target="_blank"
-                          rel="noopener"
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-warning/40 bg-warning/15 hover:bg-warning/25 text-warning-soft font-bold px-3 h-11 tableta:h-10 text-xs shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
                         >
-                          🖨️ Pre-cuenta
-                        </a>
+                          <a href={`/imprimir/pedido/${cuenta.id}`} target="_blank" rel="noopener">
+                            <Printer className="size-3.5" />
+                            Pre-cuenta
+                          </a>
+                        </Button>
                         <Button
                           type="button"
+                          size="sm"
                           onClick={() => setCuentaExpandida(cuenta.id)}
-                          className="flex-1 bg-success hover:bg-success/90 text-white font-bold h-10 text-xs shadow-sm"
+                          className="flex-1 bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-9 text-xs shadow-xs"
                         >
-                          Cobrar en caja →
+                          Cobrar cuenta
                         </Button>
                       </div>
                     ) : (

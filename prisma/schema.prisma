@@ -328,6 +328,9 @@ model BusinessSettings {
   tributeCode                String? @default("ZZ")
   responsibilities           String? @default("R-99-PN")
 
+  /// Permisos de vista personalizados por rol (JSON serializado)
+  rolePermissions            String  @default("{}")
+
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 }

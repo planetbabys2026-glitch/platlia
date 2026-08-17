@@ -32,6 +32,7 @@ type AppShellProps = {
   user: { name: string; email?: string } | null;
   businessName?: string;
   role?: string | null;
+  rolePermissions?: string | null;
   usaMesas: boolean;
   usaCocina?: boolean;
   usaDomicilios?: boolean;
@@ -187,7 +188,7 @@ function EnlaceNav({
                     onClick={onNavegar}
                     aria-current={activaSeccion ? "page" : undefined}
                     className={cn(
-                      "flex items-center rounded-md font-medium transition-colors",
+                      "flex items-center justify-between gap-2 rounded-md font-medium transition-colors",
                       denso ? "px-3 py-2 text-xs" : "min-h-11 px-3 py-2 text-sm",
                       activaSeccion
                         ? "bg-brand font-bold text-brand-foreground"
@@ -195,6 +196,9 @@ function EnlaceNav({
                     )}
                   >
                     <span className="truncate">{seccion.titulo}</span>
+                    {seccion.insignia !== undefined && seccion.insignia > 0 && (
+                      <Insignia valor={seccion.insignia} />
+                    )}
                   </Link>
                 );
               })}
@@ -217,6 +221,8 @@ function RotuloGrupo({ children }: { children: React.ReactNode }) {
 function Shell({
   user,
   businessName,
+  role,
+  rolePermissions,
   usaMesas,
   usaCocina = true,
   usaDomicilios = true,
@@ -244,6 +250,8 @@ function Shell({
     usaRecetas,
     puedeFacturar,
     esPropietario,
+    role,
+    rolePermissions,
     comandasVivas,
     domiciliosActivos,
     cuentasPorCobrar,

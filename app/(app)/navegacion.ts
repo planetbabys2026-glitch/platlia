@@ -12,6 +12,8 @@ import {
   SlidersHorizontal,
   Users,
 } from "lucide-react";
+import type { Role } from "@/generated/prisma/enums";
+import { tienePermisoSeccion, type SeccionPermiso } from "@/lib/auth/permisos-roles";
 
 /**
  * El menú, en un solo lugar.
@@ -32,6 +34,8 @@ export type SeccionNav = {
   titulo: string;
   /** El valor de `?vista=`. Vacío = la sección por defecto, sin parámetro. */
   vista: string;
+  /** Cuántos pendientes tiene esta subsección específica. */
+  insignia?: number;
 };
 
 export type ItemNav = {
@@ -68,6 +72,8 @@ type Contexto = {
   /** Solo quien puede pagar ve la licencia. */
   puedeFacturar?: boolean;
   esPropietario?: boolean;
+  role?: Role | string | null;
+  rolePermissions?: string | null;
   comandasVivas?: number;
   domiciliosActivos?: number;
   /** Cuentas esperando cobro. Es el contador que llevaba la píldora de Caja. */
@@ -90,9 +96,11 @@ export function hrefDeSeccion(item: ItemNav, seccion: SeccionNav): string {
  * Depende de `usaMesas`, que es configuración del negocio y no dato del momento:
  * el enlace sigue siendo estable, que es lo que importaba.
  */
-export function seccionesDeCaja(usaMesas: boolean): SeccionNav[] {
+export function seccionesDeCaja(usaMesas: boolean, cuentasPorCobrar?: number): SeccionNav[] {
   return [
-    ...(usaMesas ? [{ titulo: "Cobrar cuentas", vista: "" }] : []),
+    ...(usaMesas
+      ? [{ titulo: "Cobrar cuentas", vista: "", insignia: cuentasPorCobrar }]
+      : []),
     { titulo: "Cuentas cobradas", vista: usaMesas ? "cobradas" : "" },
     { titulo: "Movimientos y cierre", vista: "movimientos" },
   ];
@@ -111,6 +119,8 @@ export function construirNavegacion({
   usaRecetas = false,
   puedeFacturar,
   esPropietario,
+  role,
+  rolePermissions,
   comandasVivas,
   domiciliosActivos,
   cuentasPorCobrar,
@@ -119,15 +129,20 @@ export function construirNavegacion({
   administracion: ItemNav[];
   configuracion: ItemNav | null;
 } {
+  const puedeVer = (seccion: SeccionPermiso) => {
+    if (!role) return true;
+    return tienePermisoSeccion(role as Role, seccion, rolePermissions);
+  };
+
   const operacion: ItemNav[] = [
-    // Salón y POS son excluyentes: un negocio que no sienta mesas entra por el
-    // mostrador, y /salon le responde 404.
-    usaMesas
-      ? { titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }
-      : { titulo: "POS", href: "/pos", icono: Calculator, enBarraInferior: true },
-    // El módulo se puede apagar por empresa y la página responde 404: hasta
-    // ahora el ítem se pintaba igual y llevaba a una pantalla que no existe.
-    ...(usaCocina
+    ...(puedeVer("salon_pos")
+      ? [
+          usaMesas
+            ? { titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }
+            : { titulo: "POS", href: "/pos", icono: Calculator, enBarraInferior: true },
+        ]
+      : []),
+    ...(usaCocina && puedeVer("cocina")
       ? [
           {
             titulo: "Cocina",
@@ -138,24 +153,28 @@ export function construirNavegacion({
           },
         ]
       : []),
-    {
-      titulo: "Caja",
-      href: "/caja",
-      icono: CreditCard,
-      // La insignia solo con mesas: sin salón nada espera en la caja, y un cero
-      // permanente al lado del ítem no dice nada.
-      insignia: usaMesas ? cuentasPorCobrar : undefined,
-      enBarraInferior: true,
-      secciones: seccionesDeCaja(usaMesas),
-    },
-    ...(usaDomicilios
+    ...(puedeVer("caja")
+      ? [
+          {
+            titulo: "Caja",
+            href: "/caja",
+            icono: CreditCard,
+            insignia: usaMesas ? cuentasPorCobrar : undefined,
+            enBarraInferior: true,
+            secciones: seccionesDeCaja(usaMesas, cuentasPorCobrar),
+          },
+        ]
+      : []),
+    ...(usaDomicilios && puedeVer("domicilios")
       ? [{ titulo: "Domicilios", href: "/domicilios", icono: Bike, insignia: domiciliosActivos }]
       : []),
-    { titulo: "Turnero", href: "/turnero", icono: MonitorPlay },
+    ...(puedeVer("turnero")
+      ? [{ titulo: "Turnero", href: "/turnero", icono: MonitorPlay }]
+      : []),
   ];
 
   const gestion: ItemNav[] = [
-    ...(puedeVerInventario
+    ...(puedeVerInventario && puedeVer("inventario")
       ? [
           {
             titulo: "Inventario",
@@ -171,17 +190,21 @@ export function construirNavegacion({
           },
         ]
       : []),
-    {
-      titulo: "Informes",
-      href: "/informes",
-      icono: BarChart3,
-      secciones: [
-        { titulo: "Ventas del día", vista: "" },
-        { titulo: "Productos más vendidos", vista: "productos" },
-        { titulo: "Anulaciones", vista: "anulaciones" },
-        { titulo: "Alertas de inventario", vista: "inventario" },
-      ],
-    },
+    ...(puedeVer("informes")
+      ? [
+          {
+            titulo: "Informes",
+            href: "/informes",
+            icono: BarChart3,
+            secciones: [
+              { titulo: "Ventas del día", vista: "" },
+              { titulo: "Productos más vendidos", vista: "productos" },
+              { titulo: "Anulaciones", vista: "anulaciones" },
+              { titulo: "Alertas de inventario", vista: "inventario" },
+            ],
+          },
+        ]
+      : []),
   ];
 
   const configuracion: ItemNav | null = esPropietario
@@ -192,6 +215,7 @@ export function construirNavegacion({
         secciones: [
           { titulo: "Datos del negocio", vista: "" },
           { titulo: "Módulos", vista: "modulos" },
+          { titulo: "Permisos de roles", vista: "permisos" },
           { titulo: "Turnero TV", vista: "turnero" },
           { titulo: "Menú digital QR", vista: "qr" },
           { titulo: "Operación y recibos", vista: "operacion" },
@@ -202,22 +226,26 @@ export function construirNavegacion({
     : null;
 
   const administracion: ItemNav[] = [
-    { titulo: "Carta", href: "/administracion/carta", icono: BookOpen },
-    ...(usaMesas
+    ...(puedeVer("carta")
+      ? [{ titulo: "Carta", href: "/administracion/carta", icono: BookOpen }]
+      : []),
+    ...(usaMesas && puedeVer("salon_plano")
       ? [{ titulo: "Salón", href: "/administracion/salon", icono: LayoutGrid }]
       : []),
-    { titulo: "Equipo", href: "/administracion/equipo", icono: Users },
-    // Configuración solo sube a Gestión para quien la puede tocar; el resto la
-    // sigue viendo acá para no perder el acceso.
+    ...(puedeVer("equipo")
+      ? [{ titulo: "Equipo", href: "/administracion/equipo", icono: Users }]
+      : []),
     ...(esPropietario
       ? []
-      : [
+      : puedeVer("configuracion")
+      ? [
           {
             titulo: "Configuración",
             href: "/administracion/configuracion",
             icono: Settings,
           },
-        ]),
+        ]
+      : []),
   ];
 
   return {

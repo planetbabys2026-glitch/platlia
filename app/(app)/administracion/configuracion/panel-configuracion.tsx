@@ -11,6 +11,7 @@ import {
   FormularioQrMenu,
   FormularioTurnero,
 } from "./formularios";
+import { FormularioPermisosRoles } from "./formulario-permisos-roles";
 
 import type { ReceiptWidth } from "@/generated/prisma/enums";
 
@@ -59,6 +60,7 @@ type PanelConfiguracionProps = {
     factusNumberingRangeId: number | null;
     municipalityCode: string | null;
     faltantesParaFacturar: string[];
+    rolePermissions?: string | null;
   };
   facturacion: {
     suscripcion: {
@@ -79,7 +81,7 @@ type PanelConfiguracionProps = {
   mesas: { id: string; name: string }[];
 };
 
-type TabId = "datos" | "modulos" | "turnero" | "qr" | "operacion" | "factus" | "licencia";
+type TabId = "datos" | "modulos" | "permisos" | "turnero" | "qr" | "operacion" | "factus" | "licencia";
 
 export function PanelConfiguracion({
   negocio,
@@ -95,13 +97,13 @@ export function PanelConfiguracion({
   // píldoras ya nadie la cambia desde acá, así que el setter no se usa.
   const [tabActiva] = useVistaEnUrl<TabId>(
     "vista",
-    ["datos", "modulos", "turnero", "qr", "operacion", "factus", "licencia"],
+    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "factus", "licencia"],
     "datos",
   );
 
   return (
     <div className="space-y-6">
-      {/* La tira de píldoras que había acá se fue: las siete secciones se abren
+      {/* La tira de píldoras que había acá se fue: las ocho secciones se abren
           desde el menú lateral, como en Informes. Cada panel ya trae su propio
           `h2` con el nombre de la sección, así que no hace falta reponer nada
           para saber dónde está uno parado. */}
@@ -135,6 +137,14 @@ export function PanelConfiguracion({
               inventoryEnabled={settings.inventoryEnabled}
               recipesEnabled={settings.recipesEnabled}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {tabActiva === "permisos" && (
+        <Card className="shadow-sm">
+          <CardContent className="space-y-4 pt-6">
+            <FormularioPermisosRoles rolePermissionsRaw={settings.rolePermissions} />
           </CardContent>
         </Card>
       )}

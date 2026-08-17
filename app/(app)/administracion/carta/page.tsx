@@ -3,8 +3,11 @@ import Link from "next/link";
 import { Role } from "@/generated/prisma/enums";
 import { getCartaAdmin, getTarifas } from "@/features/carta/queries";
 import { getGruposParaAsignar } from "@/features/modificadores/queries";
+import { notFound } from "next/navigation";
+import { getSettings } from "@/features/negocio/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { cn } from "@/lib/utils";
 import {
   ArchivarCategoria,
@@ -26,7 +29,11 @@ export default async function CartaPage({
   searchParams: Promise<{ categoria?: string }>;
 }) {
   // Verifica por su cuenta: el layout no es frontera.
-  const ctx = await requireRole(Role.ADMINISTRADOR);
+  const ctx = await requireRole(Role.ADMINISTRADOR, Role.CAJERO, Role.MESERO, Role.COCINA);
+  const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "carta", settings.rolePermissions)) {
+    notFound();
+  }
   const { categoria: categoriaIdParam } = await searchParams;
 
   const [categorias, tarifas, grupos] = await Promise.all([

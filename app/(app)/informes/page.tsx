@@ -11,7 +11,9 @@ import {
 } from "@/features/informes/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { Card, CardContent } from "@/components/ui/card";
+import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { formatCop, formatRateBp, promedioCop, variacionPorcentual } from "@/lib/money";
 import { currentBusinessDate, formatBusinessDate, parseBusinessDate } from "@/lib/time";
 import { AlertTriangle, ArrowLeft, ArrowRight, Boxes, ShoppingBag } from "lucide-react";
@@ -38,6 +40,10 @@ export default async function InformesPage({
   searchParams: Promise<{ jornada?: string; vista?: string }>;
 }) {
   const ctx = await requireModule(AppModule.INFORMES);
+  const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "informes", settings.rolePermissions)) {
+    notFound();
+  }
   const { jornada, vista } = await searchParams;
 
   /**
@@ -51,7 +57,6 @@ export default async function InformesPage({
   const seccion = ["productos", "anulaciones", "inventario"].includes(vista ?? "")
     ? (vista as "productos" | "anulaciones" | "inventario")
     : "ventas";
-  const settings = await getSettings(ctx.business.id);
 
   let dia: Date;
   try {

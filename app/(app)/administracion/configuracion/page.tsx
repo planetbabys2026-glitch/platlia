@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { faltantesParaFacturar } from "@/lib/billing/factus-habilitacion";
 import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { tenantDb } from "@/lib/db/tenant";
@@ -12,7 +14,7 @@ export const metadata: Metadata = { title: "Configuración" };
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracionPage() {
-  const ctx = await requireRole(Role.ADMINISTRADOR);
+  const ctx = await requireRole(Role.ADMINISTRADOR, Role.CAJERO, Role.MESERO, Role.COCINA);
   const esPropietario = ctx.role === Role.PROPIETARIO;
   const db = tenantDb(ctx.business.id);
 
@@ -35,6 +37,10 @@ export default async function ConfiguracionPage() {
       select: { id: true, name: true },
     }),
   ]);
+
+  if (!esPropietario && !tienePermisoSeccion(ctx.role, "configuracion", settings.rolePermissions)) {
+    notFound();
+  }
 
   /**
    * Las credenciales de Factus NO cruzan a un componente cliente.

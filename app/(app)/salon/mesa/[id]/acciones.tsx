@@ -53,13 +53,30 @@ export function NuevaCuenta({ tableId }: { tableId: string }) {
   const router = useRouter();
   const [estado, accion, isPending] = useActionState(abrirPedido, ESTADO_INICIAL);
   const [nombre, setNombre] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    if (estado.ok && estado.data?.id) router.push(`/pedido/${estado.data.id}`);
+    if (estado.ok && estado.data?.id) {
+      router.push(`/pedido/${estado.data.id}`);
+    } else if (!estado.ok && estado.error) {
+      setEnviando(false);
+    }
   }, [estado, router]);
 
+  const cargando = isPending || enviando;
+
   return (
-    <form action={accion} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+    <form
+      action={accion}
+      onSubmit={(e) => {
+        if (cargando) {
+          e.preventDefault();
+          return;
+        }
+        setEnviando(true);
+      }}
+      className="flex flex-col gap-2 sm:flex-row sm:items-start"
+    >
       <input type="hidden" name="type" value="MESA" />
       <input type="hidden" name="tableId" value={tableId} />
       <div className="flex-1 space-y-1">
@@ -68,6 +85,7 @@ export function NuevaCuenta({ tableId }: { tableId: string }) {
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           required
+          disabled={cargando}
           maxLength={120}
           placeholder="¿A nombre de quién? (ej. Andrés)"
           aria-label="Nombre de la cuenta"
@@ -77,7 +95,7 @@ export function NuevaCuenta({ tableId }: { tableId: string }) {
           <p className="text-destructive text-xs">{estado.error}</p>
         )}
       </div>
-      <Enviar className="h-11 shrink-0" isPending={isPending}>
+      <Enviar className="h-11 shrink-0" isPending={cargando}>
         + Nueva cuenta
       </Enviar>
     </form>

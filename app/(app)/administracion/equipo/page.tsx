@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Role } from "@/generated/prisma/enums";
 import { getEquipo } from "@/features/equipo/queries";
+import { getSettings } from "@/features/negocio/queries";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { formatDayInTimeZone } from "@/lib/time";
 import { AccionesMiembro, AgregarEmpleado, ETIQUETA_ROL } from "./formularios";
 
@@ -11,7 +14,11 @@ export const metadata: Metadata = { title: "Equipo" };
 export const dynamic = "force-dynamic";
 
 export default async function EquipoPage() {
-  const ctx = await requireRole(Role.ADMINISTRADOR);
+  const ctx = await requireRole(Role.ADMINISTRADOR, Role.CAJERO, Role.MESERO, Role.COCINA);
+  const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "equipo", settings.rolePermissions)) {
+    notFound();
+  }
   const { miembros, propietariosActivos } = await getEquipo(ctx.business.id);
 
   const activos = miembros.filter((m) => m.active);

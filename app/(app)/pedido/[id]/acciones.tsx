@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { PaymentMethod } from "@/generated/prisma/enums";
+import { CheckCircle2, CreditCard, Minus, Plus, ReceiptText, Trash2, UtensilsCrossed } from "lucide-react";
 import {
   anularItem,
   anularPedido,
@@ -24,14 +25,14 @@ import { formatCop } from "@/lib/money";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 
-/** Etiquetas de los métodos de pago, como se dicen en Colombia. */
+/** Etiquetas de los métodos de pago en Colombia. */
 const METODOS: Record<string, string> = {
   EFECTIVO: "Efectivo",
   TARJETA_DEBITO: "Tarjeta débito",
   TARJETA_CREDITO: "Tarjeta crédito",
   NEQUI: "Nequi",
   DAVIPLATA: "Daviplata",
-  TRANSFERENCIA: "Transferencia",
+  TRANSFERENCIA: "Transferencia bancaria",
   BONO: "Bono",
   OTRO: "Otro",
 };
@@ -52,17 +53,13 @@ function Enviar({
   const { pending } = useFormStatus();
   const cargando = pending || isPending;
   return (
-    // Sin velo a pantalla completa. Estas son acciones que ocurren adentro de la
-    // pantalla que uno está mirando —subir una cantidad, poner una nota— y taparla
-    // entera mientras tanto dejaba la aplicación muda y sorda: los toques caían
-    // sobre el overlay, así que la gente tocaba otra vez. El botón alcanza.
     <Button type="submit" variant={variant} size={size} className={className} disabled={cargando}>
       {cargando ? "…" : children}
     </Button>
   );
 }
 
-/** Los ± de un renglón. Cantidad 1 y "−" no anula: anular exige motivo. */
+/** Los ± de un renglón. */
 export function ControlCantidad({
   itemId,
   quantity,
@@ -74,64 +71,67 @@ export function ControlCantidad({
 }) {
   const [, accion, isPending] = useActionState(cambiarCantidad, ESTADO_INICIAL);
 
-  if (!editable) return <span className="numeral text-sm">{quantity}</span>;
+  if (!editable) return <span className="numeral text-xs font-bold text-foreground">{quantity}</span>;
 
   return (
     <span className="flex items-center gap-1">
       <form action={accion}>
         <input type="hidden" name="itemId" value={itemId} />
         <input type="hidden" name="quantity" value={Math.max(1, quantity - 1)} />
-        <Enviar variant="outline" size="sm" className="size-7 p-0" isPending={isPending}>
-          −
+        <Enviar variant="outline" size="sm" className="size-6 p-0 rounded-md" isPending={isPending}>
+          <Minus className="size-3" />
         </Enviar>
       </form>
-      <span className="numeral w-6 text-center text-sm">{quantity}</span>
+      <span className="numeral w-6 text-center text-xs font-bold text-foreground">{quantity}</span>
       <form action={accion}>
         <input type="hidden" name="itemId" value={itemId} />
         <input type="hidden" name="quantity" value={quantity + 1} />
-        <Enviar variant="outline" size="sm" className="size-7 p-0" isPending={isPending}>
-          +
+        <Enviar variant="outline" size="sm" className="size-6 p-0 rounded-md" isPending={isPending}>
+          <Plus className="size-3" />
         </Enviar>
       </form>
     </span>
   );
 }
 
-/**
- * La nota de un renglón ("sin cebolla", "extra salsa").
- */
+/** La nota de un renglón ("sin cebolla", "extra salsa"). */
 export function NotaRenglon({ itemId, notes }: { itemId: string; notes: string | null }) {
   const [estado, accion, isPending] = useActionState(ponerNotaItem, ESTADO_INICIAL);
 
   return (
-    <form action={accion} className="flex items-center gap-1">
+    <form action={accion} className="flex items-center gap-1.5 pt-0.5">
       <input type="hidden" name="itemId" value={itemId} />
       <Input
         key={notes ?? ""}
         name="notes"
         defaultValue={notes ?? ""}
-        placeholder="Nota (sin cebolla, extra salsa…)"
+        placeholder="Nota de cocina (ej. sin cebolla, término medio…)"
         aria-label="Nota del renglón"
         maxLength={200}
-        className="h-7 flex-1 text-xs"
+        className="h-7 flex-1 text-xs rounded-lg bg-muted/30"
       />
-      <Enviar variant="ghost" size="sm" className="h-7 shrink-0 text-xs" isPending={isPending}>
-        {notes ? "Guardar" : "Agregar"}
+      <Enviar variant="ghost" size="sm" className="h-7 shrink-0 text-xs px-2" isPending={isPending}>
+        {notes ? "Guardar" : "Nota"}
       </Enviar>
       {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
     </form>
   );
 }
 
-/** Sacar un renglón que cocina todavía no tomó: sin motivo, para cualquiera que atiende. */
+/** Sacar un renglón antes de enviarlo a cocina. */
 export function QuitarRenglon({ itemId }: { itemId: string }) {
   const [estado, accion, isPending] = useActionState(quitarItem, ESTADO_INICIAL);
 
   return (
     <form action={accion} className="inline">
       <input type="hidden" name="itemId" value={itemId} />
-      <Enviar variant="ghost" size="sm" className="h-7 text-xs" isPending={isPending}>
-        Quitar
+      <Enviar
+        variant="ghost"
+        size="sm"
+        className="h-6 text-rotulo text-destructive hover:bg-destructive/10 px-1.5 gap-1 rounded-md"
+        isPending={isPending}
+      >
+        <Trash2 className="size-3" /> Quitar
       </Enviar>
       {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
     </form>
@@ -142,17 +142,17 @@ export function AnularRenglon({ itemId }: { itemId: string }) {
   const [estado, accion, isPending] = useActionState(anularItem, ESTADO_INICIAL);
 
   return (
-    <form action={accion} className="flex items-center gap-1">
+    <form action={accion} className="flex items-center gap-1 pt-1">
       <input type="hidden" name="itemId" value={itemId} />
       <Input
         name="motivo"
         required
         minLength={3}
-        placeholder="Motivo"
+        placeholder="Motivo de anulación"
         aria-label="Motivo de la anulación"
-        className="h-7 w-28 text-xs"
+        className="h-7 w-36 text-xs rounded-lg"
       />
-      <Enviar variant="ghost" size="sm" className="h-7 text-xs" isPending={isPending}>
+      <Enviar variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:bg-destructive/10" isPending={isPending}>
         Anular
       </Enviar>
       {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
@@ -160,9 +160,7 @@ export function AnularRenglon({ itemId }: { itemId: string }) {
   );
 }
 
-/**
- * Anula el pedido entero.
- */
+/** Anula el pedido entero con motivo justificado. */
 export function AnularPedido({
   orderId,
   vacio,
@@ -175,7 +173,7 @@ export function AnularPedido({
   const [estado, accion, isPending] = useActionState(anularPedido, ESTADO_INICIAL);
 
   const placeholder = !vacio
-    ? "Motivo de la anulación"
+    ? "Motivo de anulación del pedido"
     : esMesa
       ? "Motivo (mesa abierta por error)"
       : "Motivo (pedido abierto por error)";
@@ -183,16 +181,21 @@ export function AnularPedido({
   return (
     <form action={accion} className="space-y-2">
       <input type="hidden" name="orderId" value={orderId} />
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         <Input
           name="motivo"
           required
           minLength={3}
           placeholder={placeholder}
           aria-label="Motivo de la anulación del pedido"
-          className="h-8 text-xs"
+          className="h-8 text-xs rounded-lg"
         />
-        <Enviar variant="ghost" size="sm" className="h-8 text-xs" isPending={isPending}>
+        <Enviar
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0 rounded-lg"
+          isPending={isPending}
+        >
           Anular pedido
         </Enviar>
       </div>
@@ -204,12 +207,7 @@ export function AnularPedido({
 }
 
 /**
- * Pedir la cuenta, eligiendo antes si lleva propina.
- *
- * La elección va acá y no en la caja: el mesero le pregunta al cliente en la
- * mesa, y la pre-cuenta que después se imprime tiene que salir con ese total. Si
- * se eligiera al cobrar, el papel que se llevó a la mesa diría una cosa y la caja
- * cobraría otra.
+ * Pedir la cuenta para la mesa (genera pre-cuenta y marca CUENTA_PEDIDA para Caja).
  */
 export function PedirCuenta({
   orderId,
@@ -251,18 +249,20 @@ export function PedirCuenta({
       <Button
         type="submit"
         variant="outline"
-        className="w-full border-warning/50 bg-warning/10 hover:bg-warning/20 text-warning-soft font-bold h-11 shadow-sm gap-2"
+        className="w-full border-border bg-card hover:bg-muted/80 text-foreground font-bold text-xs h-10 rounded-xl shadow-xs gap-2"
         disabled={isPending}
       >
-        {isPending ? "Enviando ticket a caja…" : "🧾 Pedir la cuenta (Enviar a caja)"}
+        <ReceiptText className="size-4 text-muted-foreground" />
+        <span>{isPending ? "Solicitando cuenta…" : "Pedir la cuenta (Enviar a caja)"}</span>
       </Button>
       {!estado.ok && estado.error && (
-        <p className="text-destructive mt-2 text-xs">{estado.error}</p>
+        <p className="text-destructive mt-1 text-xs">{estado.error}</p>
       )}
     </form>
   );
 }
 
+/** Registro de cobro directo (POS mostrador). */
 export function Cobrar({
   orderId,
   faltanteCop,
@@ -298,13 +298,13 @@ export function Cobrar({
         </Alert>
       ) : null}
 
-      <div className="space-y-1.5">
-        <Label htmlFor="metodo">Método</Label>
+      <div className="space-y-1">
+        <Label htmlFor="metodo" className="text-xs text-muted-foreground">Método de pago</Label>
         <select
           id="metodo"
           name="method"
           defaultValue={PaymentMethod.EFECTIVO}
-          className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+          className="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
         >
           {Object.values(PaymentMethod).map((metodo) => (
             <option key={metodo} value={metodo}>
@@ -314,9 +314,9 @@ export function Cobrar({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="monto">Monto</Label>
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="space-y-1">
+          <Label htmlFor="monto" className="text-xs text-muted-foreground">Monto a cobrar</Label>
           <Input
             key={faltanteCop}
             id="monto"
@@ -324,24 +324,33 @@ export function Cobrar({
             inputMode="numeric"
             defaultValue={faltanteCop}
             required
+            className="h-9 text-xs rounded-lg font-mono font-bold"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="entregado">Con cuánto paga</Label>
+        <div className="space-y-1">
+          <Label htmlFor="entregado" className="text-xs text-muted-foreground">Recibido (efectivo)</Label>
           <Input
             id="entregado"
             name="tenderedCop"
             inputMode="numeric"
-            placeholder="opcional"
+            placeholder="Opcional"
+            className="h-9 text-xs rounded-lg font-mono"
           />
         </div>
       </div>
 
-      <Enviar className="w-full" isPending={isPending}>Registrar pago</Enviar>
+      <Enviar
+        className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-10 rounded-xl shadow-xs gap-1.5"
+        isPending={isPending}
+      >
+        <CreditCard className="size-3.5" />
+        <span>Registrar pago</span>
+      </Enviar>
     </form>
   );
 }
 
+/** Confirmar y enviar comanda a cocina. */
 export function ConfirmarPedido({
   orderId,
   turnNumber,
@@ -358,18 +367,18 @@ export function ConfirmarPedido({
   const tieneNuevosPendientes = itemsSinEnviarCount > 0;
   const yaEnviadoSinPendientes = turnNumber !== null && !tieneNuevosPendientes;
 
-  let textoBoton = "👨‍🍳 Confirmar pedido y enviar a cocina";
+  let textoBoton = "Mandar comanda a cocina";
   if (isPending) {
     textoBoton = "Enviando a cocina…";
   } else if (turnNumber === null) {
-    textoBoton = "👨‍🍳 Confirmar pedido y enviar a cocina";
+    textoBoton = "Mandar comanda a cocina";
   } else if (tieneNuevosPendientes) {
     textoBoton =
       itemsSinEnviarCount === 1
-        ? "👨‍🍳 Enviar 1 nuevo producto a cocina"
-        : `👨‍🍳 Enviar adición a cocina (${itemsSinEnviarCount} productos)`;
+        ? "Mandar 1 adición a cocina"
+        : `Mandar adición a cocina (${itemsSinEnviarCount} ítems)`;
   } else {
-    textoBoton = `✔ Comanda enviada (${formatTurno(turnNumber, 99, isMesa)})`;
+    textoBoton = `Comanda en cocina (${formatTurno(turnNumber, 99, isMesa)})`;
   }
 
   return (
@@ -379,16 +388,19 @@ export function ConfirmarPedido({
         type="submit"
         size="lg"
         className={cn(
-          "w-full font-bold shadow-lg gap-2 h-12 text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
+          "w-full font-bold shadow-xs gap-2 h-11 text-xs rounded-xl transition-all",
           yaEnviadoSinPendientes
-            ? "bg-secondary text-secondary-foreground border border-border hover:bg-secondary/80"
-            : tieneNuevosPendientes
-              ? "bg-brand hover:bg-brand/90 text-brand-foreground shadow-brand/20 animate-pulse"
-              : "bg-success hover:bg-success/90 text-white"
+            ? "bg-secondary text-secondary-foreground border border-border hover:bg-secondary/80 font-medium"
+            : "bg-brand hover:bg-brand/90 text-brand-foreground shadow-brand/20",
         )}
-        disabled={isPending}
+        disabled={isPending || yaEnviadoSinPendientes}
       >
-        {textoBoton}
+        {yaEnviadoSinPendientes ? (
+          <CheckCircle2 className="size-4 text-success" />
+        ) : (
+          <UtensilsCrossed className="size-4" />
+        )}
+        <span>{textoBoton}</span>
       </Button>
       {!estado.ok && estado.error && (
         <Alert variant="destructive" role="alert">

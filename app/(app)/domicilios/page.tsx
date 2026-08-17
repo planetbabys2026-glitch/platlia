@@ -3,20 +3,17 @@ import { notFound } from "next/navigation";
 import { DOMICILIOS_EN_CURSO, getDomicilios } from "@/features/domicilios/queries";
 import { getSettings, getTimeSettings } from "@/features/negocio/queries";
 import { requireActiveLicense } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { PanelDomicilios } from "./panel-domicilios";
 
 export const metadata: Metadata = { title: "Domicilios en Vivo · Platlia" };
 export const dynamic = "force-dynamic";
 
 export default async function DomiciliosPage() {
-  // Con licencia vencida esto mandaba a `/bloqueado` en todas las pantallas menos
-  // en ésta, que usaba `requireBusiness` —el único helper que no mira licencia—.
-  // No había comentario que lo justificara: era un olvido, y dejaba operar
-  // domicilios entero sin pagar.
   const ctx = await requireActiveLicense();
 
   const settings = await getSettings(ctx.business.id);
-  if (!settings.deliveryEnabled) {
+  if (!settings.deliveryEnabled || !tienePermisoSeccion(ctx.role, "domicilios", settings.rolePermissions)) {
     notFound();
   }
 

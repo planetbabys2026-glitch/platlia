@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, Layers, PlusCircle, Users, UtensilsCrossed } from "lucide-react";
 import { AppModule } from "@/generated/prisma/enums";
 import { getMesa } from "@/features/salon/queries";
 import { Badge } from "@/components/ui/badge";
@@ -21,138 +22,159 @@ const ESTADO_CUENTA: Record<string, string> = {
 /**
  * Las cuentas de una mesa.
  *
- * Existe porque una mesa dejó de ser un pedido: un grupo que llega junto y pide
- * por separado abre una cuenta por persona, y el QR de la mesa abre otra cada vez
- * que alguien manda un pedido desde su celular. Antes el salón mostraba una sola
- * y el resto quedaba invisible hasta que aparecía en cocina.
+ * Permite gestionar múltiples cuentas independientes en la misma mesa física:
+ * cada cuenta envía su propia comanda a cocina y se factura por separado.
  */
 export default async function MesaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireModule(AppModule.MESAS);
 
   const mesa = await getMesa(ctx.business.id, id);
-  // El cliente está acotado a la empresa, así que una mesa de otro negocio no
-  // aparece: es un 404 igual que una inexistente.
   if (!mesa) notFound();
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
-        <div className="space-y-1">
-          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
-            Mesa {mesa.name}
-          </h1>
-          <p className="text-muted-foreground text-xs sm:text-sm">
-            {mesa.area ? `${mesa.area.name} · ` : ""}
-            {mesa.capacity} puestos
-            {mesa.cuentas.length > 0 && (
-              <>
-                {" · "}
-                <span className="text-foreground font-medium">
-                  {mesa.cuentas.length}{" "}
-                  {mesa.cuentas.length === 1 ? "cuenta abierta" : "cuentas abiertas"}
-                </span>
-              </>
-            )}
-          </p>
-        </div>
+      {/* ─── Encabezado y Navegación ─── */}
+      <div className="space-y-3 border-b border-dashed border-border/80 pb-5">
+        <Link
+          href="/salon"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="size-3.5" />
+          <span>Ir al salón</span>
+        </Link>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <h1 className="font-display font-black uppercase tracking-tight text-foreground text-3xl sm:text-4xl">
+                Mesa {mesa.name}
+              </h1>
+              <Badge variant="outline" className="text-rotulo font-bold uppercase tracking-wider">
+                {mesa.area ? mesa.area.name : "Salón"}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground font-sans">
+              <span className="inline-flex items-center gap-1">
+                <Users className="size-3.5 text-muted-foreground" />
+                {mesa.capacity} puestos
+              </span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                <Layers className="size-3.5 text-brand" />
+                {mesa.cuentas.length}{" "}
+                {mesa.cuentas.length === 1 ? "cuenta activa" : "cuentas activas"}
+              </span>
+            </div>
+          </div>
+
           {mesa.totalCop > 0 && (
-            <span className="numeral font-display text-2xl font-black">
-              {formatCop(mesa.totalCop)}
-            </span>
+            <div className="text-right">
+              <span className="block text-rotulo font-bold uppercase tracking-wider text-muted-foreground">
+                Total mesa
+              </span>
+              <span className="numeral font-display text-2xl font-black text-brand">
+                {formatCop(mesa.totalCop)}
+              </span>
+            </div>
           )}
-          <Link
-            href="/salon"
-            className="text-primary text-sm font-medium hover:underline"
-          >
-            ← Volver al salón
-          </Link>
         </div>
       </div>
 
+      {/* ─── Cuentas de la Mesa ─── */}
       {mesa.cuentas.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-          <p className="text-muted-foreground text-sm">
-            Esta mesa está libre. Abrí la primera cuenta acá abajo.
-          </p>
-        </div>
+        <Card className="rounded-2xl border-dashed border-border p-8 text-center shadow-xs">
+          <CardContent className="space-y-2">
+            <UtensilsCrossed className="size-8 mx-auto text-muted-foreground/60" />
+            <h3 className="font-semibold text-sm text-foreground">Esta mesa está libre</h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              No hay pedidos abiertos en este momento. Abrí la primera cuenta a continuación para comenzar a tomar el pedido.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {mesa.cuentas.map((cuenta, indice) => (
-            <li key={cuenta.id}>
-              <Card className="h-full">
-                <CardContent className="flex h-full flex-col gap-3">
+            <Card key={cuenta.id} className="rounded-2xl border-border/80 shadow-xs flex flex-col justify-between overflow-hidden">
+              <CardContent className="p-4 flex flex-col justify-between h-full space-y-3.5">
+                {/* Cabecera Cuenta */}
+                <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <span className="numeral bg-secondary text-secondary-foreground flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold">
+                    <div className="flex items-center gap-2">
+                      <span className="numeral bg-brand/10 text-brand flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-black">
                         {indice + 1}
                       </span>
-                      <span className="text-sm font-semibold leading-tight">
+                      <span className="text-sm font-bold text-foreground leading-tight">
                         {cuenta.etiqueta}
                       </span>
-                    </span>
+                    </div>
+
                     {cuenta.status === "CUENTA_PEDIDA" && (
-                      <Badge variant="secondary">{ESTADO_CUENTA[cuenta.status]}</Badge>
+                      <Badge variant="outline" className="text-rotulo font-bold bg-warning/10 text-warning-soft border-warning/30">
+                        {ESTADO_CUENTA[cuenta.status]}
+                      </Badge>
                     )}
                   </div>
 
                   <p className="text-muted-foreground text-xs">
                     {cuenta.renglones === 0
-                      ? "Sin productos todavía"
+                      ? "Sin productos agregados"
                       : `${cuenta.renglones} ${cuenta.renglones === 1 ? "producto" : "productos"}`}
-                    {" · abrió "}
-                    {cuenta.abrioPor}
+                    {" · "}
+                    <span className="font-medium text-foreground">{cuenta.abrioPor}</span>
                   </p>
 
-                  <span className="numeral text-xl font-semibold">
-                    {formatCop(cuenta.totalCop)}
-                  </span>
+                  <div className="pt-1">
+                    <span className="numeral text-xl font-black text-foreground">
+                      {formatCop(cuenta.totalCop)}
+                    </span>
+                  </div>
+                </div>
 
+                {/* Acciones de la Cuenta */}
+                <div className="space-y-2.5 pt-2 border-t border-border/60">
                   <RenombrarCuenta orderId={cuenta.id} customerName={cuenta.customerName} />
 
-                  <div className="mt-auto space-y-2 pt-1">
-                    <Link
-                      href={`/pedido/${cuenta.id}`}
-                      className="bg-brand text-brand-foreground hover:bg-brand/90 flex h-11 w-full items-center justify-center rounded-xl text-sm font-bold transition-colors"
-                    >
-                      Abrir cuenta
-                    </Link>
-                    {cuenta.renglones === 0 && <CerrarSinConsumo orderId={cuenta.id} />}
-                  </div>
-                </CardContent>
-              </Card>
-            </li>
+                  <Link
+                    href={`/pedido/${cuenta.id}`}
+                    className="bg-brand text-brand-foreground hover:bg-brand/90 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition-colors shadow-xs"
+                  >
+                    <PlusCircle className="size-3.5" />
+                    <span>Tomar pedido / Adición</span>
+                  </Link>
+
+                  {cuenta.renglones === 0 && <CerrarSinConsumo orderId={cuenta.id} />}
+                </div>
+              </CardContent>
+            </Card>
           ))}
-        </ul>
+        </div>
       )}
 
-      <Card>
-        <CardContent className="space-y-4">
+      {/* ─── Formulario para Abrir Cuenta Adicional ─── */}
+      <Card className="rounded-2xl border-border/80 shadow-xs">
+        <CardContent className="p-5 space-y-3.5">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">Agregar otra cuenta</h2>
+            <h2 className="text-sm font-bold text-foreground">
+              {mesa.cuentas.length === 0 ? "Abrir primera cuenta" : "Abrir cuenta adicional en esta mesa"}
+            </h2>
             <p className="text-muted-foreground text-xs">
-              Cada cuenta lleva su propia comanda a la cocina y se cobra por
-              separado. El nombre es lo que le permite al cocinero saber de quién
-              es cada plato.
+              Permite tomar pedidos separados para comensales en la misma mesa. Cada cuenta genera su propia comanda y recibo.
             </p>
           </div>
           <NuevaCuenta tableId={mesa.id} />
         </CardContent>
       </Card>
 
-      {/* Liberar la mesa entera solo tiene sentido si nadie pidió nada: con
-          consumo hay que cobrar, y cerrar la mitad dejaría al mesero creyendo
-          que la mesa quedó libre. */}
+      {/* ─── Liberar Mesa sin Consumo ─── */}
       {mesa.sinConsumo && (
-        <Card className="border-dashed">
-          <CardContent className="space-y-3">
-            <p className="text-muted-foreground text-xs">
+        <Card className="border-dashed rounded-2xl">
+          <CardContent className="p-4 space-y-2 text-xs">
+            <p className="text-muted-foreground">
               {mesa.cuentas.length === 1
-                ? "Nadie pidió nada en esta mesa."
-                : "Ninguna de estas cuentas tiene consumo."}{" "}
-              Se puede cerrar todo y dejar la mesa libre.
+                ? "Esta cuenta no registra ningún producto."
+                : "Ninguna de las cuentas tiene productos pedidos."}{" "}
+              Podés cerrar todo y dejar la mesa libre para nuevos clientes.
             </p>
             <LiberarMesa tableId={mesa.id} />
           </CardContent>

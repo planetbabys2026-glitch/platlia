@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { AppModule } from "@/generated/prisma/enums";
 import { getCajaAbierta } from "@/features/caja/queries";
 import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
@@ -6,6 +7,7 @@ import { getSettings } from "@/features/negocio/queries";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { requireModule } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { ModuloPosInteractive } from "./modulo-pos-interactive";
 
 export const metadata: Metadata = { title: "Pedido sin mesa" };
@@ -27,6 +29,12 @@ export default async function PosPage({
     pedidoId ? getPedido(ctx.business.id, pedidoId) : Promise.resolve(null),
   ]);
 
+  if (!tienePermisoSeccion(ctx.role, "salon_pos", settings.rolePermissions)) {
+    notFound();
+  }
+
+  const usaMesas = ctx.modules.has(AppModule.MESAS);
+
   return (
     <ModuloPosInteractive
       carta={carta}
@@ -34,6 +42,7 @@ export default async function PosPage({
       pedidosAbiertos={pedidos}
       pedidoInicial={pedidoInicial}
       puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}
+      usaMesas={usaMesas}
       settings={{
         inventoryEnabled: settings.inventoryEnabled,
         deliveryEnabled: settings.deliveryEnabled,

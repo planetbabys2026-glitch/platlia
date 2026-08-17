@@ -1,27 +1,13 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useFormStatus } from "react-dom";
 import { OrderType } from "@/generated/prisma/enums";
 import { abrirPedido } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-
 import { PantallaCargando } from "@/components/ui/cargando-overlay";
-
-function Enviar() {
-  const { pending } = useFormStatus();
-  return (
-    <>
-      <PantallaCargando forcePending={pending} />
-      <Button type="submit" variant="outline" disabled={pending}>
-        {pending ? "Abriendo…" : "Nuevo pedido"}
-      </Button>
-    </>
-  );
-}
 
 /**
  * Abre un pedido sin mesa y lleva derecho a él.
@@ -39,17 +25,37 @@ function Enviar() {
  */
 export function AbrirPedidoSinMesa() {
   const router = useRouter();
-  const [estado, accion] = useActionState(abrirPedido, ESTADO_INICIAL);
+  const [estado, accion, isPending] = useActionState(abrirPedido, ESTADO_INICIAL);
+  const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    if (estado.ok && estado.data?.id) router.push(`/pedido/${estado.data.id}`);
+    if (estado.ok && estado.data?.id) {
+      router.push(`/pedido/${estado.data.id}`);
+    } else if (!estado.ok && estado.error) {
+      setEnviando(false);
+    }
   }, [estado, router]);
 
+  const cargando = isPending || enviando;
+
   return (
-    <form action={accion} className="flex flex-wrap items-start gap-2">
+    <form
+      action={accion}
+      onSubmit={(e) => {
+        if (cargando) {
+          e.preventDefault();
+          return;
+        }
+        setEnviando(true);
+      }}
+      className="flex flex-wrap items-start gap-2"
+    >
       <input type="hidden" name="type" value={OrderType.LLEVAR} />
 
-      <Enviar />
+      <PantallaCargando forcePending={cargando} />
+      <Button type="submit" variant="outline" disabled={cargando}>
+        {cargando ? "Abriendo…" : "Nuevo pedido"}
+      </Button>
 
       {!estado.ok && estado.error && (
         <Alert variant="destructive" role="alert" className="w-full">

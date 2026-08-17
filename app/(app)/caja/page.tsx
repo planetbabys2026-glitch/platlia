@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { AppModule } from "@/generated/prisma/enums";
 import {
   getCajaAbierta,
@@ -11,6 +12,7 @@ import {
 } from "@/features/caja/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { requireModule } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { tenantDb } from "@/lib/db/tenant";
@@ -30,8 +32,11 @@ export default async function CajaPage({
   searchParams: Promise<{ vista?: string; jornada?: string }>;
 }) {
   const ctx = await requireModule(AppModule.CAJA);
-  const { jornada } = await searchParams;
   const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "caja", settings.rolePermissions)) {
+    notFound();
+  }
+  const { jornada } = await searchParams;
   const businessDate = currentBusinessDate(settings);
   const caja = await getCajaAbierta(ctx.business.id);
   const usaMesas = ctx.modules.has(AppModule.MESAS);

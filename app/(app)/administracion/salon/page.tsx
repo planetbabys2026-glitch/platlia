@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Role } from "@/generated/prisma/enums";
 import { getSalonAdmin } from "@/features/carta/queries";
+import { getSettings } from "@/features/negocio/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import {
   AccionesMesa,
   ArchivarArea,
@@ -23,7 +26,11 @@ const ESTADO: Record<string, string> = {
 };
 
 export default async function SalonAdminPage() {
-  const ctx = await requireRole(Role.ADMINISTRADOR);
+  const ctx = await requireRole(Role.ADMINISTRADOR, Role.CAJERO, Role.MESERO, Role.COCINA);
+  const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "salon_plano", settings.rolePermissions)) {
+    notFound();
+  }
   const { areas, mesas } = await getSalonAdmin(ctx.business.id);
 
   const porArea = [

@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let usaInventario = false;
   let usaRecetas = false;
   let usaDomicilios = true;
+  let rolePermissions: string | null = null;
   let cocinaInicial = 0;
   let domiciliosInicial = 0;
   let cajaInicial = 0;
@@ -34,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // Inventario que la pantalla no dibuja.
       usaRecetas = settings.recipesEnabled;
       usaDomicilios = settings.deliveryEnabled;
+      rolePermissions = settings.rolePermissions ?? null;
 
       // Los contadores del menú se calculan acá para que la primera pintura ya
       // traiga el número: el stream los refresca después, pero sin esto la
@@ -81,6 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       user={ctx.user}
       businessName={ctx.business.name}
       role={ctx.role}
+      rolePermissions={rolePermissions}
       usaMesas={usaMesas}
       usaCocina={usaCocina}
       usaDomicilios={usaDomicilios}

@@ -100,19 +100,11 @@ export function PanelCaja({
           MÓDULO 1: COBRO DE CUENTAS (SALÓN / MESAS)
           ───────────────────────────────────────────────────────────── */}
       {tabActiva === "cobros" && usaMesas && (
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold tracking-tight">Cobro de Cuentas por Cobrar</h2>
-            <p className="text-xs text-muted-foreground">
-              Tickets y pedidos enviados a la caja desde el módulo de Salón.
-            </p>
-          </div>
-          <CuentasPorCobrar
-            cuentas={cuentas}
-            puedeFacturar={puedeFacturar}
-            propina={propina}
-          />
-        </div>
+        <CuentasPorCobrar
+          cuentas={cuentas}
+          puedeFacturar={puedeFacturar}
+          propina={propina}
+        />
       )}
 
       {/* ─────────────────────────────────────────────────────────────

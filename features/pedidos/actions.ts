@@ -109,19 +109,62 @@ export const abrirPedido = defineAction({
             throw new ErrorDeUsuario(`La mesa ${mesa.name} está fuera de servicio.`);
           }
 
-          // Acá antes se rechazaba abrir una segunda cuenta en una mesa ocupada.
-          // Ya no: un grupo que llega junto y pide por separado abre una cuenta
-          // por persona, cada una con su comanda y su tiquete. Quien mantiene el
-          // estado de la mesa es `sincronizarEstadoMesa`, no este bloque.
-          //
-          // El ordinal cuenta TODAS las cuentas de la jornada, incluidas las ya
-          // cerradas: si se recicla, dos tiquetes del mismo día dicen "Cuenta 2"
-          // y no son la misma.
+          // Prevención de doble pedido: si se toca la mesa libre y ya existe una
+          // cuenta abierta sin productos en esta misma mesa, se reutiliza en vez
+          // de crear una segunda cuenta vacía por retrasos de red o doble clic.
           if (!customerName) {
+            const ordenVaciaExistente = await tx.order.findFirst({
+              where: {
+                tableId: mesa.id,
+                businessDate,
+                status: "ABIERTA",
+                items: { none: {} },
+              },
+              orderBy: { openedAt: "desc" },
+              select: { id: true, code: true, turnNumber: true, tableId: true },
+            });
+            if (ordenVaciaExistente) {
+              return ordenVaciaExistente;
+            }
+
             const abiertasHoy = await tx.order.count({
               where: { tableId: mesa.id, businessDate },
             });
             customerName = etiquetaDeCuenta(null, abiertasHoy + 1);
+          } else {
+            // Si viene con nombre (ej. desde "+ Nueva cuenta"), prevenir doble envío idéntico en los últimos 15s
+            const ordenMismoNombreReciente = await tx.order.findFirst({
+              where: {
+                tableId: mesa.id,
+                businessDate,
+                status: "ABIERTA",
+                customerName,
+                openedById: ctx.user.id,
+                items: { none: {} },
+                openedAt: { gte: new Date(Date.now() - 15_000) },
+              },
+              select: { id: true, code: true, turnNumber: true, tableId: true },
+            });
+            if (ordenMismoNombreReciente) {
+              return ordenMismoNombreReciente;
+            }
+          }
+        } else {
+          // Para pedidos sin mesa: si el mismo usuario abrió un pedido vacío en los últimos 10 segundos, reutilizarlo
+          const ordenSinMesaReciente = await tx.order.findFirst({
+            where: {
+              tableId: null,
+              businessDate,
+              status: "ABIERTA",
+              openedById: ctx.user.id,
+              items: { none: {} },
+              openedAt: { gte: new Date(Date.now() - 10_000) },
+            },
+            orderBy: { openedAt: "desc" },
+            select: { id: true, code: true, turnNumber: true, tableId: true },
+          });
+          if (ordenSinMesaReciente) {
+            return ordenSinMesaReciente;
           }
         }
 

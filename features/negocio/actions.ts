@@ -8,6 +8,7 @@ import {
   datosNegocioSchema,
   modulosSchema,
   operacionSchema,
+  permisosRolesSchema,
   qrMenuSchema,
   turneroSchema,
 } from "@/features/negocio/schemas";
@@ -361,6 +362,31 @@ export const crearSucursalAdicional = defineAction({
     revalidatePath("/facturacion");
 
     return sucursal;
+  },
+});
+
+export const guardarPermisosRoles = defineAction({
+  schema: permisosRolesSchema,
+  roles: ADMINISTRAN,
+  async handler({ input, db }) {
+    let jsonNormalizado = "{}";
+    try {
+      const parsed = JSON.parse(input.rolePermissions);
+      if (parsed && typeof parsed === "object") {
+        jsonNormalizado = JSON.stringify(parsed);
+      }
+    } catch {
+      throw new ErrorDeUsuario("El formato de permisos no es válido.");
+    }
+
+    await db.businessSettings.updateMany({
+      data: {
+        rolePermissions: jsonNormalizado,
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
+    revalidatePath("/panel");
   },
 });
 

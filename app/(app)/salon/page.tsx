@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { AppModule } from "@/generated/prisma/enums";
 import { getCajaAbierta } from "@/features/caja/queries";
+import { getSettings } from "@/features/negocio/queries";
 import { AbrirPedidoSinMesa } from "@/features/pedidos/components/abrir-sin-mesa";
 import { ListaSinMesa } from "@/features/pedidos/components/lista-sin-mesa";
 import { getPedidosAbiertos } from "@/features/pedidos/queries";
 import { getSalon } from "@/features/salon/queries";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { requireModule } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { Mesa } from "./tarjeta-mesa";
 
 export const metadata: Metadata = { title: "Salón en Vivo · Platlia" };
@@ -16,6 +19,10 @@ export const dynamic = "force-dynamic";
 export default async function SalonPage() {
   // La página verifica por su cuenta: sesión, empresa, licencia y módulo.
   const ctx = await requireModule(AppModule.MESAS);
+  const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "salon_pos", settings.rolePermissions)) {
+    notFound();
+  }
 
   const [areas, caja, pedidos] = await Promise.all([
     getSalon(ctx.business.id),

@@ -126,6 +126,10 @@ export const crearSucursalSchema = z.object({
   phone: textoOpcional(40),
 });
 
+export const permisosRolesSchema = z.object({
+  rolePermissions: z.string().trim().default("{}"),
+});
+
 /**
  * El esquema de configuración de Factus se fue con su acción: la cuenta es de la
  * plataforma y el rango de numeración lo asigna el superadministrador desde

@@ -245,6 +245,7 @@ export async function getCuentasPorCobrar(businessId: string, businessDate: Date
       subtotalCop: true,
       taxCop: true,
       tipCop: true,
+      deliveryFeeCop: true,
       customerName: true,
       // Para precargar el bloque fiscal cuando alguien ya había pedido factura.
       docType: true,

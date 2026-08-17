@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { abrirPedido } from "@/features/pedidos/actions";
@@ -76,10 +76,15 @@ function Cuadro({
 export function Mesa({ mesa }: { mesa: MesaDelSalon }) {
   const router = useRouter();
   const [estado, accion, isPending] = useActionState(abrirPedido, ESTADO_INICIAL);
+  const [enviando, setEnviando] = useState(false);
   const cuentas = mesa.cuentas.length;
 
   useEffect(() => {
-    if (estado.ok && estado.data?.id) router.push(`/pedido/${estado.data.id}`);
+    if (estado.ok && estado.data?.id) {
+      router.push(`/pedido/${estado.data.id}`);
+    } else if (!estado.ok && estado.error) {
+      setEnviando(false);
+    }
   }, [estado, router]);
 
   if (cuentas > 0) {
@@ -101,11 +106,22 @@ export function Mesa({ mesa }: { mesa: MesaDelSalon }) {
     );
   }
 
+  const cargando = isPending || enviando;
+
   return (
-    <form action={accion}>
+    <form
+      action={accion}
+      onSubmit={(e) => {
+        if (cargando) {
+          e.preventDefault();
+          return;
+        }
+        setEnviando(true);
+      }}
+    >
       <input type="hidden" name="type" value="MESA" />
       <input type="hidden" name="tableId" value={mesa.id} />
-      <BotonAbrir mesa={mesa} error={!estado.ok ? estado.error : undefined} isPending={isPending} />
+      <BotonAbrir mesa={mesa} error={!estado.ok ? estado.error : undefined} isPending={cargando} />
     </form>
   );
 }

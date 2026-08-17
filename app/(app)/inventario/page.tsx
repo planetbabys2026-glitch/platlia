@@ -12,15 +12,21 @@ import {
 } from "@/features/inventario/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { VistaInventario } from "./vista-inventario";
 
 export const metadata: Metadata = { title: "Inventario" };
 export const dynamic = "force-dynamic";
 
 export default async function InventarioPage() {
-  const ctx = await requireRole(Role.ADMINISTRADOR, Role.CAJERO);
+  const ctx = await requireRole(Role.ADMINISTRADOR, Role.CAJERO, Role.MESERO, Role.COCINA);
   const settings = await getSettings(ctx.business.id);
+
+  if (!tienePermisoSeccion(ctx.role, "inventario", settings.rolePermissions)) {
+    notFound();
+  }
 
   if (!settings.inventoryEnabled) {
     return (

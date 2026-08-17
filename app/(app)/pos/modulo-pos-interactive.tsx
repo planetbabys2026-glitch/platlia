@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowLeft,
   Bike,
   Box,
   Boxes,
-  ChefHat,
+  CreditCard,
   DollarSign,
   Minus,
   PauseCircle,
@@ -19,6 +20,7 @@ import {
   ShoppingCart,
   Trash2,
   Utensils,
+  UtensilsCrossed,
   X,
 } from "lucide-react";
 import { abrirCaja } from "@/features/caja/actions";
@@ -183,6 +185,8 @@ type ModuloPosInteractiveProps = {
    * calculado del servidor: las credenciales de Factus no bajan al navegador.
    */
   puedeFacturar: boolean;
+  /** Si el negocio opera con salón y mesas. */
+  usaMesas?: boolean;
 };
 
 type CartItem = {
@@ -212,79 +216,6 @@ type CartItem = {
  * tres momentos es lo más barato que convierte una lista de campos en algo que
  * se puede seguir sin que nadie te lo explique.
  */
-function Paso({
-  numero,
-  titulo,
-  ayuda,
-}: {
-  numero: number;
-  titulo: string;
-  ayuda?: string;
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <span className="numeral mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--brasa)] text-rotulo font-bold text-[var(--tinta)]">
-        {numero}
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-bold leading-none text-foreground">{titulo}</p>
-        {ayuda && <p className="text-muted-foreground mt-1 text-rotulo leading-snug">{ayuda}</p>}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Una de las tres salidas del pedido, con su nombre y qué pasa después.
- *
- * El texto de abajo no es decoración: la diferencia entre mandar a cocina y
- * dejar en espera no se deduce de ningún nombre corto, y equivocarse significa
- * que la comida no se empieza a hacer o que se hace de más.
- */
-function AccionDelPedido({
-  titulo,
-  explicacion,
-  icono,
-  onClick,
-  deshabilitado,
-  destacada = false,
-}: {
-  titulo: string;
-  explicacion: string;
-  icono: React.ReactNode;
-  onClick: () => void;
-  deshabilitado?: boolean;
-  destacada?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={deshabilitado}
-      className={cn(
-        "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all",
-        "disabled:pointer-events-none disabled:opacity-40",
-        destacada
-          ? "border-success-soft bg-success text-white hover:bg-success/90"
-          : "border-border bg-card hover:border-brand hover:bg-brand/5",
-      )}
-    >
-      <span className={cn("mt-0.5 shrink-0", destacada ? "text-white" : "text-brand")}>{icono}</span>
-      <span className="min-w-0">
-        <span className="block text-sm font-bold leading-tight">{titulo}</span>
-        <span
-          className={cn(
-            "mt-0.5 block text-rotulo leading-snug",
-            destacada ? "text-white/80" : "text-muted-foreground",
-          )}
-        >
-          {explicacion}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 function precioUnitario(item: CartItem): number {
   return item.priceCop + item.recargoCop;
 }
@@ -296,6 +227,7 @@ export function ModuloPosInteractive({
   pedidoInicial,
   settings,
   puedeFacturar,
+  usaMesas = false,
 }: ModuloPosInteractiveProps) {
   const router = useRouter();
 
@@ -629,7 +561,7 @@ export function ModuloPosInteractive({
 
   const nuevoPedido = () => {
     vaciarCarrito();
-    router.push("/pos");
+    router.push(usaMesas ? "/salon" : "/pos");
   };
 
   // ── Procesar Acción (PAGAR_DIRECTO, ENVIAR_COCINA, PARQUEAR) ───────────────
@@ -743,7 +675,7 @@ export function ModuloPosInteractive({
       } else if (accion === "ENVIAR_COCINA") {
         setMensajeExito({
           titulo: "Comanda enviada a cocina",
-          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Se cobra cuando esté listo.`,
+          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Pedido listo en Caja para cobrar.`,
           orderId: data.orderId,
         });
       } else {
@@ -757,7 +689,11 @@ export function ModuloPosInteractive({
       vaciarCarrito();
       setNumeroComprobante("");
       setMontoRecibido("");
-      router.refresh();
+      if (usaMesas) {
+        router.push("/salon");
+      } else {
+        router.refresh();
+      }
     } catch (err: unknown) {
       setProcesandoAccion(false);
       const msg =
@@ -833,7 +769,7 @@ export function ModuloPosInteractive({
               disabled={pendingCaja}
               className="w-full h-11 bg-brand text-brand-foreground hover:bg-brand/90 font-bold rounded-xl text-sm"
             >
-              {pendingCaja ? "Abriendo Turno..." : "🚀 Abrir Turno de Caja y Comenzar"}
+              {pendingCaja ? "Abriendo turno..." : "Abrir turno de caja"}
             </Button>
           </form>
         </Card>
@@ -841,68 +777,71 @@ export function ModuloPosInteractive({
         /* ── INTERFAZ POS COMPLETA DUAL PANE ────────────────────────────────── */
         <div className="space-y-4">
           {/* Header Superior del POS */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5 rounded-2xl border border-border shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5 rounded-2xl border border-border shadow-xs">
             <div className="flex items-center gap-3">
-              <div className="size-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center font-bold">
-                <ShoppingBag className="size-5" />
+              <div className="size-9 rounded-xl bg-brand/10 text-brand flex items-center justify-center font-bold">
+                <ShoppingBag className="size-4" />
               </div>
               <div>
-                <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                  Pedido sin mesa
-                  <Badge variant="outline" className="text-rotulo bg-success/10 text-success-soft border-success/30">
-                    Caja abierta
-                  </Badge>
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  Para llevar, para comer acá o a domicilio. Armá el pedido y decidí al final qué
-                  hacer con él.
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-bold tracking-tight text-foreground">
+                    {usaMesas ? "Pedido sin mesa" : "Punto de Venta Mostrador"}
+                  </h1>
+                  {activeOrderId && (
+                    <Badge variant="outline" className="font-mono text-rotulo font-bold">
+                      Pedido #{orderCode}{turnNumber !== null ? ` · Turno 0${turnNumber}` : ""}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-rotulo text-muted-foreground">
+                  Venta rápida para llevar, en sitio o a domicilio.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {activeOrderId ? (
-                <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 p-1.5 px-3 rounded-xl">
-                  {/* Antes decía "Editando Pedido #5 (Turno #3)": dos números con
-                      numeral y sin decir cuál es cuál. El consecutivo es contable
-                      y el turno es el que se canta. */}
-                  <span className="text-xs font-bold text-warning-soft">
-                    Pedido {orderCode}
-                    {turnNumber !== null ? ` · Turno ${turnNumber}` : ""}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={nuevoPedido}
-                    className="h-7 text-xs font-bold gap-1 rounded-lg border-warning/40"
-                  >
-                    Empezar otro
-                  </Button>
-                  {/* Un pedido abierto que quedó sin productos no se puede cobrar
-                      —el total es cero— ni aparece en caja, así que sin este
-                      botón se quedaba abierto para siempre y terminaba trancando
-                      el cierre del turno. */}
-                  {pedidoGuardadoVacio && cart.length === 0 && (
-                    <CerrarSinConsumo
-                      orderId={activeOrderId}
-                      texto="Cerrar sin consumo"
-                      redirigirA="/pos"
-                    />
-                  )}
-                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={nuevoPedido}
+                  className="h-8 text-xs font-semibold gap-1 rounded-xl"
+                >
+                  <Plus className="size-3.5" /> Nuevo pedido
+                </Button>
               ) : null}
+
+              {pedidoGuardadoVacio && cart.length === 0 && activeOrderId && (
+                <CerrarSinConsumo
+                  orderId={activeOrderId}
+                  texto="Cerrar pedido vacío"
+                  redirigirA={usaMesas ? "/salon" : "/pos"}
+                />
+              )}
+
+              {usaMesas && (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="text-xs font-semibold rounded-xl h-8 gap-1.5 border-border hover:bg-muted text-foreground"
+                >
+                  <Link href="/salon" className="inline-flex items-center gap-1.5">
+                    <ArrowLeft className="size-3.5" />
+                    <span>Ir al salón</span>
+                  </Link>
+                </Button>
+              )}
 
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setModalParqueadosAbierto(true)}
-                className="relative text-xs font-semibold rounded-xl h-9 gap-1.5 border-brand/30 hover:bg-brand/5 text-foreground"
+                className="relative text-xs font-semibold rounded-xl h-8 gap-1.5 border-border hover:bg-muted text-foreground"
               >
-                <PauseCircle className="size-4 text-warning-soft" />
-                {/* "Parqueados" es de autos. Lo que son es pedidos empezados que
-                    todavía no se cobraron. */}
+                <PauseCircle className="size-3.5 text-muted-foreground" />
                 <span>En espera</span>
                 {pedidosAbiertos.length > 0 && (
                   <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
@@ -915,21 +854,32 @@ export function ModuloPosInteractive({
 
           {/* Banner de Éxito Temporal */}
           {mensajeExito && (
-            <Alert className="border-success/40 bg-success/10 text-success-soft flex items-center justify-between">
+            <Alert className="border-success/40 bg-success/10 text-success-soft flex flex-wrap items-center justify-between gap-3 rounded-2xl">
               <div>
                 <AlertTitle className="font-bold text-sm">{mensajeExito.titulo}</AlertTitle>
                 <AlertDescription className="text-xs">{mensajeExito.detalle}</AlertDescription>
               </div>
               <div className="flex items-center gap-2">
+                {usaMesas && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push("/salon")}
+                    className="h-8 text-xs font-bold gap-1 border-success/40 text-success-soft rounded-xl"
+                  >
+                    ← Ir al salón
+                  </Button>
+                )}
                 {mensajeExito.orderId && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => window.open(`/imprimir/pedido/${mensajeExito.orderId}?auto=1`, "_blank")}
-                    className="h-8 text-xs font-semibold gap-1"
+                    className="h-8 text-xs font-semibold gap-1 rounded-xl"
                   >
-                    <Printer className="size-3.5" /> Re-imprimir
+                    <Printer className="size-3.5" /> Imprimir recibo
                   </Button>
                 )}
                 <Button
@@ -957,7 +907,7 @@ export function ModuloPosInteractive({
                     type="text"
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="🔍 Buscar producto por nombre o ingrediente..."
+                    placeholder="Buscar producto por nombre o ingrediente..."
                     className="h-10 pl-10 pr-10 text-xs rounded-xl bg-card border-border"
                   />
                   {busqueda && (
@@ -1192,12 +1142,17 @@ export function ModuloPosInteractive({
 
             {/* ── PANEL DERECHO: PANEL DE VENTA Y CARRITO (5 COLS / 40%) ────────── */}
             <div className="lg:col-span-5 space-y-4 sticky top-4">
-              <Card className="border-border bg-card shadow-lg rounded-2xl overflow-hidden space-y-0">
+              <Card className="border-border bg-card shadow-sm rounded-2xl overflow-hidden space-y-0">
                 {/* Header del Carrito */}
-                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
+                <div className="p-3.5 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShoppingCart className="size-4 text-brand" />
-                    <span className="font-bold text-sm text-foreground">El pedido</span>
+                    <span className="font-bold text-sm text-foreground">Detalle del pedido</span>
+                    {cart.length > 0 && (
+                      <Badge variant="outline" className="font-mono text-rotulo font-bold">
+                        {cart.reduce((sum, item) => sum + item.quantity, 0)} ítems
+                      </Badge>
+                    )}
                   </div>
                   {cart.length > 0 && (
                     <Button
@@ -1205,7 +1160,7 @@ export function ModuloPosInteractive({
                       variant="ghost"
                       size="sm"
                       onClick={vaciarCarrito}
-                      className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2"
+                      className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2 rounded-lg"
                     >
                       <Trash2 className="size-3.5 mr-1" /> Vaciar
                     </Button>
@@ -1213,122 +1168,20 @@ export function ModuloPosInteractive({
                 </div>
 
                 <div className="p-4 space-y-4">
-                  {/* El orden es el de la mano: primero se toca la carta y se ve caer
-                      lo pedido, después se dice de quién es, y recién al final se
-                      decide qué hacer con el pedido. Antes empezaba pidiendo el tipo
-                      de consumo y el nombre de alguien que todavía no había pedido
-                      nada. */}
-                  <Paso numero={1} titulo="Lo que lleva" ayuda="Tocá los productos del catálogo." />
-                  {/* Lista de Ítems en el Carrito */}
-                  <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-1">
-                    {cart.length === 0 ? (
-                      <div className="p-6 text-center text-muted-foreground space-y-1">
-                        <ShoppingBag className="size-8 mx-auto opacity-30" />
-                        <p className="text-xs font-medium">Todavía no hay nada</p>
-                        <p className="text-rotulo opacity-75">
-                          Tocá un producto de la izquierda y aparece acá.
-                        </p>
-                      </div>
-                    ) : (
-                      cart.map((item) => (
-                        <div
-                          key={item.lineKey}
-                          className="p-2.5 rounded-xl bg-[var(--panel-2)] border border-border space-y-1.5"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="space-y-0.5 flex-1 min-w-0">
-                              <span className="font-bold text-xs text-foreground block truncate">
-                                {item.name}
-                              </span>
-                              {item.opciones.length > 0 && (
-                                <span className="text-rotulo font-medium text-muted-foreground block leading-tight">
-                                  {item.opciones
-                                    .map((o) =>
-                                      o.priceDeltaCop > 0
-                                        ? `${o.name} (+${formatCop(o.priceDeltaCop)})`
-                                        : o.name
-                                    )
-                                    .join(" · ")}
-                                </span>
-                              )}
-                              <span className="numeral text-rotulo font-semibold text-muted-foreground block">
-                                {formatCop(precioUnitario(item))} c/u
-                              </span>
-                            </div>
-                            <span className="numeral font-bold text-xs text-brand shrink-0">
-                              {formatCop(precioUnitario(item) * item.quantity)}
-                            </span>
-                          </div>
-
-                          {/* Controles de cantidad e inline note */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => cambiarCantidadCart(item.lineKey, -1)}
-                                className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground"
-                              >
-                                <Minus className="size-3" />
-                              </button>
-                              <span className="numeral font-bold text-xs w-6 text-center">
-                                {item.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => cambiarCantidadCart(item.lineKey, 1)}
-                                className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground"
-                              >
-                                <Plus className="size-3" />
-                              </button>
-                            </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <Input
-                                value={item.notes}
-                                onChange={(e) => actualizarNotaItem(item.lineKey, e.target.value)}
-                                placeholder="Nota ítem..."
-                                className="h-6 text-rotulo w-28 rounded-lg px-1.5"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => quitarDelCarrito(item.lineKey)}
-                                className="text-muted-foreground hover:text-destructive p-1"
-                              >
-                                <X className="size-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-
-                  <Paso
-                    numero={2}
-                    titulo="Para quién es"
-                    ayuda="El nombre se canta al entregar y queda en el tiquete."
-                  />
                   {/* Selector de Tipo de Consumo */}
                   <div className="space-y-1.5">
                     <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
-                      ¿Cómo se lo lleva?
+                      Tipo de consumo
                     </Label>
-                    {/* `bg-muted` acá era el beige de la paleta —un token de
-                        texto, no de superficie— y los botones inactivos usan
-                        `text-muted-foreground`, que es ese mismo beige: "En
-                        Sitio" y "Domicilio" quedaban invisibles y parecía que el
-                        único tipo posible era "Llevar". Va sobre el panel oscuro
-                        y el elegido se marca con la brasa. */}
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--panel-2)] rounded-xl">
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--panel-2)] rounded-xl border border-border/60">
                       <button
                         type="button"
                         onClick={() => setTipoConsumo("LLEVAR")}
                         className={cn(
-                          "min-h-11 tableta:min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                          "min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                           tipoConsumo === "LLEVAR"
-                            ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
-                            : "text-muted-foreground hover:text-[var(--papel)]"
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
+                            : "text-muted-foreground hover:text-foreground"
                         )}
                       >
                         <ShoppingBag className="size-3.5" /> Llevar
@@ -1337,10 +1190,10 @@ export function ModuloPosInteractive({
                         type="button"
                         onClick={() => setTipoConsumo("EN_SITIO")}
                         className={cn(
-                          "min-h-11 tableta:min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                          "min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                           tipoConsumo === "EN_SITIO"
-                            ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
-                            : "text-muted-foreground hover:text-[var(--papel)]"
+                            ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
+                            : "text-muted-foreground hover:text-foreground"
                         )}
                       >
                         <Utensils className="size-3.5" /> En sitio
@@ -1350,10 +1203,10 @@ export function ModuloPosInteractive({
                           type="button"
                           onClick={() => setTipoConsumo("DOMICILIO")}
                           className={cn(
-                            "min-h-11 tableta:min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1",
+                            "min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                             tipoConsumo === "DOMICILIO"
-                              ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-sm font-bold"
-                              : "text-muted-foreground hover:text-[var(--papel)]"
+                              ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
+                              : "text-muted-foreground hover:text-foreground"
                           )}
                         >
                           <Bike className="size-3.5" /> Domicilio
@@ -1363,11 +1216,11 @@ export function ModuloPosInteractive({
                   </div>
 
                   {/* Datos del Cliente */}
-                  <div className="space-y-2 pt-1 border-t border-border/60">
+                  <div className="space-y-2.5 pt-1">
                     <div className="space-y-1">
                       <Label htmlFor="customerName" className="text-xs font-medium flex items-center justify-between">
-                        <span>¿A nombre de quién?</span>
-                        <span className="text-rotulo font-semibold text-destructive-soft">Obligatorio</span>
+                        <span>Nombre del cliente</span>
+                        <span className="text-rotulo font-semibold text-muted-foreground">Obligatorio</span>
                       </Label>
                       <Input
                         id="customerName"
@@ -1376,26 +1229,21 @@ export function ModuloPosInteractive({
                           setCustomerName(e.target.value);
                           if (errorGlobal && e.target.value.trim()) setErrorGlobal(null);
                         }}
-                        placeholder="Ej. Carlos, o Cliente mostrador"
+                        placeholder="Ej. Carlos o Mostrador"
                         className={cn(
                           "h-9 text-xs rounded-xl transition-all",
-                          cart.length > 0 && !customerName.trim()
-                            ? "border-destructive-soft ring-2 ring-destructive/20 bg-destructive/5 placeholder:text-destructive-soft font-semibold text-foreground"
+                          cart.length > 0 && !customerName.trim() && errorGlobal
+                            ? "border-destructive ring-1 ring-destructive/30 bg-destructive/5 font-semibold text-foreground"
                             : "bg-background border-input"
                         )}
                       />
-                      {cart.length > 0 && !customerName.trim() && (
-                        <p className="text-rotulo text-destructive-soft font-medium pt-0.5">
-                          Sin nombre no se puede entregar ni imprimir: es lo que se canta y lo que sale en el tiquete.
-                        </p>
-                      )}
                     </div>
 
                     {/* Campos obligatorios si es Domicilio */}
                     {tipoConsumo === "DOMICILIO" && (
                       <div className="space-y-2 p-3 rounded-xl bg-brand/5 border border-brand/20">
-                        <span className="text-xs font-bold text-brand block flex items-center gap-1">
-                          <Bike className="size-3.5" /> Datos Requeridos para Domicilio
+                        <span className="text-xs font-bold text-brand flex items-center gap-1.5">
+                          <Bike className="size-3.5" /> Datos de entrega
                         </span>
                         <div className="space-y-1.5">
                           <Label htmlFor="customerPhone" className="text-rotulo font-semibold">
@@ -1406,7 +1254,7 @@ export function ModuloPosInteractive({
                             value={customerPhone}
                             onChange={(e) => setCustomerPhone(e.target.value)}
                             placeholder="Ej. 3001234567"
-                            className="h-9 text-xs rounded-xl bg-background"
+                            className="h-8 text-xs rounded-xl bg-background"
                             required
                           />
                         </div>
@@ -1419,7 +1267,7 @@ export function ModuloPosInteractive({
                             value={deliveryAddress}
                             onChange={(e) => setDeliveryAddress(e.target.value)}
                             placeholder="Ej. Calle 45 # 12-34 Apto 201"
-                            className="h-9 text-xs rounded-xl bg-background"
+                            className="h-8 text-xs rounded-xl bg-background"
                             required
                           />
                         </div>
@@ -1429,94 +1277,218 @@ export function ModuloPosInteractive({
                     {/* Notas generales del pedido */}
                     <div className="space-y-1">
                       <Label htmlFor="orderNotes" className="text-xs font-medium text-muted-foreground">
-                        Notas generales del pedido
+                        Notas generales (opcional)
                       </Label>
                       <Input
                         id="orderNotes"
                         value={orderNotes}
                         onChange={(e) => setOrderNotes(e.target.value)}
-                        placeholder="Ej. Empacar con servilletas extra, salsa picante..."
+                        placeholder="Ej. Sin picante, empacar para viaje..."
                         className="h-8 text-xs rounded-xl text-muted-foreground"
                       />
                     </div>
                   </div>
 
-                  {/* Total y qué hacer con el pedido */}
-                  <div className="space-y-3 pt-4 border-t border-border">
-                    <Paso
-                      numero={3}
-                      titulo="Qué hacemos con el pedido"
-                      ayuda={
-                        cart.length === 0
-                          ? "Se habilita en cuanto agregues el primer producto."
-                          : "Las tres salidas son distintas. Elegí la que corresponda."
-                      }
-                    />
+                  {/* Lista de Ítems en el Carrito */}
+                  <div className="space-y-1.5 pt-2 border-t border-border/80">
+                    <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
+                      Productos seleccionados
+                    </Label>
+                    <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
+                      {cart.length === 0 ? (
+                        <div className="p-6 text-center text-muted-foreground space-y-1 bg-[var(--panel-2)] rounded-xl border border-dashed border-border/80">
+                          <ShoppingBag className="size-6 mx-auto opacity-30" />
+                          <p className="text-xs font-medium">El pedido está vacío</p>
+                          <p className="text-rotulo opacity-75">
+                            Tocá productos del catálogo a la izquierda para agregarlos.
+                          </p>
+                        </div>
+                      ) : (
+                        cart.map((item) => (
+                          <div
+                            key={item.lineKey}
+                            className="p-2.5 rounded-xl bg-[var(--panel-2)] border border-border/80 space-y-1.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-0.5 flex-1 min-w-0">
+                                <span className="font-bold text-xs text-foreground block truncate">
+                                  {item.name}
+                                </span>
+                                {item.opciones.length > 0 && (
+                                  <span className="text-rotulo font-medium text-muted-foreground block leading-tight">
+                                    {item.opciones
+                                      .map((o) =>
+                                        o.priceDeltaCop > 0
+                                          ? `${o.name} (+${formatCop(o.priceDeltaCop)})`
+                                          : o.name
+                                      )
+                                      .join(" · ")}
+                                  </span>
+                                )}
+                                <span className="numeral text-rotulo font-semibold text-muted-foreground block">
+                                  {formatCop(precioUnitario(item))} c/u
+                                </span>
+                              </div>
+                              <span className="numeral font-bold text-xs text-brand shrink-0">
+                                {formatCop(precioUnitario(item) * item.quantity)}
+                              </span>
+                            </div>
 
+                            {/* Controles de cantidad e inline note */}
+                            <div className="flex items-center justify-between gap-2 pt-1">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => cambiarCantidadCart(item.lineKey, -1)}
+                                  className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground transition-colors"
+                                >
+                                  <Minus className="size-3" />
+                                </button>
+                                <span className="numeral font-bold text-xs w-6 text-center">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => cambiarCantidadCart(item.lineKey, 1)}
+                                  className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground transition-colors"
+                                >
+                                  <Plus className="size-3" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  value={item.notes}
+                                  onChange={(e) => actualizarNotaItem(item.lineKey, e.target.value)}
+                                  placeholder="Nota..."
+                                  className="h-6 text-rotulo w-28 rounded-lg px-1.5"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => quitarDelCarrito(item.lineKey)}
+                                  className="text-muted-foreground hover:text-destructive p-1 transition-colors"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Total y qué hacer con el pedido */}
+                  <div className="space-y-3 pt-3 border-t border-border">
                     {errorGlobal && (
-                      <Alert variant="destructive" role="alert" className="py-2 text-xs">
+                      <Alert variant="destructive" role="alert" className="py-2 text-xs rounded-xl">
                         <AlertDescription>{errorGlobal}</AlertDescription>
                       </Alert>
                     )}
 
-                    {tipoConsumo === "DOMICILIO" && costoDomicilio > 0 && (
-                      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                        <span>Servicio de domicilio</span>
-                        <span className="numeral font-bold text-foreground">+{formatCop(costoDomicilio)}</span>
+                    {tipoConsumo === "DOMICILIO" && (
+                      <div className="flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-brand/10 border border-brand/20 text-brand">
+                        <span className="flex items-center gap-1.5 font-bold">
+                          <Bike className="size-4 shrink-0" /> Servicio de domicilio
+                        </span>
+                        <span className="numeral font-bold text-foreground">
+                          {costoDomicilio > 0 ? `+${formatCop(costoDomicilio)}` : "Gratis ($0)"}
+                        </span>
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-brand/5 border border-brand/20">
-                      <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-                        Total
-                      </span>
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--panel-2)] border border-border">
+                      <div className="space-y-0.5">
+                        <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground block">
+                          Total a pagar
+                        </span>
+                        {tipoConsumo === "DOMICILIO" && (
+                          <span className="text-rotulo text-muted-foreground block">
+                            Productos {formatCop(subtotalCart)} + Domicilio {formatCop(costoDomicilio)}
+                          </span>
+                        )}
+                      </div>
                       <span className="numeral text-2xl font-extrabold text-brand">
                         {formatCop(totalCart)}
                       </span>
                     </div>
 
-                    {/* Cada botón dice lo que hace y qué pasa después. Antes eran
-                        "Venta Rápida / Cobrar Ahora", "Cocina + Turno" y
-                        "Parquear Pedido": tres nombres de los que solo el primero
-                        se entendía a medias, y nada que explicara en qué se
-                        diferencian ni cuál dejaba el pedido abierto. */}
-                    <div className="grid grid-cols-1 gap-2 pt-1">
-                      <AccionDelPedido
-                        titulo="Cobrar y entregar"
-                        explicacion="Paga ahora y se lo lleva. Cierra el pedido e imprime el tiquete."
-                        icono={<DollarSign className="size-4" />}
-                        deshabilitado={cart.length === 0 || procesandoAccion}
-                        destacada
-                        onClick={() => {
-                          if (!customerName.trim()) {
-                            setErrorGlobal("Escribí el nombre del cliente antes de cobrar.");
-                            document.getElementById("customerName")?.focus();
-                            return;
-                          }
-                          const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta, settings.inventoryEnabled);
-                          if (errorStock) {
-                            setErrorGlobal(errorStock);
-                            return;
-                          }
-                          setModalPagoAbierto(true);
-                        }}
-                      />
+                    {/* Acciones principales del pedido */}
+                    <div className="space-y-2 pt-1">
+                      {usaMesas ? (
+                        <>
+                          <Button
+                            type="button"
+                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
+                            disabled={cart.length === 0 || procesandoAccion}
+                            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
+                          >
+                            <UtensilsCrossed className="size-4" />
+                            <span>Mandar comanda a cocina y caja</span>
+                          </Button>
 
-                      <AccionDelPedido
-                        titulo="Mandar a cocina"
-                        explicacion="Se prepara ya y se cobra cuando esté. Le asigna número de turno."
-                        icono={<ChefHat className="size-4" />}
-                        deshabilitado={cart.length === 0 || procesandoAccion}
-                        onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                      />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => ejecutarProcesarPos("PARQUEAR")}
+                            disabled={cart.length === 0 || procesandoAccion}
+                            className="w-full text-muted-foreground hover:text-foreground h-8 text-xs gap-1.5"
+                          >
+                            <PauseCircle className="size-3.5" />
+                            <span>Guardar en espera</span>
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              if (!customerName.trim()) {
+                                setErrorGlobal("Escribí el nombre del cliente antes de cobrar.");
+                                document.getElementById("customerName")?.focus();
+                                return;
+                              }
+                              const errorStock = auditarStockCarritoRecetas(
+                                carritoParaAuditar(),
+                                carta,
+                                settings.inventoryEnabled,
+                              );
+                              if (errorStock) {
+                                setErrorGlobal(errorStock);
+                                return;
+                              }
+                              setModalPagoAbierto(true);
+                            }}
+                            disabled={cart.length === 0 || procesandoAccion}
+                            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
+                          >
+                            <CreditCard className="size-4" />
+                            <span>Cobrar y facturar</span>
+                          </Button>
 
-                      <AccionDelPedido
-                        titulo="Dejar en espera"
-                        explicacion="Queda guardado sin ir a cocina ni cobrarse. Se retoma desde “En espera”."
-                        icono={<PauseCircle className="size-4" />}
-                        deshabilitado={cart.length === 0 || procesandoAccion}
-                        onClick={() => ejecutarProcesarPos("PARQUEAR")}
-                      />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
+                            disabled={cart.length === 0 || procesandoAccion}
+                            className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
+                          >
+                            <UtensilsCrossed className="size-3.5 text-brand" />
+                            <span>Mandar a cocina</span>
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => ejecutarProcesarPos("PARQUEAR")}
+                            disabled={cart.length === 0 || procesandoAccion}
+                            className="w-full text-muted-foreground hover:text-foreground h-8 text-xs gap-1.5"
+                          >
+                            <PauseCircle className="size-3.5" />
+                            <span>Guardar en espera</span>
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1544,18 +1516,18 @@ export function ModuloPosInteractive({
 
                 <div className="p-5 space-y-4">
                   {/* Total a pagar */}
-                  <div className="text-center p-3 rounded-2xl bg-brand/5 border border-brand/20 space-y-0.5">
+                  <div className="text-center p-3 rounded-2xl bg-brand/5 border border-brand/20 space-y-1">
                     <span className="text-rotulo font-semibold text-muted-foreground uppercase">Total del Pedido</span>
                     <p className="numeral text-3xl font-extrabold text-brand">
                       {formatCop(totalConPropina)}
                     </p>
-                    <div className="text-rotulo text-muted-foreground space-x-1">
-                      <span>Productos {formatCop(subtotalCart)}</span>
-                      {costoDomicilio > 0 && (
-                        <span>+ Domicilio {formatCop(costoDomicilio)}</span>
+                    <div className="text-rotulo text-muted-foreground flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+                      <span>Productos: {formatCop(subtotalCart)}</span>
+                      {tipoConsumo === "DOMICILIO" && (
+                        <span className="font-semibold text-foreground">· Domicilio: {formatCop(costoDomicilio)}</span>
                       )}
                       {propinaCop > 0 && (
-                        <span>+ Propina {formatCop(propinaCop)}</span>
+                        <span className="font-semibold text-foreground">· Propina: {formatCop(propinaCop)}</span>
                       )}
                     </div>
                   </div>
@@ -1587,24 +1559,24 @@ export function ModuloPosInteractive({
 
                   {/* Selector Método de Pago */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Método de Pago *</Label>
+                    <Label className="text-xs font-semibold text-foreground">Método de pago</Label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {[
-                        { id: "EFECTIVO", label: "💵 Efectivo" },
-                        { id: "NEQUI", label: "📱 Nequi" },
-                        { id: "DAVIPLATA", label: "📱 Daviplata" },
-                        { id: "TARJETA_DEBITO", label: "💳 T. Débito" },
-                        { id: "TARJETA_CREDITO", label: "💳 T. Crédito" },
-                        { id: "TRANSFERENCIA", label: "🏦 Transf." },
+                        { id: "EFECTIVO", label: "Efectivo" },
+                        { id: "NEQUI", label: "Nequi" },
+                        { id: "DAVIPLATA", label: "Daviplata" },
+                        { id: "TARJETA_DEBITO", label: "T. Débito" },
+                        { id: "TARJETA_CREDITO", label: "T. Crédito" },
+                        { id: "TRANSFERENCIA", label: "Transf." },
                       ].map((m) => (
                         <button
                           key={m.id}
                           type="button"
                           onClick={() => setMetodoPago(m.id as typeof metodoPago)}
                           className={cn(
-                            "py-2 px-1.5 rounded-xl text-xs font-semibold transition-all border text-center",
+                            "py-2 px-1.5 rounded-xl text-xs font-medium transition-all border text-center",
                             metodoPago === m.id
-                              ? "bg-brand text-brand-foreground border-brand font-bold shadow-sm"
+                              ? "bg-brand/10 border-brand text-brand font-bold shadow-xs"
                               : "bg-background text-foreground hover:bg-muted border-border"
                           )}
                         >
@@ -1618,15 +1590,15 @@ export function ModuloPosInteractive({
                   {metodoPago === "EFECTIVO" ? (
                     <div className="space-y-3 p-3.5 rounded-2xl bg-muted/40 border border-border">
                       <div className="space-y-1">
-                        <Label htmlFor="montoRecibido" className="text-xs font-semibold">
-                          Efectivo Recibido ($ COP)
+                        <Label htmlFor="montoRecibido" className="text-xs font-semibold text-foreground">
+                          Efectivo recibido ($ COP)
                         </Label>
                         <Input
                           id="montoRecibido"
                           type="number"
                           value={montoRecibido}
                           onChange={(e) => setMontoRecibido(e.target.value)}
-                          placeholder={totalCart.toString()}
+                          placeholder={totalConPropina.toString()}
                           className="h-10 text-base font-bold rounded-xl font-mono bg-background"
                         />
                       </div>
@@ -1634,7 +1606,7 @@ export function ModuloPosInteractive({
                       {/* Presets de billetes */}
                       <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                         {[
-                          { label: "Exacto", val: totalCart },
+                          { label: "Exacto", val: totalConPropina },
                           { label: "$20k", val: 20000 },
                           { label: "$50k", val: 50000 },
                           { label: "$100k", val: 100000 },
@@ -1661,14 +1633,14 @@ export function ModuloPosInteractive({
                   ) : (
                     /* Si es Tarjeta / Electrónico: Número de comprobante obligatorio */
                     <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/40 border border-border">
-                      <Label htmlFor="numeroComprobante" className="text-xs font-semibold">
-                        Número de Comprobante / Referencias de Pago *
+                      <Label htmlFor="numeroComprobante" className="text-xs font-semibold text-foreground">
+                        Número de Comprobante / Referencia de Pago *
                       </Label>
                       <Input
                         id="numeroComprobante"
                         value={numeroComprobante}
                         onChange={(e) => setNumeroComprobante(e.target.value)}
-                        placeholder="Ej. # 482910 / Aprobación datafono"
+                        placeholder="Ej. # 482910 / Aprobación datáfono"
                         className="h-10 text-xs rounded-xl bg-background font-mono"
                         required
                       />
@@ -1693,9 +1665,9 @@ export function ModuloPosInteractive({
                       type="button"
                       disabled={procesandoAccion}
                       onClick={() => ejecutarProcesarPos("PAGAR_DIRECTO")}
-                      className="w-full h-11 bg-success hover:bg-success/90 text-white font-bold text-sm rounded-xl shadow-md gap-2"
+                      className="w-full h-11 bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-sm rounded-xl shadow-xs gap-2"
                     >
-                      {procesandoAccion ? "Procesando Cobro..." : "🚀 Confirmar Pago y Cerrar Pedido"}
+                      {procesandoAccion ? "Procesando cobro..." : `Confirmar pago de ${formatCop(totalConPropina)}`}
                     </Button>
                   </div>
                 </div>
