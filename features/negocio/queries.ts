@@ -1,9 +1,7 @@
 import "server-only";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import { cache } from "react";
 import { tenantDb } from "@/lib/db/tenant";
-import { carpetaDeDescargas, EJECUTABLES } from "@/lib/printing/descargas";
+import { EJECUTABLES, fuenteDelEjecutable } from "@/lib/printing/descargas";
 
 /**
  * Los parámetros de operación de la empresa.
@@ -103,21 +101,20 @@ export async function getConfiguracionDeImpresion(businessId: string) {
 /**
  * Los ejecutables del agente que están disponibles para descargar.
  *
- * Se compilan con `pnpm agente:build` y quedan en `public/descargas/`, que Next
- * sirve como estático. No se versionan —son ~6 MB por sistema— así que en un clon
- * nuevo no están, y el panel tiene que poder decir eso en vez de ofrecer un enlace
- * que devuelve 404: alguien parado en un bar con la PC lista no puede quedarse
- * mirando una página de error sin saber si es culpa suya.
+ * Se compilan con `pnpm agente:build` en una máquina con Go, y de ahí van a un
+ * volumen del VPS o a un hosting estático: no viajan con el despliegue. En un
+ * servidor donde no se publicaron no hay ninguno, y el panel tiene que poder
+ * decir eso en vez de ofrecer un enlace que devuelve 404 — alguien parado en un
+ * bar con la PC lista no puede quedarse mirando una página de error sin saber si
+ * es culpa suya.
+ *
+ * Dónde buscar lo decide `fuenteDelEjecutable()` y no este archivo: son dos los
+ * que preguntan y ya divergieron una vez, con el panel escondiendo los botones
+ * mientras la ruta servía el archivo perfectamente.
  */
 export function getDescargasDelAgente() {
-  // La carpeta la decide `carpetaDeDescargas()` y no este archivo: en el VPS es
-  // un volumen, no `public/`. Cuando cada uno resolvía la ruta por su cuenta, el
-  // panel escondía los botones mientras la ruta servía el archivo perfectamente.
-  const carpeta = carpetaDeDescargas();
-
   return EJECUTABLES.map((a) => ({
     ...a,
-    url: `/descargas/${a.archivo}`,
-    disponible: existsSync(path.join(carpeta, a.archivo)),
+    disponible: fuenteDelEjecutable(a.so) !== null,
   }));
 }

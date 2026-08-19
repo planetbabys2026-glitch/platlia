@@ -97,6 +97,20 @@ const schema = z.object({
   // Es una ruta del servidor, no una URL: nada de esto llega al navegador.
   DESCARGAS_AGENTE_DIR: opcional(z.string().min(1)),
 
+  // ─── …o en un hosting cualquiera, si no hay volumen ───────────────────────
+  // Cloudinary, S3, un release de GitHub: da igual, es un archivo estático.
+  //
+  // El servidor los **retransmite**, no redirige. Parece un rodeo y es la razón
+  // de ser de la ruta: el código de emparejamiento viaja en el NOMBRE del
+  // archivo, y ese nombre lo pone nuestro `Content-Disposition`. Bajando directo
+  // del hosting el archivo llega sin código y el doble clic deja de alcanzar.
+  //
+  // Efecto secundario útil: el nombre del otro lado no importa. Si el hosting no
+  // acepta subir un `.exe`, se sube sin extensión y acá sale con la que va.
+  DESCARGAS_AGENTE_URL_WINDOWS: opcional(z.url()),
+  DESCARGAS_AGENTE_URL_LINUX: opcional(z.url()),
+  DESCARGAS_AGENTE_URL_MAC: opcional(z.url()),
+
   // ─── Facturación electrónica DIAN (Factus) ────────────────────────────────
   // La cuenta de Factus es UNA, de la plataforma: Factus nos vende una bolsa de
   // documentos y nosotros la repartimos entre los negocios. Antes estas cuatro

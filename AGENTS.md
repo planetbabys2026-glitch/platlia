@@ -457,10 +457,23 @@ base del VPS, para que un deploy no cambie el esquema mientras hay gente cobrand
 está en `.gitignore` —son ~7 MB por sistema— y la imagen no trae Go (`providers = ["node"]`), así
 que en el VPS esa carpeta llega vacía. Hay dos salidas y **la de fábrica es la segunda**:
 
-1. **Publicarlos**: compilarlos en una máquina con Go, subirlos a un volumen y apuntarle
-   `DESCARGAS_AGENTE_DIR`. Recién ahí sirve el botón de descarga con el código en el nombre.
+1. **Publicarlos**, y ahí sirve el botón de descarga con el código en el nombre. Van a un
+   volumen del VPS (`DESCARGAS_AGENTE_DIR`) o a un hosting estático cualquiera —Cloudinary, S3,
+   un release de GitHub— con una URL por sistema (`DESCARGAS_AGENTE_URL_WINDOWS`, `_LINUX`,
+   `_MAC`). La URL le gana a la carpeta: si alguien la configuró es porque ahí está el binario al
+   día, y uno viejo olvidado en el volumen sería un agente desactualizado instalándose sin que
+   nadie lo note.
 2. **No publicarlos** y que la instalación la haga nuestro equipo, con el ejecutable en la mano y
    el `agente.json` que entrega **Configurar a mano**. El servidor deja de repartir binarios.
+
+**Con una URL, el archivo se retransmite; no se redirige.** Parece un rodeo —los 7 MB pasan por el
+servidor— y es la razón de ser de la ruta: el código de emparejamiento viaja en el **nombre** del
+archivo y ese nombre lo pone nuestro `Content-Disposition`. Un `302` al hosting entrega el archivo
+con el nombre que tenga allá, sin código adentro, y el doble clic deja de alcanzar. El efecto
+secundario es útil: del otro lado el archivo puede llamarse de cualquier manera, así que si el
+hosting no acepta subir un `.exe` se sube sin extensión y sale con la que va. Y el hosting caído
+contesta **502**, distinto del 404 de "no está publicado": son dos problemas que arregla gente
+distinta.
 
 El panel **dice cuál de las dos está pasando**: sin ejecutables no esconde los botones —eso era
 un equipo registrado, un código a la vista y ningún archivo, sin una palabra sobre por qué— sino

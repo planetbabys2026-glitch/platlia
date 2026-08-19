@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RotuloSeccion } from "@/components/marca/pantalla";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import {
   borrarAgenteDeImpresion,
@@ -48,7 +49,7 @@ export type ConfiguracionImpresionProps = {
   comandaDestino: string;
   timeZone: string;
   /** Qué ejecutables están compilados y listos para bajar. */
-  descargas: { so: "windows" | "linux" | "mac"; etiqueta: string; url: string; disponible: boolean }[];
+  descargas: { so: "windows" | "linux" | "mac"; etiqueta: string; disponible: boolean }[];
 };
 
 const IMPRESORA_NUEVA: ImpresoraPlana = {
@@ -410,9 +411,58 @@ export function FormularioImpresoras({
           <p className="text-xs text-muted-foreground">
             Corre en una PC del local, en la misma red que las impresoras. Es el único
             que puede hablarles: desde internet no se llega a una impresora del bar.
-            Registrá el equipo acá abajo y te damos el archivo listo para abrir.
           </p>
         </div>
+
+        {/* ── Paso 1 ──────────────────────────────────────────────────────────
+            La descarga vive acá y no adentro del recuadro de "Registrar equipo".
+            Ahí estaba antes, y al recargar la página desaparecía: el único camino
+            de vuelta era "Volver a instalar", que regenera el código y mata el
+            token del equipo que ya estaba imprimiendo. Bajar el programa y dar de
+            alta un equipo son dos cosas distintas y ahora se piden por separado.
+            El archivo es idéntico para todos los locales y no lleva ningún
+            secreto, así que no necesita ir acompañado de nada. */}
+        <div className="space-y-2">
+          <RotuloSeccion>1 · Bajá el programa</RotuloSeccion>
+          {hayDescargas ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {descargas
+                  .filter((d) => d.disponible)
+                  .map((d) => (
+                    <a
+                      key={d.so}
+                      href={`/api/impresion/descargar?so=${d.so}`}
+                      className={cn(
+                        "rounded-lg px-3 py-2 text-xs font-bold transition-all",
+                        d.so === soDetectado
+                          ? "bg-brand text-brand-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {d.etiqueta}
+                      {d.so === soDetectado ? " · este equipo" : ""}
+                    </a>
+                  ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Guardalo en una carpeta de la computadora que esté en la misma red que las
+                impresoras. Todavía no lo abras: primero necesita el archivo del paso 3.
+              </p>
+            </>
+          ) : (
+            <p
+              role="alert"
+              className="rounded-lg border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
+            >
+              <span className="font-bold">El programa no está publicado en este servidor.</span>{" "}
+              Se compila con <code className="font-mono">pnpm agente:build</code> y viaja con el
+              despliegue; si acá no aparece, ese paso no se hizo.
+            </p>
+          )}
+        </div>
+
+        <RotuloSeccion>2 · Registrá el equipo</RotuloSeccion>
 
         <ul className="space-y-2">
           {agentes.map((agente) => {
@@ -518,75 +568,60 @@ export function FormularioImpresoras({
         {codigoNuevo && (
           <div className="space-y-3 rounded-xl border border-brand/40 bg-brand/10 p-3">
             <div>
-              <p className="text-xs font-bold text-brand">
-                Equipo registrado. Falta ponerle el programa.
-              </p>
+              <p className="text-xs font-bold text-brand">Equipo registrado.</p>
               <p className="text-xs text-muted-foreground">
-                {hayDescargas
-                  ? "El archivo ya viene con este equipo adentro: bajalo en la computadora del local y hacé doble clic. No hay que escribir nada."
-                  : "El programa no se reparte desde este servidor: instalalo con el ejecutable que ya tenés y el archivo de configuración."}
+                Falta darle su configuración: es un archivo chico que va junto al programa
+                que bajaste en el paso 1.
               </p>
             </div>
 
-            {/* El código viaja en el NOMBRE del archivo: el programa lo lee de sí
-                mismo. Nadie copia un token de 43 caracteres a un archivo de texto,
-                que era lo que había antes y ningún cajero iba a hacer. */}
-            {hayDescargas ? (
-              <div className="flex flex-wrap gap-2">
-                {descargas
-                  .filter((d) => d.disponible)
-                  .map((d) => (
-                    <a
-                      key={d.so}
-                      href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo.codigo)}`}
-                      className={cn(
-                        "rounded-lg px-3 py-2 text-xs font-bold transition-all",
-                        d.so === soDetectado
-                          ? "bg-brand text-brand-foreground"
-                          : "bg-muted text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Bajar para {d.etiqueta}
-                      {d.so === soDetectado ? " · este equipo" : ""}
-                    </a>
-                  ))}
-              </div>
-            ) : (
-              /* Sin ejecutables publicados los botones desaparecían y no quedaba
-                 NADA en su lugar: el equipo aparecía registrado, el código a la
-                 vista, y ningún archivo que bajar ni una palabra sobre por qué.
-                 No es una falla: el despliegue no compila Go, así que la instalación
-                 la hace nuestro equipo con el ejecutable en la mano y lo único que
-                 falta traer de acá es el archivo de configuración. */
-              <div className="space-y-2 rounded-lg border border-border bg-[var(--panel-3)] p-2.5">
-                <p className="text-xs text-muted-foreground">
-                  El código de emparejamiento viaja en el nombre del archivo que se baja,
-                  así que sin descarga no sirve. Llevate el archivo de configuración y
-                  dejalo junto al programa en la computadora del local.
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={pendiente}
-                  className="bg-brand text-brand-foreground text-xs"
-                  onClick={() => pedirConfiguracion(codigoNuevo.id)}
-                >
-                  Ver el archivo de configuración
-                </Button>
-              </div>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              disabled={pendiente}
+              className="bg-brand text-brand-foreground text-xs"
+              onClick={() => pedirConfiguracion(codigoNuevo.id)}
+            >
+              Ver el archivo de configuración
+            </Button>
 
-            {/* Sin descarga no hay archivo cuyo nombre lleve el código, así que
-                esto no tendría de qué ser el plan B. */}
+            {/* El atajo, no el camino principal: el código de emparejamiento viaja
+                en el NOMBRE del archivo y el programa lo lee de sí mismo, así que
+                bajándolo desde acá no hay nada que pegar. Queda plegado porque solo
+                sirve si se baja EN la computadora del local, y quien instala varios
+                locales desde su propia máquina no está en ese caso. */}
             {hayDescargas && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground">
-                  Lo voy a bajar desde otra computadora
+                  Estoy sentado en la computadora del local: bajarlo ya configurado
                 </summary>
                 <div className="space-y-2 pt-2">
                   <p className="text-muted-foreground">
-                    Si el archivo se baja en otra máquina o el navegador le cambia el nombre,
-                    el programa va a pedir este código al abrirse. Vence en una hora.
+                    Este archivo trae el equipo adentro —viaja en su propio nombre— así que
+                    alcanza con hacerle doble clic. No hay nada que pegar.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {descargas
+                      .filter((d) => d.disponible)
+                      .map((d) => (
+                        <a
+                          key={d.so}
+                          href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo.codigo)}`}
+                          className={cn(
+                            "rounded-lg px-3 py-2 text-xs font-bold transition-all",
+                            d.so === soDetectado
+                              ? "bg-brand text-brand-foreground"
+                              : "bg-muted text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {d.etiqueta}
+                          {d.so === soDetectado ? " · este equipo" : ""}
+                        </a>
+                      ))}
+                  </div>
+                  <p className="text-muted-foreground">
+                    Si el navegador le cambia el nombre al archivo, el programa va a pedir
+                    este código al abrirse. Vence en una hora.
                   </p>
                   <code className="block rounded-lg bg-[var(--panel-3)] p-2 text-center font-mono text-base font-bold tracking-widest text-foreground">
                     {codigoNuevo.codigo}
@@ -617,15 +652,22 @@ export function FormularioImpresoras({
             la máquina—: no queda ningún paso manual después de pegarlo. */}
         {manual && (
           <div className="space-y-3 rounded-xl border border-brand/40 bg-brand/10 p-3">
-            <div>
+            <div className="space-y-1">
+              <RotuloSeccion>3 · Pegá esto junto al programa</RotuloSeccion>
               <p className="text-xs font-bold text-brand">
                 Configuración de &ldquo;{manual.nombre}&rdquo;
               </p>
+              <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
+                <li>
+                  Guardalo con el nombre exacto <code className="font-mono">agente.json</code>, en la
+                  misma carpeta donde dejaste el programa.
+                </li>
+                <li>Hacé doble clic en el programa.</li>
+              </ol>
               <p className="text-xs text-muted-foreground">
-                Dejá este archivo con el nombre <code className="font-mono">agente.json</code> en la
-                misma carpeta que el programa, en la computadora del local, y abrí el programa. Se
-                copia solo a donde tiene que vivir y queda arrancando con la computadora todos los
-                días, sin pedir permisos de administrador y sin ventana abierta.
+                Eso es todo: se copia solo a donde tiene que vivir, queda arrancando con la
+                computadora todos los días —sin pedir permisos de administrador y sin ventana
+                abierta— y abre una página que dice si está imprimiendo.
               </p>
             </div>
 
