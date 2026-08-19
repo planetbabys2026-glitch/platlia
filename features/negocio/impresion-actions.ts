@@ -12,8 +12,14 @@ import {
   rutasDeImpresionSchema,
 } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { regenerarCodigo, registrarEquipo } from "@/lib/printing/agente";
+import {
+  archivoDeConfiguracion,
+  emitirToken,
+  regenerarCodigo,
+  registrarEquipo,
+} from "@/lib/printing/agente";
 import { avisarAlAgente, encolarImpresion } from "@/lib/printing/cola";
+import { env } from "@/lib/env";
 
 /**
  * Configuración de la impresión térmica.
@@ -155,6 +161,38 @@ export const regenerarTokenDeAgente = defineAction({
     const codigo = await regenerarCodigo(agente.id);
     revalidatePath("/administracion/configuracion");
     return { codigo, id: agente.id };
+  },
+});
+
+/**
+ * El `agente.json` para configurar el equipo a mano.
+ *
+ * El camino del código de emparejamiento supone que el programa se baja desde
+ * esta pantalla, porque el código viaja en el nombre del archivo. Cuando lo
+ * instala nuestro propio equipo —que llega al local con el ejecutable ya
+ * compilado— ese camino no aplica: el servidor no necesita repartir binarios y
+ * lo único que falta es el archivo de configuración.
+ *
+ * Emitir el token **quema el código**: quien ya se bajó el programa con el
+ * código adentro deja de poder emparejarse, así que la pantalla lo dice antes.
+ */
+export const emitirConfiguracionDeAgente = defineAction({
+  schema: regenerarTokenSchema,
+  roles: ADMINISTRAN,
+  async handler({ input, db }) {
+    const agente = await db.printAgent.findFirst({
+      where: { id: input.id },
+      select: { id: true, nombre: true },
+    });
+    if (!agente) throw new ErrorDeUsuario("Ese equipo ya no está registrado.");
+
+    const token = await emitirToken(agente.id);
+
+    revalidatePath("/administracion/configuracion");
+    return {
+      nombre: agente.nombre,
+      archivo: archivoDeConfiguracion({ url: env.APP_URL, token, nombre: agente.nombre }),
+    };
   },
 });
 

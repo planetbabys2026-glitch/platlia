@@ -101,6 +101,53 @@ export async function regenerarCodigo(agenteId: string): Promise<string> {
 }
 
 /**
+ * Emite el token de un equipo para configurarlo a mano.
+ *
+ * Es el camino para cuando el programa NO se baja desde esta pantalla: quien
+ * instala llega al local con el ejecutable ya compilado y lo único que necesita
+ * del servidor es el archivo de configuración. El código de emparejamiento no le
+ * sirve, porque ese viaja en el nombre de una descarga que no va a hacer.
+ *
+ * Mata el código, no lo deja convivir: un código existe para PARIR un token, así
+ * que con uno ya emitido sería una segunda llave para la misma puerta, viva una
+ * hora y sin que nadie sepa que quedó abierta.
+ *
+ * Se devuelve una sola vez —de la base solo queda el hash— y por eso la pantalla
+ * lo muestra con su botón de copiar en vez de dejarlo para después.
+ */
+export async function emitirToken(agenteId: string): Promise<string> {
+  const token = randomBytes(32).toString("base64url");
+
+  await rootDb.printAgent.update({
+    where: { id: agenteId },
+    data: {
+      tokenHash: hashear(token),
+      codigoHash: null,
+      codigoExpiraEn: null,
+      emparejadoEn: new Date(),
+    },
+  });
+
+  return token;
+}
+
+/**
+ * El `agente.json` listo para pegar, tal como lo lee el programa.
+ *
+ * Lo arma el servidor y no la pantalla para que la URL sea exactamente la que el
+ * servidor cree que es: escrita a mano en un componente cliente, un `localhost`
+ * o una barra final de más son un agente que no conecta y un error que solo se
+ * ve en la PC del local.
+ */
+export function archivoDeConfiguracion(datos: {
+  url: string;
+  token: string;
+  nombre: string;
+}): string {
+  return `${JSON.stringify({ url: datos.url, token: datos.token, nombre: datos.nombre }, null, 2)}\n`;
+}
+
+/**
  * El canje: un código válido a cambio del token de verdad.
  *
  * Es de un solo uso —el código se borra al canjearlo— y vencible. Esas dos cosas

@@ -11,6 +11,7 @@ import {
   borrarAgenteDeImpresion,
   borrarImpresora,
   crearAgenteDeImpresion,
+  emitirConfiguracionDeAgente,
   guardarComandaDestino,
   guardarImpresora,
   guardarRutasDeImpresion,
@@ -82,7 +83,8 @@ export function FormularioImpresoras({
   descargas,
 }: ConfiguracionImpresionProps) {
   const [editando, setEditando] = useState<ImpresoraPlana | null>(null);
-  const [codigoNuevo, setCodigoNuevo] = useState<string | null>(null);
+  const [codigoNuevo, setCodigoNuevo] = useState<{ id: string; codigo: string } | null>(null);
+  const [manual, setManual] = useState<{ nombre: string; archivo: string } | null>(null);
   const [nombreAgente, setNombreAgente] = useState("PC de la caja");
   const [destino, setDestino] = useState(comandaDestino);
   const [mapa, setMapa] = useState<Record<string, string>>(
@@ -118,6 +120,21 @@ export function FormularioImpresoras({
       toast.error("No pude copiar. Seleccionalo y copialo a mano.");
     }
   };
+
+  /**
+   * Pide el archivo de configuración de un equipo.
+   *
+   * Emitir el token quema el código de emparejamiento, así que se limpia de la
+   * pantalla: dejarlo a la vista sería ofrecer una llave que ya no abre.
+   */
+  const pedirConfiguracion = (id: string) =>
+    iniciar(async () => {
+      const res = await emitirConfiguracionDeAgente(ESTADO_INICIAL, { id });
+      if (res.ok) {
+        setCodigoNuevo(null);
+        setManual({ nombre: res.data.nombre, archivo: res.data.archivo });
+      } else toast.error(res.error);
+    });
 
   const correr = (fn: () => Promise<{ ok: boolean; error?: string }>, exito: string) =>
     iniciar(async () => {
@@ -418,7 +435,20 @@ export function FormularioImpresoras({
                     </span>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {/* El camino de la instalación asistida: no baja nada de acá,
+                      se lleva el archivo. Vive en la fila y no solo en el alta
+                      porque hace falta cada vez que se cambia la computadora del
+                      local, no una única vez. */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={pendiente}
+                    onClick={() => pedirConfiguracion(agente.id)}
+                  >
+                    Configurar a mano
+                  </Button>
                   <Button
                     type="button"
                     size="sm"
@@ -428,7 +458,7 @@ export function FormularioImpresoras({
                       iniciar(async () => {
                         const res = await regenerarTokenDeAgente(ESTADO_INICIAL, { id: agente.id });
                         if (res.ok) {
-                          setCodigoNuevo(res.data.codigo);
+                          setCodigoNuevo({ id: res.data.id, codigo: res.data.codigo });
                           toast.success("Código nuevo. El programa anterior dejó de servir.");
                         } else toast.error(res.error);
                       })
@@ -475,8 +505,8 @@ export function FormularioImpresoras({
               iniciar(async () => {
                 const res = await crearAgenteDeImpresion(ESTADO_INICIAL, { nombre: nombreAgente });
                 if (res.ok) {
-                  setCodigoNuevo(res.data.codigo);
-                  toast.success("Equipo registrado. Ahora bajá el programa.");
+                  setCodigoNuevo({ id: res.data.id, codigo: res.data.codigo });
+                  toast.success("Equipo registrado.");
                 } else toast.error(res.error);
               })
             }
@@ -488,10 +518,13 @@ export function FormularioImpresoras({
         {codigoNuevo && (
           <div className="space-y-3 rounded-xl border border-brand/40 bg-brand/10 p-3">
             <div>
-              <p className="text-xs font-bold text-brand">Equipo listo. Falta bajar el programa.</p>
+              <p className="text-xs font-bold text-brand">
+                Equipo registrado. Falta ponerle el programa.
+              </p>
               <p className="text-xs text-muted-foreground">
-                El archivo ya viene con este equipo adentro: bajalo en la computadora del
-                local y hacé doble clic. No hay que escribir nada.
+                {hayDescargas
+                  ? "El archivo ya viene con este equipo adentro: bajalo en la computadora del local y hacé doble clic. No hay que escribir nada."
+                  : "El programa no se reparte desde este servidor: instalalo con el ejecutable que ya tenés y el archivo de configuración."}
               </p>
             </div>
 
@@ -505,7 +538,7 @@ export function FormularioImpresoras({
                   .map((d) => (
                     <a
                       key={d.so}
-                      href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo)}`}
+                      href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo.codigo)}`}
                       className={cn(
                         "rounded-lg px-3 py-2 text-xs font-bold transition-all",
                         d.so === soDetectado
@@ -522,46 +555,117 @@ export function FormularioImpresoras({
               /* Sin ejecutables publicados los botones desaparecían y no quedaba
                  NADA en su lugar: el equipo aparecía registrado, el código a la
                  vista, y ningún archivo que bajar ni una palabra sobre por qué.
-                 Es un problema del servidor, así que se dice como tal, con lo que
-                 hay que hacer y a quién le toca. */
-              <p
-                role="alert"
-                className="rounded-lg border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
-              >
-                <span className="font-bold">El programa no está publicado en este servidor.</span>{" "}
-                El equipo quedó registrado y el código sirve, pero falta subir los
-                ejecutables: se compilan con <code className="font-mono">pnpm agente:build</code> y
-                se dejan donde apunta <code className="font-mono">DESCARGAS_AGENTE_DIR</code>. No es
-                algo que se resuelva desde esta pantalla.
-              </p>
-            )}
-
-            <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground">
-                Lo voy a bajar desde otra computadora
-              </summary>
-              <div className="space-y-2 pt-2">
-                <p className="text-muted-foreground">
-                  Si el archivo se baja en otra máquina o el navegador le cambia el nombre,
-                  el programa va a pedir este código al abrirse. Vence en una hora.
+                 No es una falla: el despliegue no compila Go, así que la instalación
+                 la hace nuestro equipo con el ejecutable en la mano y lo único que
+                 falta traer de acá es el archivo de configuración. */
+              <div className="space-y-2 rounded-lg border border-border bg-[var(--panel-3)] p-2.5">
+                <p className="text-xs text-muted-foreground">
+                  El código de emparejamiento viaja en el nombre del archivo que se baja,
+                  así que sin descarga no sirve. Llevate el archivo de configuración y
+                  dejalo junto al programa en la computadora del local.
                 </p>
-                <code className="block rounded-lg bg-[var(--panel-3)] p-2 text-center font-mono text-base font-bold tracking-widest text-foreground">
-                  {codigoNuevo}
-                </code>
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
-                  onClick={() => copiar(codigoNuevo, "Código")}
+                  disabled={pendiente}
+                  className="bg-brand text-brand-foreground text-xs"
+                  onClick={() => pedirConfiguracion(codigoNuevo.id)}
                 >
-                  Copiar código
+                  Ver el archivo de configuración
                 </Button>
               </div>
-            </details>
+            )}
+
+            {/* Sin descarga no hay archivo cuyo nombre lleve el código, así que
+                esto no tendría de qué ser el plan B. */}
+            {hayDescargas && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground">
+                  Lo voy a bajar desde otra computadora
+                </summary>
+                <div className="space-y-2 pt-2">
+                  <p className="text-muted-foreground">
+                    Si el archivo se baja en otra máquina o el navegador le cambia el nombre,
+                    el programa va a pedir este código al abrirse. Vence en una hora.
+                  </p>
+                  <code className="block rounded-lg bg-[var(--panel-3)] p-2 text-center font-mono text-base font-bold tracking-widest text-foreground">
+                    {codigoNuevo.codigo}
+                  </code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copiar(codigoNuevo.codigo, "Código")}
+                  >
+                    Copiar código
+                  </Button>
+                </div>
+              </details>
+            )}
 
             <Button type="button" size="sm" variant="outline" onClick={() => setCodigoNuevo(null)}>
               Listo
             </Button>
+          </div>
+        )}
+
+        {/* ── El archivo de configuración ────────────────────────────────────
+            El otro camino de instalación: el programa no se baja de acá, lo lleva
+            quien instala. Lo único que tiene que viajar del servidor a la
+            computadora del local es este archivo, y con él el programa se
+            autoconfigura igual —se copia a su carpeta y se anota para arrancar con
+            la máquina—: no queda ningún paso manual después de pegarlo. */}
+        {manual && (
+          <div className="space-y-3 rounded-xl border border-brand/40 bg-brand/10 p-3">
+            <div>
+              <p className="text-xs font-bold text-brand">
+                Configuración de &ldquo;{manual.nombre}&rdquo;
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Dejá este archivo con el nombre <code className="font-mono">agente.json</code> en la
+                misma carpeta que el programa, en la computadora del local, y abrí el programa. Se
+                copia solo a donde tiene que vivir y queda arrancando con la computadora todos los
+                días, sin pedir permisos de administrador y sin ventana abierta.
+              </p>
+            </div>
+
+            <pre className="overflow-x-auto rounded-lg bg-[var(--panel-3)] p-3 font-mono text-xs text-foreground">
+              {manual.archivo}
+            </pre>
+
+            <div className="flex flex-wrap gap-2">
+              {/* Bajarlo en vez de copiarlo evita el error más caro de este paso:
+                  un token pegado con un espacio de más o cortado a la mitad falla
+                  recién en el local, con la impresora conectada y sin pistas. */}
+              <a
+                download="agente.json"
+                href={`data:application/json;charset=utf-8,${encodeURIComponent(manual.archivo)}`}
+                className="rounded-lg bg-brand px-3 py-2 text-xs font-bold text-brand-foreground"
+              >
+                Bajar agente.json
+              </a>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => copiar(manual.archivo, "Archivo")}
+              >
+                Copiar
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setManual(null)}>
+                Listo
+              </Button>
+            </div>
+
+            <p
+              role="alert"
+              className="rounded-lg border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
+            >
+              Adentro va la llave de la cola de impresión de este local: no lo mandes por chat ni lo
+              dejes en Descargas. <span className="font-bold">Se muestra una sola vez</span> — de
+              acá en más el servidor solo guarda su huella. Y si ya habías bajado el programa con el
+              código adentro, ese código dejó de servir.
+            </p>
           </div>
         )}
       </section>

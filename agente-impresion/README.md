@@ -49,6 +49,37 @@ Si el navegador le cambió el nombre al archivo, o si se bajó desde otra
 computadora, la página local muestra un campo para escribir el código a mano. Es el
 plan B, no el camino.
 
+## El otro camino: instalación asistida con `agente.json`
+
+El de arriba supone que el programa se baja **desde el servidor**, porque el código
+viaja en el nombre del archivo. Eso pide que los ejecutables estén publicados ahí, y
+el despliegue no compila Go: no los tiene y no los va a tener.
+
+Cuando la instalación la hace nuestro propio equipo —que llega al local con el
+ejecutable ya compilado— lo único que tiene que viajar del servidor a esa
+computadora es el archivo de configuración:
+
+1. En **Configuración → Impresoras**, botón **Configurar a mano** del equipo. Sale
+   el `agente.json` con su token, para copiar o bajar.
+2. Se deja ese `agente.json` **en la misma carpeta que el ejecutable**.
+3. Doble clic en el ejecutable.
+
+De ahí en adelante hace exactamente lo mismo que el otro camino: guarda la
+configuración en la carpeta de datos, se copia a su lugar definitivo, se anota para
+arrancar con la máquina y abre su página de estado. **Lo único que cambia es de
+dónde sale el token**; no hay ningún paso manual después de pegar el archivo.
+
+Se lee del lado del ejecutable y no de la carpeta de datos porque esa carpeta es
+distinta en cada sistema —`%AppData%`, `~/.config`, `Application Support`— y con el
+usuario adentro de la ruta: pedirle a alguien que la encuentre antes de poder copiar
+nada es el archivo de texto hecho a mano que este diseño evita.
+
+El token **se muestra una sola vez** —de la base solo queda su hash— y pedirlo
+**quema el código de emparejamiento** de ese equipo: son dos llaves para la misma
+puerta y no tiene sentido que convivan. Conviene borrar el `agente.json` de la
+carpeta desde donde se abrió el programa: ya quedó guardado con permisos 0600 en la
+carpeta de datos, y en Descargas es un secreto de larga vida a la vista.
+
 ## Compilar
 
 Sin dependencias fuera de la biblioteca estándar: en una PC de un bar no hay con
@@ -83,7 +114,7 @@ Todo en la carpeta de datos del usuario (`os.UserConfigDir()` + `Platlia`):
 
 | Archivo | Qué es |
 |---|---|
-| `agente.json` | url, token, nombre del equipo. Lo escribe el programa, no una persona |
+| `agente.json` | url, token, nombre del equipo. Lo escribe el programa; en la instalación asistida se copia del que se dejó junto al ejecutable |
 | `platlia-impresion[.exe]` | la copia instalada, que es la que arranca con la máquina |
 | `respaldo/` | cada trabajo antes de intentarlo; se borra al confirmarse |
 | `impresion.log` | la bitácora, que es la única salida: no hay consola |
@@ -92,8 +123,8 @@ Todo en la carpeta de datos del usuario (`os.UserConfigDir()` + `Platlia`):
 
 - **"ese código no sirve"**: vale una hora y un solo uso. Se pide otro con **Volver
   a instalar** en Configuración → Impresoras.
-- **"token rechazado"**: alguien apretó "Volver a instalar", lo que invalida el
-  token viejo. Hay que bajar el archivo nuevo.
+- **"token rechazado"**: alguien apretó "Volver a instalar" o "Configurar a mano",
+  y las dos cosas invalidan el token viejo. Hay que traer el archivo nuevo.
 - **"no responde en 192.168.x.x:9100"**: la impresora está apagada, tiene otra IP,
   o la PC no está en la misma red. Probá `ping` a esa IP desde la PC del agente.
 - El trabajo se reintenta **tres veces**. Si no sale, salta un aviso en las

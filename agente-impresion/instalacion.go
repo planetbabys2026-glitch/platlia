@@ -71,9 +71,36 @@ func rutaInstalada() string {
 	return filepath.Join(carpetaDeDatos(), nombre)
 }
 
+// rutaVecina es el `agente.json` puesto AL LADO del ejecutable.
+//
+// Es el camino de la instalación asistida: quien instala llega al local con el
+// programa ya compilado y el archivo que le dio Platlia, los deja juntos en una
+// carpeta y hace doble clic. Sin esto habría que adivinar dónde vive
+// `os.UserConfigDir()` en la máquina de ese cliente antes de poder copiar nada.
+func rutaVecina() (string, error) {
+	ejecutable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(ejecutable), "agente.json"), nil
+}
+
 func leerConfiguracion() (configuracion, error) {
+	return leerConfiguracionDe(rutaDeConfiguracion())
+}
+
+// leerConfiguracionVecina lee el archivo que se dejó junto al ejecutable.
+func leerConfiguracionVecina() (configuracion, error) {
+	ruta, err := rutaVecina()
+	if err != nil {
+		return configuracion{}, err
+	}
+	return leerConfiguracionDe(ruta)
+}
+
+func leerConfiguracionDe(ruta string) (configuracion, error) {
 	var cfg configuracion
-	datos, err := os.ReadFile(rutaDeConfiguracion())
+	datos, err := os.ReadFile(ruta)
 	if err != nil {
 		return cfg, err
 	}

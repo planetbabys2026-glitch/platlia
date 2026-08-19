@@ -453,13 +453,21 @@ runtime: `next build` importa `lib/env.ts` al recolectar las rutas y aborta sin 
 Las migraciones no corren en el despliegue. Se aplican aparte con `pnpm db:deploy` contra la
 base del VPS, para que un deploy no cambie el esquema mientras hay gente cobrando.
 
-**Los ejecutables del agente de impresión tampoco viajan solos.** `public/descargas/` está en
-`.gitignore` —son ~7 MB por sistema— y la imagen no trae Go (`providers = ["node"]`), así que en
-el VPS esa carpeta llega vacía y el botón de descarga responde 404 con un mensaje que habla de
-`pnpm agente:build`, un comando que ahí no se puede correr. Se compilan en una máquina con Go y
-se suben a un volumen, y `DESCARGAS_AGENTE_DIR` apunta ahí. Separarlo del build no es solo por
-Go: la URL del servidor va **horneada** en el binario, así que actualizarlo es reemplazar un
-archivo, no volver a desplegar la aplicación.
+**Los ejecutables del agente de impresión no viajan con el despliegue.** `public/descargas/`
+está en `.gitignore` —son ~7 MB por sistema— y la imagen no trae Go (`providers = ["node"]`), así
+que en el VPS esa carpeta llega vacía. Hay dos salidas y **la de fábrica es la segunda**:
+
+1. **Publicarlos**: compilarlos en una máquina con Go, subirlos a un volumen y apuntarle
+   `DESCARGAS_AGENTE_DIR`. Recién ahí sirve el botón de descarga con el código en el nombre.
+2. **No publicarlos** y que la instalación la haga nuestro equipo, con el ejecutable en la mano y
+   el `agente.json` que entrega **Configurar a mano**. El servidor deja de repartir binarios.
+
+El panel **dice cuál de las dos está pasando**: sin ejecutables no esconde los botones —eso era
+un equipo registrado, un código a la vista y ningún archivo, sin una palabra sobre por qué— sino
+que ofrece el archivo de configuración.
+
+Separarlo del build no es solo por Go: la URL del servidor va **horneada** en el binario, así que
+actualizarlo es reemplazar un archivo, no volver a desplegar la aplicación.
 
 ## Marca (Dark Kitchen-Fire)
 
@@ -853,10 +861,11 @@ el hash** (`PrintAgent`). SHA-256 y no argon2: son 32 bytes aleatorios, no una
 contraseña que alguien repite en otro lado, y el hash se verifica varias veces por
 minuto.
 
-**Ese token no lo escribe nadie.** Antes había que copiarlo a un `agente.json` hecho
+**A ese token no lo teclea nadie.** Antes había que copiarlo a un `agente.json` escrito
 a mano al lado del binario, y eso no lo va a hacer un cajero: son 43 caracteres, una
-coma de más rompe el archivo y el error no dice cuál. Ahora el alta entrega un
-**código de emparejamiento** —12 caracteres, alfabeto sin `0/O` ni `1/I/L`— que viaja
+coma de más rompe el archivo y el error no dice cuál. El archivo volvió —abajo—, pero
+sale hecho del servidor y se pega entero; lo que no vuelve es escribirlo. El alta entrega
+un **código de emparejamiento** —12 caracteres, alfabeto sin `0/O` ni `1/I/L`— que viaja
 en el **nombre del archivo que se descarga** (`platlia-impresion__K7M2-9QXT-4B8N.exe`,
 lo pone el `Content-Disposition` de `/api/impresion/descargar`). El programa se lee a
 sí mismo con `os.Executable()`, canjea el código en `/api/impresion/emparejar` y
@@ -869,9 +878,29 @@ vencido, ya usado— contestan **el mismo mensaje**, por lo mismo que `ingresar`
 contesta igual exista o no la cuenta: distinguirlas le diría a quien esté probando
 cuál de sus intentos estuvo cerca.
 
+**Ese camino supone que el programa se baja del servidor**, porque el código viaja en
+el nombre del archivo. Cuando los binarios no están publicados —que es lo normal en el
+VPS— hay un segundo camino: **Configurar a mano** emite el token y entrega el
+`agente.json` armado, y el programa lo lee **del lado del ejecutable**
+(`leerConfiguracionVecina`). Se dejan los dos archivos juntos, doble clic, y desde ahí
+hace exactamente lo mismo que el otro camino —se copia a la carpeta de datos, se anota
+para arrancar con la máquina, abre su página—: lo único que cambia es de dónde salió el
+token.
+
+Se lee del lado del ejecutable y no de la carpeta de datos porque esa carpeta es distinta
+en cada sistema y lleva el usuario adentro de la ruta: hacer que alguien la encuentre
+antes de poder copiar nada es volver al archivo de texto hecho a mano.
+
+**`emitirToken` mata el código de emparejamiento** (y `regenerarCodigo` ya mataba el
+token). Son dos llaves para la misma puerta: dejarlas convivir sería una segunda entrada
+viva una hora sin que nadie sepa que quedó abierta. El JSON lo arma el **servidor**
+(`archivoDeConfiguracion`, con `env.APP_URL`) y no la pantalla, porque una URL escrita a
+mano en un componente cliente —un `localhost`, una barra final de más— es un agente que
+no conecta y un error que solo se ve en la PC del local.
+
 **La URL del servidor se hornea al compilar** (`-X main.servidorHorneado=$APP_URL`,
 en `scripts/compilar-agente.sh`). Tiene que saber a quién hablarle antes de tener
-ninguna configuración; si hubiera que escribirla, volvíamos al archivo de texto.
+ninguna configuración; el `agente.json` puede pisarla, pero solo si alguien lo puso.
 
 El doble clic hace todo lo demás solo: se copia a la carpeta de datos del usuario
 —Descargas es una carpeta que se vacía, y ahí el local dejaría de imprimir un día sin

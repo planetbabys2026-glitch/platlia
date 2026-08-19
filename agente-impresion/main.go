@@ -151,6 +151,24 @@ func arrancar() bool {
 		return false
 	}
 
+	// El archivo puede venir AL LADO del ejecutable, no en la carpeta de datos.
+	//
+	// Es el camino de la instalación asistida: quien instala llega con el programa
+	// compilado y el `agente.json` que le dio Platlia, los deja juntos y hace doble
+	// clic. Se copia a la carpeta de datos en el acto, porque la carpeta desde la
+	// que se abrió puede ser Descargas —que se vacía— o un pendrive que se saca.
+	if cfg, err := leerConfiguracionVecina(); err == nil && cfg.Token != "" {
+		log.Printf("configuración encontrada junto al ejecutable")
+		if err := guardarConfiguracion(cfg); err != nil {
+			log.Printf("aviso: no pude guardar la configuración: %v", err)
+		}
+		if err := instalarse(); err != nil {
+			log.Printf("aviso: no pude instalarme del todo: %v", err)
+		}
+		aplicarConfiguracion(cfg)
+		return true
+	}
+
 	codigo := codigoDelNombre()
 	if codigo == "" {
 		log.Printf("sin configuración y sin código en el nombre: espero que lo escriban")
