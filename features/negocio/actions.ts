@@ -13,6 +13,7 @@ import {
   turneroSchema,
 } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
 // eslint-disable-next-line no-restricted-imports -- Crear sucursal adicional requiere crear la fila de Business inicial
@@ -274,25 +275,23 @@ export const crearSucursalAdicional = defineAction({
   schema: crearSucursalSchema,
   roles: [Role.PROPIETARIO],
   async handler({ input, ctx }) {
-    // 1. Contar sucursales activas propiedad del usuario
-    const sucursalesDelUsuario = await rootDb.membership.findMany({
-      where: { userId: ctx.user.id, role: Role.PROPIETARIO, active: true, business: { deletedAt: null } },
-      select: { businessId: true },
-    });
+    /**
+     * La cuenta del propietario: sus sedes y la licencia de la principal, que es
+     * la que cobra y la que lleva el cupo.
+     *
+     * Antes esto se resolvía acá con un `subscription.findFirst` ordenado por
+     * `subscription.createdAt`, mientras que `cuentaDelPropietario` ordena por
+     * `business.createdAt`. Son dos definiciones distintas de "la sede principal"
+     * y no siempre coinciden: alcanza con que una suscripción se haya creado
+     * fuera de orden para que el cupo se lea de una sede y el cobro de otra.
+     */
+    const cuenta = await cuentaDelPropietario(ctx.user.id);
 
-    const cantActual = sucursalesDelUsuario.length;
-
-    // 2. La suscripción de la cuenta: la más vieja es la que cobra y la que
-    //    lleva el cupo de sedes.
-    const subPrincipal = await rootDb.subscription.findFirst({
-      where: { businessId: { in: sucursalesDelUsuario.map((s) => s.businessId) } },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const maxPermitidas = subPrincipal?.maxBranches ?? 1;
+    const cantActual = cuenta?.sedes ?? 0;
+    const maxPermitidas = cuenta?.maxBranches ?? 1;
 
     // Bloquear creación de sedes adicionales en el plan de prueba gratuita de 7 días
-    if (!subPrincipal || subPrincipal.status === SubscriptionStatus.PRUEBA) {
+    if (!cuenta || cuenta.status === SubscriptionStatus.PRUEBA) {
       throw new ErrorDeUsuario(
         "El plan de prueba gratuita (7 días) no permite crear sedes adicionales. Adquiere o renueva una licencia de pago para agregar más sucursales a tu empresa.",
       );
@@ -340,17 +339,16 @@ export const crearSucursalAdicional = defineAction({
         },
         // La sede nueva hereda las fechas de la cuenta: la licencia es una sola y
         // ya está paga. Antes nacía con siete días de prueba propios —o sea que
-        // vencía en otro momento que el resto— y con un `priceCop` de 30.000 que
-        // se cobraba aparte, duplicando el cobro.
+        // vencía en otro momento que el resto— y se cobraba aparte, duplicando
+        // el cobro.
         subscription: {
           create: {
-            status: subPrincipal.status,
-            priceCop: 0,
+            status: cuenta.status as SubscriptionStatus,
             maxBranches: maxPermitidas,
-            trialEndsAt: subPrincipal.trialEndsAt,
-            currentPeriodStart: subPrincipal.currentPeriodStart,
-            currentPeriodEnd: subPrincipal.currentPeriodEnd,
-            graceUntil: subPrincipal.graceUntil,
+            trialEndsAt: cuenta.trialEndsAt,
+            currentPeriodStart: cuenta.currentPeriodStart,
+            currentPeriodEnd: cuenta.currentPeriodEnd,
+            graceUntil: cuenta.graceUntil,
           },
         },
       },

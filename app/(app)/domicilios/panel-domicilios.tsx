@@ -12,11 +12,22 @@ import {
   Search,
   User,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { actualizarEstadoDomicilio } from "@/features/domicilios/actions";
+import { Label } from "@/components/ui/label";
+import {
+  actualizarEstadoDomicilio,
+  anularDomicilio,
+  confirmarDomicilio,
+} from "@/features/domicilios/actions";
+import {
+  ACCION_HACIA,
+  ETIQUETA_ESTADO,
+  type EstadoDomicilio,
+} from "@/features/domicilios/reglas";
 import type { DomicilioPedido } from "@/features/domicilios/queries";
 import { formatCop } from "@/lib/money";
 import { formatDateTimeInTimeZone } from "@/lib/time";
@@ -27,14 +38,28 @@ type PanelDomiciliosProps = {
   timeZone: string;
 };
 
+/**
+ * Las píldoras de filtro salen del enum, no de una lista escrita a mano.
+ *
+ * Antes acá vivía una copia de los estados válidos, y otra en el schema y otra
+ * en las consultas: tres listas que podían separarse sin que nada fallara.
+ */
 const ESTADOS_DELIVERY = [
   { id: "TODOS", label: "Todos" },
-  { id: "PENDIENTE", label: "Recibidos" },
-  { id: "EN_PREPARACION", label: "En preparación" },
-  { id: "EN_CAMINO", label: "En reparto" },
-  { id: "ENTREGADO", label: "Entregados" },
-  { id: "CANCELADO", label: "Anulados" },
+  ...(
+    ["POR_CONFIRMAR", "EN_PREPARACION", "LISTO", "EN_CAMINO", "ENTREGADO", "CANCELADO"] as const
+  ).map((id) => ({ id, label: ETIQUETA_ESTADO[id] })),
 ] as const;
+
+/** El color de cada momento del recorrido. */
+const TONO_ESTADO: Record<EstadoDomicilio, string> = {
+  POR_CONFIRMAR: "bg-warning/10 text-warning-soft border-warning/30",
+  EN_PREPARACION: "bg-brand/10 text-brand border-brand/30",
+  LISTO: "bg-info/10 text-info-soft border-info/30",
+  EN_CAMINO: "bg-info/10 text-info-soft border-info/30",
+  ENTREGADO: "bg-success/10 text-success-soft border-success/30",
+  CANCELADO: "bg-destructive/10 text-destructive-soft border-destructive/30",
+};
 
 function formatearCanal(channel: string) {
   switch (channel) {
@@ -70,14 +95,14 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
     };
   }, [router]);
 
-  const cambiarEstado = async (
-    orderId: string,
-    deliveryStatus: "PENDIENTE" | "EN_PREPARACION" | "EN_CAMINO" | "ENTREGADO" | "CANCELADO",
-  ) => {
+  const cambiarEstado = async (orderId: string, deliveryStatus: EstadoDomicilio) => {
     setCargandoId(orderId);
     try {
-      await actualizarEstadoDomicilio(undefined, { orderId, deliveryStatus });
-      router.refresh();
+      const res = await actualizarEstadoDomicilio(undefined, { orderId, deliveryStatus });
+      // El error del servidor se muestra: antes se descartaba en silencio y el
+      // botón simplemente no hacía nada.
+      if (!res.ok) toast.error(res.error);
+      else router.refresh();
     } finally {
       setCargandoId(null);
     }
@@ -172,7 +197,8 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                 key={pedido.id}
                 className={cn(
                   "shadow-xs transition-all border flex flex-col justify-between rounded-2xl",
-                  pedido.deliveryStatus === "PENDIENTE" && "border-warning/40 bg-warning/[0.02]",
+                  pedido.deliveryStatus === "POR_CONFIRMAR" && "border-warning/40 bg-warning/[0.02]",
+                  pedido.deliveryStatus === "LISTO" && "border-info/40 bg-info/[0.02]",
                   pedido.deliveryStatus === "EN_CAMINO" && "border-info/40 bg-info/[0.02]",
                   pedido.deliveryStatus === "ENTREGADO" && "border-success/30 bg-success/[0.01]",
                   esAnulado && "opacity-60 bg-muted/20 border-border",
@@ -196,14 +222,12 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                           variant="outline"
                           className={cn(
                             "text-rotulo font-bold uppercase tracking-wider px-2 py-0.5",
-                            pedido.deliveryStatus === "PENDIENTE" && "bg-warning/10 text-warning-soft border-warning/30",
-                            pedido.deliveryStatus === "EN_PREPARACION" && "bg-warning/10 text-warning-soft border-warning/30",
-                            pedido.deliveryStatus === "EN_CAMINO" && "bg-info/10 text-info-soft border-info/30",
-                            pedido.deliveryStatus === "ENTREGADO" && "bg-success/10 text-success-soft border-success/30",
-                            pedido.deliveryStatus === "CANCELADO" && "bg-destructive/10 text-destructive-soft border-destructive/30",
+                            pedido.deliveryStatus && TONO_ESTADO[pedido.deliveryStatus],
                           )}
                         >
-                          {ESTADOS_DELIVERY.find((e) => e.id === pedido.deliveryStatus)?.label || pedido.deliveryStatus}
+                          {pedido.deliveryStatus
+                            ? ETIQUETA_ESTADO[pedido.deliveryStatus]
+                            : "Sin estado"}
                         </Badge>
 
                         {/* Estado financiero en caja */}
@@ -323,55 +347,240 @@ export function PanelDomicilios({ domicilios, timeZone }: PanelDomiciliosProps) 
                   </div>
 
                   {/* Acciones de Trazabilidad y Despacho */}
-                  {!esAnulado && (
-                    <div className="pt-2 border-t border-border">
-                      {pedido.deliveryStatus === "PENDIENTE" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={cargandoId === pedido.id}
-                          onClick={() => cambiarEstado(pedido.id, "EN_PREPARACION")}
-                          className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-9 rounded-xl shadow-xs"
-                        >
-                          {cargandoId === pedido.id ? "Actualizando..." : "Aceptar y pasar a cocina"}
-                        </Button>
-                      )}
-
-                      {pedido.deliveryStatus === "EN_PREPARACION" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={cargandoId === pedido.id}
-                          onClick={() => cambiarEstado(pedido.id, "EN_CAMINO")}
-                          className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-9 rounded-xl shadow-xs"
-                        >
-                          {cargandoId === pedido.id ? "Actualizando..." : "Despachar a reparto"}
-                        </Button>
-                      )}
-
-                      {pedido.deliveryStatus === "EN_CAMINO" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={cargandoId === pedido.id}
-                          onClick={() => cambiarEstado(pedido.id, "ENTREGADO")}
-                          className="w-full bg-success hover:bg-success/90 text-white font-bold text-xs h-9 rounded-xl shadow-xs"
-                        >
-                          {cargandoId === pedido.id ? "Actualizando..." : "Confirmar entrega al cliente"}
-                        </Button>
-                      )}
-
-                      {pedido.deliveryStatus === "ENTREGADO" && (
-                        <div className="text-center py-1.5 text-xs text-muted-foreground font-medium">
-                          ✓ Pedido entregado al cliente
-                        </div>
-                      )}
-                    </div>
+                  {!esAnulado && pedido.deliveryStatus && (
+                    <Acciones
+                      pedido={pedido}
+                      cargando={cargandoId === pedido.id}
+                      onCambiar={cambiarEstado}
+                      onTrabajando={setCargandoId}
+                      onListo={() => router.refresh()}
+                    />
                   )}
                 </CardContent>
               </Card>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lo que se puede hacer con un domicilio según dónde está.
+ *
+ * Confirmar es un formulario y no un botón: la dirección, el teléfono y el costo
+ * de envío los escribió el comensal en la calle, y este es el único momento en
+ * que corregirlos no cuesta nada. Antes "Aceptar y pasar a cocina" solo cambiaba
+ * un string y no había forma de tocar ninguno de los tres.
+ */
+function Acciones({
+  pedido,
+  cargando,
+  onCambiar,
+  onTrabajando,
+  onListo,
+}: {
+  pedido: DomicilioPedido;
+  cargando: boolean;
+  onCambiar: (orderId: string, estado: EstadoDomicilio) => void;
+  onTrabajando: (id: string | null) => void;
+  onListo: () => void;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [anulando, setAnulando] = useState(false);
+  const [direccion, setDireccion] = useState(pedido.deliveryAddress ?? "");
+  const [telefono, setTelefono] = useState(pedido.customerPhone ?? "");
+  const [envio, setEnvio] = useState(String(pedido.deliveryFeeCop ?? 0));
+  const [motivo, setMotivo] = useState("");
+
+  const estado = pedido.deliveryStatus as EstadoDomicilio;
+
+  const confirmar = async () => {
+    onTrabajando(pedido.id);
+    try {
+      const res = await confirmarDomicilio(undefined, {
+        orderId: pedido.id,
+        deliveryAddress: direccion,
+        customerPhone: telefono,
+        deliveryFeeCop: envio,
+      });
+      if (!res.ok) toast.error(res.error);
+      else {
+        toast.success(`Pedido #${pedido.code} confirmado y enviado a cocina.`);
+        setConfirmando(false);
+        onListo();
+      }
+    } finally {
+      onTrabajando(null);
+    }
+  };
+
+  const anular = async () => {
+    onTrabajando(pedido.id);
+    try {
+      const res = await anularDomicilio(undefined, { orderId: pedido.id, motivo });
+      if (!res.ok) toast.error(res.error);
+      else {
+        toast.success(`Pedido #${pedido.code} anulado.`);
+        setAnulando(false);
+        onListo();
+      }
+    } finally {
+      onTrabajando(null);
+    }
+  };
+
+  if (estado === "ENTREGADO") {
+    return (
+      <div className="pt-2 border-t border-border text-center py-1.5 text-xs text-muted-foreground font-medium">
+        ✓ Pedido entregado al cliente
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-2 border-t border-border space-y-2">
+      {estado === "POR_CONFIRMAR" && !confirmando && (
+        <Button
+          type="button"
+          size="sm"
+          disabled={cargando}
+          onClick={() => setConfirmando(true)}
+          className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-9 rounded-xl shadow-xs"
+        >
+          {ACCION_HACIA.EN_PREPARACION}
+        </Button>
+      )}
+
+      {estado === "POR_CONFIRMAR" && confirmando && (
+        <div className="space-y-2 rounded-xl border border-brand/30 bg-brand/5 p-3">
+          <p className="text-rotulo text-muted-foreground">
+            Revisá lo que escribió el cliente antes de que la cocina empiece.
+          </p>
+
+          <div className="space-y-1">
+            <Label htmlFor={`dir-${pedido.id}`} className="text-rotulo">Dirección de entrega</Label>
+            <Input
+              id={`dir-${pedido.id}`}
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              className="text-xs"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label htmlFor={`tel-${pedido.id}`} className="text-rotulo">Teléfono</Label>
+              <Input
+                id={`tel-${pedido.id}`}
+                value={telefono}
+                onChange={(e) => setTelefono(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`env-${pedido.id}`} className="text-rotulo">Costo de envío</Label>
+              <Input
+                id={`env-${pedido.id}`}
+                type="number"
+                min={0}
+                value={envio}
+                onChange={(e) => setEnvio(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={cargando}
+              onClick={confirmar}
+              className="flex-1 bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-9 rounded-xl"
+            >
+              {cargando ? "Enviando..." : "Confirmar y enviar a cocina"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setConfirmando(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {estado === "EN_PREPARACION" && (
+        <div className="text-center py-1.5 text-xs text-muted-foreground">
+          En la cocina. Pasa a caja cuando esté listo.
+        </div>
+      )}
+
+      {estado === "LISTO" && (
+        <>
+          <div className="text-center text-rotulo text-muted-foreground">
+            {pedido.status === "PAGADA"
+              ? "Cobrado. Despachalo cuando salga."
+              : "Listo. Al cobrarlo en caja sale a reparto solo."}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={cargando}
+            onClick={() => onCambiar(pedido.id, "EN_CAMINO")}
+            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-9 rounded-xl shadow-xs"
+          >
+            {cargando ? "Actualizando..." : ACCION_HACIA.EN_CAMINO}
+          </Button>
+        </>
+      )}
+
+      {estado === "EN_CAMINO" && (
+        <Button
+          type="button"
+          size="sm"
+          disabled={cargando}
+          onClick={() => onCambiar(pedido.id, "ENTREGADO")}
+          className="w-full bg-success hover:bg-success/90 text-white font-bold text-xs h-9 rounded-xl shadow-xs"
+        >
+          {cargando ? "Actualizando..." : ACCION_HACIA.ENTREGADO}
+        </Button>
+      )}
+
+      {!anulando ? (
+        <button
+          type="button"
+          onClick={() => setAnulando(true)}
+          className="w-full text-rotulo text-muted-foreground hover:text-destructive-soft tap-libre"
+        >
+          Anular pedido
+        </button>
+      ) : (
+        <div className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3">
+          <Label htmlFor={`mot-${pedido.id}`} className="text-rotulo">
+            Motivo de la anulación
+          </Label>
+          <Input
+            id={`mot-${pedido.id}`}
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Ej. El cliente canceló"
+            className="text-xs"
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={cargando || motivo.trim().length < 3}
+              onClick={anular}
+              className="flex-1 text-xs h-9"
+            >
+              {cargando ? "Anulando..." : "Confirmar anulación"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setAnulando(false)}>
+              Volver
+            </Button>
+          </div>
         </div>
       )}
     </div>

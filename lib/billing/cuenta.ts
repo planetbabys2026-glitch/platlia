@@ -26,7 +26,6 @@ export type CuentaDeFacturacion = {
   principalBusinessId: string;
   principalNombre: string;
   subscriptionId: string;
-  priceCop: number;
   status: string;
   maxBranches: number;
   /** "MENSUAL" | "ANUAL" si el débito automático está encendido; null si no. */
@@ -59,7 +58,6 @@ export const cuentaDelPropietario = cache(
             subscription: {
               select: {
                 id: true,
-                priceCop: true,
                 status: true,
                 maxBranches: true,
                 cobroAutomatico: true,
@@ -90,7 +88,6 @@ export const cuentaDelPropietario = cache(
       principalBusinessId: principal.id,
       principalNombre: principal.name,
       subscriptionId: principal.subscription.id,
-      priceCop: principal.subscription.priceCop,
       status: principal.subscription.status,
       maxBranches: principal.subscription.maxBranches,
       cobroAutomatico: principal.subscription.cobroAutomatico,
@@ -132,6 +129,42 @@ export async function sedesDeLaMismaCuenta(tx: Tx, businessId: string): Promise<
 }
 
 /**
+ * La sede principal de la cuenta a la que pertenece `businessId`, junto con los
+ * ids de todo el grupo.
+ *
+ * Es la contracara de `cuentaDelPropietario` para cuando no hay sesión y solo se
+ * tiene una sede en la mano: la necesitan el webhook y las acciones de soporte,
+ * que reciben un negocio y tienen que actuar sobre la cuenta entera.
+ *
+ * Elige con el mismo criterio que `cuentaDelPropietario`: la más vieja por
+ * `business.createdAt`, prefiriendo una que tenga suscripción.
+ */
+export async function principalDeLaCuenta(
+  tx: Tx,
+  businessId: string,
+): Promise<{
+  principalBusinessId: string;
+  subscriptionId: string | null;
+  businessIds: string[];
+}> {
+  const businessIds = await sedesDeLaMismaCuenta(tx, businessId);
+
+  const sedes = await tx.business.findMany({
+    where: { id: { in: businessIds }, deletedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, subscription: { select: { id: true } } },
+  });
+
+  const principal = sedes.find((s) => s.subscription) ?? sedes[0];
+
+  return {
+    principalBusinessId: principal?.id ?? businessId,
+    subscriptionId: principal?.subscription?.id ?? null,
+    businessIds,
+  };
+}
+
+/**
  * Deja todas las sedes de una cuenta con las mismas fechas que la principal.
  *
  * Es lo que hace que "pagar la licencia" signifique pagar por todo el negocio y
@@ -147,6 +180,15 @@ export async function sincronizarSedes(
     currentPeriodStart: Date;
     currentPeriodEnd: Date;
     graceUntil: Date;
+    /**
+     * Solo hace falta mientras la cuenta está en PRUEBA.
+     *
+     * `licenciaVigente` mira `graceUntil` y por eso alcanzaba con las tres fechas
+     * de arriba para desbloquear a las hijas. Pero `diasParaElCorte` prefiere
+     * `trialEndsAt` cuando el estado es PRUEBA, así que sin esto una sede hija
+     * mostraba los días de la prueba vieja: trabajando bien y avisando mal.
+     */
+    trialEndsAt?: Date | null;
   },
 ): Promise<void> {
   const otras = args.businessIds.filter((id) => id !== args.exceptoBusinessId);
@@ -164,6 +206,7 @@ export async function sincronizarSedes(
       currentPeriodStart: args.currentPeriodStart,
       currentPeriodEnd: args.currentPeriodEnd,
       graceUntil: args.graceUntil,
+      ...(args.trialEndsAt !== undefined ? { trialEndsAt: args.trialEndsAt } : {}),
     },
   });
 }

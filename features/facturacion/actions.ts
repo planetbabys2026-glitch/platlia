@@ -10,7 +10,7 @@ import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { listaVigenteDeLaBase } from "@/lib/billing/lista";
 import { crearPreferenciaDePago } from "@/lib/billing/mercadopago";
 import { cancelarAutorizacion, crearAutorizacionDeCobro } from "@/lib/billing/preapproval";
-import { cotizar, listaParaNegocio, NOMBRE_PERIODICIDAD } from "@/lib/billing/precios";
+import { cotizar, NOMBRE_PERIODICIDAD } from "@/lib/billing/precios";
 import { prorratearSedeNueva } from "@/lib/billing/prorrateo";
 import {
   activarCobroAutomaticoSchema,
@@ -56,7 +56,7 @@ export const pagarSuscripcion = defineAction({
     }
 
     // El precio propio de la empresa manda salvo que haya una promoción vigente.
-    const lista = listaParaNegocio(await listaVigenteDeLaBase(), cuenta.priceCop);
+    const lista = await listaVigenteDeLaBase();
     const sedes = cuenta.sedes;
     const cotizacion = cotizar({ lista, sedes, periodicidad: input.periodicidad });
 
@@ -164,7 +164,7 @@ export const comprarSedeAdicional = defineAction({
       );
     }
 
-    const lista = listaParaNegocio(await listaVigenteDeLaBase(), cuenta.priceCop);
+    const lista = await listaVigenteDeLaBase();
     const prorrateo = prorratearSedeNueva({
       lista,
       sedesActuales: cuenta.sedes,
@@ -237,7 +237,7 @@ export const activarCobroAutomatico = defineAction({
       throw new ErrorDeUsuario("El cobro automático ya está activo.");
     }
 
-    const lista = listaParaNegocio(await listaVigenteDeLaBase(), cuenta.priceCop);
+    const lista = await listaVigenteDeLaBase();
     const cotizacion = cotizar({
       lista,
       sedes: cuenta.sedes,

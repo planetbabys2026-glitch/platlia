@@ -4,6 +4,7 @@ import { DOMICILIOS_EN_CURSO, getDomicilios } from "@/features/domicilios/querie
 import { getSettings, getTimeSettings } from "@/features/negocio/queries";
 import { requireActiveLicense } from "@/lib/auth/dal";
 import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
+import { InterruptorDomiciliosQr } from "@/features/domicilios/components/interruptor-qr";
 import { PanelDomicilios } from "./panel-domicilios";
 
 export const metadata: Metadata = { title: "Domicilios en Vivo · Platlia" };
@@ -27,8 +28,8 @@ export default async function DomiciliosPage() {
   // mostraba siempre el total del día, entregados incluidos. El estado del
   // reparto es `deliveryStatus`, y es el mismo criterio que usa la insignia del
   // menú.
-  const activosCount = domicilios.filter((d) =>
-    DOMICILIOS_EN_CURSO.includes(d.deliveryStatus),
+  const activosCount = domicilios.filter(
+    (d) => d.deliveryStatus !== null && DOMICILIOS_EN_CURSO.includes(d.deliveryStatus),
   ).length;
 
   return (
@@ -49,6 +50,10 @@ export default async function DomiciliosPage() {
           </span>
         </div>
       </div>
+
+      {/* Arriba de todo y no al pie: es lo primero que hay que mirar al llegar,
+          porque decide si la pantalla de abajo va a tener algo nuevo. */}
+      <InterruptorDomiciliosQr abierto={settings.qrDeliveryEnabled} />
 
       <PanelDomicilios domicilios={domicilios} timeZone={timeSettings.timeZone} />
     </div>

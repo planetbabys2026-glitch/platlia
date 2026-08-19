@@ -39,6 +39,13 @@ export function esPeriodicidad(valor: unknown): valor is Periodicidad {
  * Una lista de precios. Sin fechas es la lista base, permanente; con fechas es
  * una promoción que vale solo dentro de su ventana.
  */
+export type TramoDePrecios = {
+  /** Piso del tramo: aplica desde esta cantidad de sedes en adelante. */
+  desdeSedes: number;
+  /** Lo que cuesta el mes entero con esa cantidad de sedes. */
+  precioMensualCop: Cop;
+};
+
 export type ListaDePrecios = {
   id: string;
   nombre: string;
@@ -46,6 +53,13 @@ export type ListaDePrecios = {
   precioSedePrincipalCop: Cop;
   /** Lo que suma cada local adicional. */
   precioSedeAdicionalCop: Cop;
+  /**
+   * Escalones por cantidad de sedes. Vacío = rige la fórmula.
+   *
+   * De tres locales para arriba el precio se negocia y no sale de sumar, así que
+   * tiene que poder escribirse entero.
+   */
+  tramos?: readonly TramoDePrecios[];
   /** Meses de regalo al comprar 6. */
   mesesGratisSemestral: number;
   /** Meses de regalo al comprar 12. */
@@ -66,6 +80,7 @@ export const LISTA_POR_DEFECTO: ListaDePrecios = {
   nombre: "Lista base",
   precioSedePrincipalCop: 50_000,
   precioSedeAdicionalCop: 30_000,
+  tramos: [],
   mesesGratisSemestral: 1,
   mesesGratisAnual: 2,
   desde: null,
@@ -105,24 +120,46 @@ export function esPromocion(lista: ListaDePrecios): boolean {
 }
 
 /**
- * Con qué precios se le cobra a ESTA empresa.
+ * La lista base, sin importar qué promoción esté corriendo.
  *
- * Cada suscripción guarda su propio `priceCop`, que es el precio que se le
- * respeta aunque la lista suba: el que entró pagando 50.000 sigue pagando 50.000.
- * Pero una promoción es justamente lo contrario —una oferta para todos, por un
- * tiempo—, así que mientras esté vigente le gana al precio congelado.
- *
- * Dicho al revés: el precio propio protege de las **subas**, no de los descuentos.
+ * Hace falta para poder decirle al cliente **de cuánto** bajó el precio: sin el
+ * precio de siempre al lado, una promoción se ve igual que una tarifa normal y
+ * nadie se entera de que está aprovechando algo que se termina.
  */
-export function listaParaNegocio(
+export function listaBaseDe(listas: readonly ListaDePrecios[]): ListaDePrecios {
+  const activas = listas.filter((l) => l.activa);
+  return activas.find((l) => l.desde === null && l.hasta === null) ?? LISTA_POR_DEFECTO;
+}
+
+/**
+ * El tramo que le toca a una cantidad de sedes, o null si no hay ninguno.
+ *
+ * Manda el de piso más alto que no la supere: con tramos en 1 y 3, cuatro sedes
+ * caen en el de 3. Los tramos con piso inválido se ignoran en vez de tumbar la
+ * cotización —un dato mal cargado no puede dejar a nadie sin poder pagar—.
+ */
+export function tramoAplicable(
   lista: ListaDePrecios,
-  precioPropioCop: number | null | undefined,
-): ListaDePrecios {
-  if (esPromocion(lista)) return lista;
-  if (typeof precioPropioCop !== "number" || !Number.isInteger(precioPropioCop) || precioPropioCop < 0) {
-    return lista;
-  }
-  return { ...lista, precioSedePrincipalCop: precioPropioCop };
+  sedes: number,
+): TramoDePrecios | null {
+  const candidatos = (lista.tramos ?? [])
+    .filter((t) => Number.isInteger(t.desdeSedes) && t.desdeSedes >= 1 && t.desdeSedes <= sedes)
+    .filter((t) => Number.isInteger(t.precioMensualCop) && t.precioMensualCop >= 0)
+    .sort((a, b) => b.desdeSedes - a.desdeSedes);
+
+  return candidatos[0] ?? null;
+}
+
+/**
+ * Lo que cuesta el mes con esa cantidad de sedes.
+ *
+ * Si hay un tramo, el tramo dice el precio completo y no se le suma nada encima.
+ * Si no, rige `principal + adicional × (n − 1)`.
+ */
+export function mensualDeLaLista(lista: ListaDePrecios, sedes: number): Cop {
+  const tramo = tramoAplicable(lista, sedes);
+  if (tramo) return tramo.precioMensualCop;
+  return lista.precioSedePrincipalCop + lista.precioSedeAdicionalCop * (sedes - 1);
 }
 
 export type Cotizacion = {
@@ -167,7 +204,7 @@ export function cotizar({
   assertCop(lista.precioSedePrincipalCop, "el precio de la sede principal");
   assertCop(lista.precioSedeAdicionalCop, "el precio de la sede adicional");
 
-  const mensualCop = lista.precioSedePrincipalCop + lista.precioSedeAdicionalCop * (sedes - 1);
+  const mensualCop = mensualDeLaLista(lista, sedes);
   const mesesOtorgados = MESES_POR_PERIODICIDAD[periodicidad];
 
   const mesesGratisCrudo =

@@ -44,9 +44,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       [cocinaInicial, domiciliosInicial, cajaInicial] = await Promise.all([
         usaCocina ? contarComandasVivas(ctx.business.id, businessDate) : Promise.resolve(0),
         usaDomicilios ? contarDomiciliosActivos(ctx.business.id) : Promise.resolve(0),
-        // Solo con mesas: sin salón no hay cuentas esperando en la caja, las
-        // ventas del mostrador se cobran en el acto.
-        usaMesas
+        // Mesas o domicilios: las ventas del mostrador se cobran en el acto y
+        // no dejan cuenta esperando, pero un negocio de puro domicilio sí. Es el
+        // mismo criterio con el que `navegacion.ts` decide si mostrar la
+        // insignia, y con el que `/caja` decide si consultar las cuentas.
+        usaMesas || usaDomicilios
           ? contarCuentasPorCobrar(ctx.business.id, businessDate)
           : Promise.resolve(0),
       ]);

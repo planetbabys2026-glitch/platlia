@@ -48,3 +48,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Los ejecutables del agente de impresión se compilan con `pnpm agente:build`,
+# no se versionan: son ~9 MB por sistema operativo.
+/public/descargas/

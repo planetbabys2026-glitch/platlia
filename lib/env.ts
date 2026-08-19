@@ -86,6 +86,17 @@ const schema = z.object({
   // ─── Redis (Turnero SSE Pub/Sub) ──────────────────────────────────────────
   REDIS_URL: opcional(z.string().min(1)),
 
+  // ─── Dónde están los ejecutables del agente de impresión ──────────────────
+  // Por defecto `public/descargas/`, que es donde los deja `pnpm agente:build`.
+  //
+  // Se puede mover porque en el VPS esa carpeta no existe: los binarios no se
+  // versionan —son ~7 MB por sistema— y la imagen de despliegue no trae Go, así
+  // que no hay forma de que aparezcan solos ahí. Apuntando esto a un volumen se
+  // suben una vez y se actualizan sin volver a desplegar la aplicación.
+  //
+  // Es una ruta del servidor, no una URL: nada de esto llega al navegador.
+  DESCARGAS_AGENTE_DIR: opcional(z.string().min(1)),
+
   // ─── Facturación electrónica DIAN (Factus) ────────────────────────────────
   // La cuenta de Factus es UNA, de la plataforma: Factus nos vende una bolsa de
   // documentos y nosotros la repartimos entre los negocios. Antes estas cuatro

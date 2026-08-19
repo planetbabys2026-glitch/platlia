@@ -6,9 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireBusiness } from "@/lib/auth/dal";
 import { aplicarPagoDeMercadoPago } from "@/lib/billing/aplicar-pago";
 import { cuentaDelPropietario } from "@/lib/billing/cuenta";
-import { listaVigenteDeLaBase } from "@/lib/billing/lista";
+import { preciosVigentes } from "@/lib/billing/lista";
+import { AvisoPromocion } from "@/features/facturacion/components/aviso-promocion";
 import { prorratearSedeNueva } from "@/lib/billing/prorrateo";
-import { cotizarTodas, listaParaNegocio, type Periodicidad } from "@/lib/billing/precios";
+import { cotizarTodas, type Periodicidad } from "@/lib/billing/precios";
 import { aplicarPagoAprobado, diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
@@ -106,9 +107,10 @@ export default async function FacturacionPage({
   // La licencia es de la CUENTA, no de esta sede: el precio depende de cuántas
   // sedes cubre y se cobra una sola vez.
   const cuenta = await cuentaDelPropietario(ctx.user.id);
-  const lista = listaParaNegocio(await listaVigenteDeLaBase(), cuenta?.priceCop ?? suscripcion.priceCop);
+  const { vigente: lista, base: listaBase, promo } = await preciosVigentes();
   const sedes = cuenta?.sedes ?? 1;
   const cotizaciones = cotizarTodas(lista, sedes);
+  const mensualCop = cotizaciones.find((c) => c.periodicidad === "MENSUAL")?.mensualCop ?? 0;
   const ahora = new Date();
   const vencimientos = Object.fromEntries(
     cotizaciones.map((c) => [
@@ -150,8 +152,13 @@ export default async function FacturacionPage({
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-1">
         <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Facturación</h1>
+        {/* El mensual sale de la cotización de la CUENTA, no del `priceCop` de
+            esta sede: en una sucursal creada por `crearSucursalAdicional` ese
+            campo es 0, así que el subtítulo decía "$0 al mes" mientras el botón
+            de abajo cobraba el precio completo. */}
         <p className="text-muted-foreground text-sm">
-          {ctx.business.name} · {formatCop(suscripcion.priceCop)} al mes
+          {ctx.business.name} · {formatCop(mensualCop)} al mes
+          {sedes > 1 ? ` por tus ${sedes} sedes` : ""}
         </p>
       </div>
 
@@ -206,6 +213,10 @@ export default async function FacturacionPage({
                 : "El servicio está cortado. Renová para volver a trabajar."}
             </p>
           )}
+
+          {/* Va ANTES de los planes: quien está por pagar tiene que ver el
+              motivo del precio en el mismo golpe de vista que el precio. */}
+          <AvisoPromocion promo={promo} base={listaBase} sedes={sedes} timeZone={zona} />
 
           {suscripcion.status !== "CANCELADA" && (
             <BotonPagar

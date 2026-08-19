@@ -2,9 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AppModule, OrderItemStatus, Role } from "@/generated/prisma/enums";
+import { AppModule, DeliveryStatus, OrderItemStatus, Role } from "@/generated/prisma/enums";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-import { publishCocinaUpdate, publishTurneroUpdate } from "@/lib/redis";
+import {
+  publishCocinaUpdate,
+  publishDomiciliosUpdate,
+  publishTurneroUpdate,
+} from "@/lib/redis";
 import { id } from "@/lib/validaciones";
 
 /**
@@ -35,7 +39,13 @@ export const avanzarComanda = defineAction({
   async handler({ input, db, ctx }) {
     const item = await db.orderItem.findFirst({
       where: { id: input.itemId },
-      select: { id: true, status: true, orderId: true, nameSnapshot: true },
+      select: {
+        id: true,
+        status: true,
+        orderId: true,
+        nameSnapshot: true,
+        order: { select: { deliveryStatus: true } },
+      },
     });
     if (!item) throw new ErrorDeUsuario("Ese renglón no existe.");
 
@@ -57,6 +67,35 @@ export const avanzarComanda = defineAction({
       },
     });
 
+    /**
+     * Cuando la cocina termina, el domicilio sale de la cocina y entra a la caja.
+     *
+     * Esta acción trabaja por RENGLÓN y nunca tocaba el pedido, así que un
+     * domicilio se quedaba en "En cocina" para siempre por más que estuviera
+     * empacado. La caja, mientras tanto, lo listaba desde que nacía.
+     *
+     * El disparador es que no quede ningún renglón por preparar: el pedido está
+     * completo, no a medias.
+     */
+    let despachable = false;
+    if (item.order?.deliveryStatus === DeliveryStatus.EN_PREPARACION) {
+      const enPreparacion = await db.orderItem.count({
+        where: {
+          orderId: item.orderId,
+          sentToKitchenAt: { not: null },
+          status: { in: [OrderItemStatus.PENDIENTE, OrderItemStatus.EN_PREPARACION] },
+        },
+      });
+
+      if (enPreparacion === 0) {
+        await db.order.update({
+          where: { id: item.orderId },
+          data: { deliveryStatus: DeliveryStatus.LISTO },
+        });
+        despachable = true;
+      }
+    }
+
     revalidatePath("/cocina");
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${item.orderId}`);
@@ -64,6 +103,12 @@ export const avanzarComanda = defineAction({
     void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
 
-    return { status: siguiente };
+    if (despachable) {
+      revalidatePath("/domicilios");
+      revalidatePath("/caja");
+      void publishDomiciliosUpdate(ctx.business.id);
+    }
+
+    return { status: siguiente, despachable };
   },
 });

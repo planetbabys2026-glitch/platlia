@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getListasDePrecios } from "@/features/superadmin/queries";
 import { requireSuperAdmin } from "@/lib/auth/dal";
 import { listaVigente } from "@/lib/billing/precios";
+import { diaFinalDeVentana, formatDayInTimeZone, ZONA_PLATAFORMA } from "@/lib/time";
 import { VistaPrecios } from "./vista-precios";
 
 export const metadata: Metadata = { title: "Precios · Superadmin" };
@@ -34,8 +35,16 @@ export default async function PreciosPage() {
           precioSedeAdicionalCop: l.precioSedeAdicionalCop,
           mesesGratisSemestral: l.mesesGratisSemestral,
           mesesGratisAnual: l.mesesGratisAnual,
-          desde: l.desde ? l.desde.toISOString().slice(0, 10) : null,
-          hasta: l.hasta ? l.hasta.toISOString().slice(0, 10) : null,
+          tramos: l.tramos.map((t) => ({
+            desdeSedes: t.desdeSedes,
+            precioMensualCop: t.precioMensualCop,
+          })),
+          desde: l.desde ? formatDayInTimeZone(l.desde, ZONA_PLATAFORMA) : null,
+          // `hasta` se guarda como el arranque del día siguiente —el día escrito
+          // cuenta entero—, así que para volver a mostrarlo hay que retroceder.
+          hasta: l.hasta
+            ? formatDayInTimeZone(diaFinalDeVentana(l.hasta), ZONA_PLATAFORMA)
+            : null,
           activa: l.activa,
         }))}
         idVigente={vigente.id}

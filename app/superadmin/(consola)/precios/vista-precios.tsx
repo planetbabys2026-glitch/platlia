@@ -2,7 +2,12 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { guardarListaBase, guardarPromocion } from "@/features/superadmin/actions";
+import {
+  detenerPromocion,
+  eliminarPromocion,
+  guardarListaBase,
+  guardarPromocion,
+} from "@/features/superadmin/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +19,8 @@ import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 /** La forma serializable que viaja del servidor: las fechas como `yyyy-mm-dd`. */
+export type TramoPlano = { desdeSedes: number; precioMensualCop: number };
+
 export type ListaPlana = {
   id: string;
   nombre: string;
@@ -21,6 +28,7 @@ export type ListaPlana = {
   precioSedeAdicionalCop: number;
   mesesGratisSemestral: number;
   mesesGratisAnual: number;
+  tramos: TramoPlano[];
   desde: string | null;
   hasta: string | null;
   activa: boolean;
@@ -42,10 +50,17 @@ function aLista(l: ListaPlana): ListaDePrecios {
  * cabeza y confiar.
  */
 function VistaPrevia({ lista }: { lista: ListaDePrecios }) {
-  const filas = useMemo(
-    () => [1, 2].map((sedes) => ({ sedes, cotizaciones: cotizarTodas(lista, sedes) })),
-    [lista],
-  );
+  const filas = useMemo(() => {
+    // 1 y 2 siempre, más el piso de cada tramo: son los saltos donde el precio
+    // cambia, o sea lo único que hace falta ver para saber si quedó bien.
+    const pisos = new Set<number>([1, 2]);
+    for (const t of lista.tramos ?? []) {
+      if (Number.isInteger(t.desdeSedes) && t.desdeSedes >= 1) pisos.add(t.desdeSedes);
+    }
+    return [...pisos]
+      .sort((a, b) => a - b)
+      .map((sedes) => ({ sedes, cotizaciones: cotizarTodas(lista, sedes) }));
+  }, [lista]);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-[var(--linea-16)]">
@@ -78,6 +93,106 @@ function VistaPrevia({ lista }: { lista: ListaDePrecios }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * Los escalones por cantidad de sedes.
+ *
+ * De tres locales para arriba el precio se negocia y no sale de sumar sedes
+ * adicionales, así que tiene que poder escribirse entero. Sin ningún tramo rige
+ * la fórmula de siempre, que es lo razonable hasta dos.
+ */
+function CamposDeTramos({
+  tramos,
+  onCambio,
+}: {
+  tramos: TramoPlano[];
+  onCambio: (tramos: TramoPlano[]) => void;
+}) {
+  const cambiar = (i: number, parcial: Partial<TramoPlano>) =>
+    onCambio(tramos.map((t, j) => (i === j ? { ...t, ...parcial } : t)));
+
+  const siguientePiso = tramos.length
+    ? Math.max(...tramos.map((t) => t.desdeSedes)) + 1
+    : 3;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-dashed border-[var(--linea-30)] p-3">
+      <div>
+        <span className="text-rotulo uppercase text-muted-foreground">
+          Tramos por cantidad de sedes
+        </span>
+        <p className="text-xs text-muted-foreground">
+          Cada tramo fija el mensual completo desde esa cantidad de sedes en
+          adelante, y le gana a la fórmula. Sin tramos, el precio sale de la
+          primera sede más las adicionales.
+        </p>
+      </div>
+
+      {tramos.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Sin tramos: {`de 3 sedes se cobra principal + adicional × (n − 1)`}.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {tramos.map((tramo, i) => (
+            <li key={i} className="flex flex-wrap items-end gap-2">
+              <div className="space-y-1">
+                <Label className="text-rotulo" htmlFor={`tramo-desde-${i}`}>
+                  Desde (sedes)
+                </Label>
+                <Input
+                  id={`tramo-desde-${i}`}
+                  type="number"
+                  min={1}
+                  max={999}
+                  className="w-28"
+                  value={tramo.desdeSedes}
+                  onChange={(e) => cambiar(i, { desdeSedes: Number(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-rotulo" htmlFor={`tramo-precio-${i}`}>
+                  Mensual, todo incluido
+                </Label>
+                <Input
+                  id={`tramo-precio-${i}`}
+                  type="number"
+                  min={0}
+                  className="w-40"
+                  value={tramo.precioMensualCop}
+                  onChange={(e) => cambiar(i, { precioMensualCop: Number(e.target.value) })}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onCambio(tramos.filter((_, j) => j !== i))}
+              >
+                Quitar
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          onCambio([...tramos, { desdeSedes: siguientePiso, precioMensualCop: 0 }])
+        }
+      >
+        Agregar tramo
+      </Button>
+
+      {/* Viaja serializado: un `<form>` no tiene forma natural de mandar una
+          lista de largo variable. */}
+      <input type="hidden" name="tramos" value={JSON.stringify(tramos)} />
     </div>
   );
 }
@@ -180,6 +295,10 @@ function FormularioBase({ base }: { base: ListaPlana }) {
           )}
 
           <CamposDePrecio valores={valores} onCambio={cambiar} />
+          <CamposDeTramos
+            tramos={valores.tramos}
+            onCambio={(tramos) => cambiar({ tramos })}
+          />
           <VistaPrevia lista={aLista(valores)} />
 
           <div className="space-y-1.5">
@@ -200,11 +319,127 @@ function FormularioBase({ base }: { base: ListaPlana }) {
   );
 }
 
+/**
+ * En qué momento de su vida está una promoción.
+ *
+ * Se calcula acá y se dice en la tarjeta porque "apagada" y "todavía no empezó"
+ * se ven idénticas mirando dos campos de fecha y una casilla al fondo del
+ * formulario, que es exactamente como se pierde de vista una promo corriendo.
+ */
+function estadoDePromo(
+  promo: ListaPlana,
+  esVigente: boolean,
+): { texto: string; clase: string } {
+  if (!promo.activa) {
+    return { texto: "Apagada", clase: "bg-[var(--panel-3)] text-muted-foreground" };
+  }
+  if (esVigente) return { texto: "Rige ahora", clase: "bg-brand/15 text-brand" };
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  if (promo.hasta && promo.hasta <= hoy) {
+    return { texto: "Terminada", clase: "bg-[var(--panel-3)] text-muted-foreground" };
+  }
+  if (promo.desde && promo.desde > hoy) {
+    return { texto: "Programada", clase: "bg-warning/15 text-warning-soft" };
+  }
+  return { texto: "Encendida", clase: "bg-success/15 text-success-soft" };
+}
+
+/**
+ * Detener o borrar una promoción, fuera del formulario de precios.
+ *
+ * Va aparte a propósito: cortar una promo es urgente y no puede exigir revisar
+ * precios, tramos y fechas para llegar a una casilla. Y `<form>` no anida, así
+ * que tampoco podría vivir adentro del otro.
+ */
+function AccionesDePromo({ promo, esVigente }: { promo: ListaPlana; esVigente: boolean }) {
+  const [abierto, setAbierto] = useState<"detener" | "eliminar" | null>(null);
+  const [estadoDetener, accionDetener] = useActionState(detenerPromocion, ESTADO_INICIAL);
+  const [estadoEliminar, accionEliminar] = useActionState(eliminarPromocion, ESTADO_INICIAL);
+
+  const yaEmpezo = !promo.desde || promo.desde <= new Date().toISOString().slice(0, 10);
+  const estado = abierto === "detener" ? estadoDetener : estadoEliminar;
+  // Aplicada la acción, el panel de confirmación no tiene nada más que hacer ahí:
+  // dejarlo abierto invita a confirmar dos veces algo que ya pasó.
+  const pendiente = abierto !== null && !estado.ok;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {promo.activa && (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => setAbierto(abierto === "detener" ? null : "detener")}
+          >
+            {esVigente ? "Detener ahora" : "Apagar"}
+          </Button>
+        )}
+        {!yaEmpezo && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setAbierto(abierto === "eliminar" ? null : "eliminar")}
+          >
+            Eliminar
+          </Button>
+        )}
+      </div>
+
+      {pendiente && (
+        <form
+          action={abierto === "detener" ? accionDetener : accionEliminar}
+          className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3"
+        >
+          <input type="hidden" name="id" value={promo.id} />
+
+          {!estado.ok && estado.error && (
+            <Alert variant="destructive" role="alert">
+              <AlertDescription>{estado.error}</AlertDescription>
+            </Alert>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            {abierto === "detener"
+              ? esVigente
+                ? "Se corta ya. Los clientes vuelven al precio de lista en la próxima carga de pantalla."
+                : "Queda apagada: no va a regir aunque llegue su fecha."
+              : "Se borra del todo. Solo se puede con una promoción que todavía no empezó."}
+          </p>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`motivo-detener-${promo.id}`}>Motivo (queda en la bitácora)</Label>
+            <Input
+              id={`motivo-detener-${promo.id}`}
+              name="motivo"
+              required
+              minLength={3}
+              placeholder={
+                abierto === "detener" ? "Ej. Se agotó el cupo de la campaña" : "Ej. Creada por error"
+              }
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Guardar>{abierto === "detener" ? "Confirmar y detener" : "Confirmar y eliminar"}</Guardar>
+            <Button type="button" variant="outline" size="sm" onClick={() => setAbierto(null)}>
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function FormularioPromo({ promo, esVigente }: { promo: ListaPlana; esVigente: boolean }) {
   const [estado, accion] = useActionState(guardarPromocion, ESTADO_INICIAL);
   const [valores, setValores] = useState(promo);
   const cambiar = (p: Partial<ListaPlana>) => setValores((v) => ({ ...v, ...p }));
   const esNueva = promo.id === "";
+  const insignia = estadoDePromo(promo, esVigente);
 
   return (
     <Card className={cn(esVigente && "border-brand")}>
@@ -213,12 +448,19 @@ function FormularioPromo({ promo, esVigente }: { promo: ListaPlana; esVigente: b
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-foreground">
             {esNueva ? "Nueva promoción" : promo.nombre}
           </h2>
-          {esVigente && (
-            <span className="rounded-full bg-brand/15 px-2 py-0.5 text-rotulo font-bold uppercase text-brand">
-              Rige ahora
+          {!esNueva && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-rotulo font-bold uppercase",
+                insignia.clase,
+              )}
+            >
+              {insignia.texto}
             </span>
           )}
         </div>
+
+        {!esNueva && <AccionesDePromo promo={promo} esVigente={esVigente} />}
 
         <form action={accion} className="space-y-4">
           <input type="hidden" name="id" value={promo.id} />
@@ -242,6 +484,10 @@ function FormularioPromo({ promo, esVigente }: { promo: ListaPlana; esVigente: b
           </div>
 
           <CamposDePrecio valores={valores} onCambio={cambiar} />
+          <CamposDeTramos
+            tramos={valores.tramos}
+            onCambio={(tramos) => cambiar({ tramos })}
+          />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -271,15 +517,21 @@ function FormularioPromo({ promo, esVigente }: { promo: ListaPlana; esVigente: b
 
           <VistaPrevia lista={aLista(valores)} />
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
               name="activa"
               checked={valores.activa}
               onChange={(e) => cambiar({ activa: e.target.checked })}
-              className="accent-brand size-4"
+              className="accent-brand mt-0.5 size-4"
             />
-            <span>Encendida</span>
+            <span>
+              Encendida
+              <span className="block text-rotulo text-muted-foreground">
+                Apagada no rige aunque esté dentro de sus fechas. Para cortar una que
+                ya está corriendo usá &ldquo;Detener ahora&rdquo;, arriba.
+              </span>
+            </span>
           </label>
 
           <div className="space-y-1.5">
@@ -307,6 +559,7 @@ const PROMO_VACIA: ListaPlana = {
   precioSedeAdicionalCop: 25000,
   mesesGratisSemestral: 1,
   mesesGratisAnual: 2,
+  tramos: [],
   desde: null,
   hasta: null,
   activa: true,

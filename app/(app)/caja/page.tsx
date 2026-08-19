@@ -39,7 +39,17 @@ export default async function CajaPage({
   const { jornada } = await searchParams;
   const businessDate = currentBusinessDate(settings);
   const caja = await getCajaAbierta(ctx.business.id);
+  /**
+   * Quién tiene cuentas esperando en la caja.
+   *
+   * No es "usa mesas": un negocio de puro domicilio también cobra, y atado a
+   * mesas abría la caja y no veía nada por cobrar justo quien más lo necesita.
+   * Es el mismo criterio con el que el menú arma las secciones de Caja
+   * (`seccionesDeCaja`), y tienen que coincidir o el enlace lleva a una sección
+   * que la pantalla no dibuja.
+   */
   const usaMesas = ctx.modules.has(AppModule.MESAS);
+  const cobraCuentas = usaMesas || settings.deliveryEnabled;
   // Un booleano, no la configuración: nada de lo fiscal tiene por qué cruzar al
   // navegador.
   const puedeFacturar = puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada());
@@ -74,7 +84,7 @@ export default async function CajaPage({
     const [resData, movData, cuentasData] = await Promise.all([
       getResumenCaja(db, caja.id),
       getMovimientos(ctx.business.id, caja.id),
-      usaMesas ? getCuentasPorCobrar(ctx.business.id, businessDate) : Promise.resolve([]),
+      cobraCuentas ? getCuentasPorCobrar(ctx.business.id, businessDate) : Promise.resolve([]),
     ]);
     resumen = resData;
     movimientos = movData;
@@ -112,7 +122,10 @@ export default async function CajaPage({
           habilitada: settings.tipSuggestionEnabled,
           rateBp: settings.tipSuggestionRateBp,
         }}
-        usaMesas={usaMesas}
+        cobraCuentas={cobraCuentas}
+        domiciliosQr={
+          settings.deliveryEnabled ? { abierto: settings.qrDeliveryEnabled } : null
+        }
         timeZone={ctx.business.timeZone}
       />
     </div>

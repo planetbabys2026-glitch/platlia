@@ -177,6 +177,7 @@ export default async function MenuQrPublicPage({
         qrMenuAccent: settings.qrMenuAccent,
         turnNumberMax: settings.turnNumberMax,
         deliveryEnabled: settings.deliveryEnabled,
+        qrDeliveryEnabled: settings.qrDeliveryEnabled,
         deliveryFeeCop: settings.deliveryFeeCop,
         tipSuggestionEnabled: settings.tipSuggestionEnabled,
         tipSuggestionRateBp: settings.tipSuggestionRateBp,

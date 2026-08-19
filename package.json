@@ -24,7 +24,8 @@
     "db:studio": "prisma studio",
     "seed": "tsx --env-file=.env prisma/seed.ts",
     "db:reset-operacion": "tsx --env-file=.env scripts/reset-operacion.ts",
-    "cron:subs": "tsx --env-file=.env scripts/cron/sweep-subscriptions.ts"
+    "cron:subs": "tsx --env-file=.env scripts/cron/sweep-subscriptions.ts",
+    "agente:build": "bash scripts/compilar-agente.sh"
   },
   "dependencies": {
     "@date-fns/tz": "^1.4.1",

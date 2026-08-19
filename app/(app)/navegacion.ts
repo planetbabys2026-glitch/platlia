@@ -96,19 +96,19 @@ export function hrefDeSeccion(item: ItemNav, seccion: SeccionNav): string {
  * Depende de `usaMesas`, que es configuración del negocio y no dato del momento:
  * el enlace sigue siendo estable, que es lo que importaba.
  */
-export function seccionesDeCaja(usaMesas: boolean, cuentasPorCobrar?: number): SeccionNav[] {
+export function seccionesDeCaja(cobraCuentas: boolean, cuentasPorCobrar?: number): SeccionNav[] {
   return [
-    ...(usaMesas
+    ...(cobraCuentas
       ? [{ titulo: "Cobrar cuentas", vista: "", insignia: cuentasPorCobrar }]
       : []),
-    { titulo: "Cuentas cobradas", vista: usaMesas ? "cobradas" : "" },
+    { titulo: "Cuentas cobradas", vista: cobraCuentas ? "cobradas" : "" },
     { titulo: "Movimientos y cierre", vista: "movimientos" },
   ];
 }
 
 /** La vista de entrada de `/caja`, la que va sin `?vista=`. */
-export function vistaInicialDeCaja(usaMesas: boolean): "cobros" | "cobradas" {
-  return usaMesas ? "cobros" : "cobradas";
+export function vistaInicialDeCaja(cobraCuentas: boolean): "cobros" | "cobradas" {
+  return cobraCuentas ? "cobros" : "cobradas";
 }
 
 export function construirNavegacion({
@@ -159,9 +159,11 @@ export function construirNavegacion({
             titulo: "Caja",
             href: "/caja",
             icono: CreditCard,
-            insignia: usaMesas ? cuentasPorCobrar : undefined,
+            // Un negocio de puro domicilio también cobra cuentas: atarlo a mesas
+            // le dejaba la caja vacía justo a quien más la necesita.
+            insignia: usaMesas || usaDomicilios ? cuentasPorCobrar : undefined,
             enBarraInferior: true,
-            secciones: seccionesDeCaja(usaMesas, cuentasPorCobrar),
+            secciones: seccionesDeCaja(usaMesas || usaDomicilios, cuentasPorCobrar),
           },
         ]
       : []),
@@ -219,6 +221,7 @@ export function construirNavegacion({
           { titulo: "Turnero TV", vista: "turnero" },
           { titulo: "Menú digital QR", vista: "qr" },
           { titulo: "Operación y recibos", vista: "operacion" },
+    { titulo: "Impresoras", vista: "impresoras" },
           { titulo: "Facturación DIAN", vista: "factus" },
           ...(puedeFacturar ? [{ titulo: "Licencia y sucursales", vista: "licencia" }] : []),
         ],

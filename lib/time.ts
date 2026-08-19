@@ -33,6 +33,58 @@ export type BusinessTimeSettings = {
 const MINUTO_MS = 60_000;
 const DIA_MS = 86_400_000;
 
+/**
+ * La zona de la plataforma, para lo que no pertenece a ninguna empresa.
+ *
+ * La lista de precios y sus promociones son de Platlia, no de un negocio: no hay
+ * un `BusinessSettings` del cual sacar la zona, y una fecha sin zona vuelve a ser
+ * ingenua. Platlia vende en Colombia; el día que deje de hacerlo, esto se vuelve
+ * un parámetro.
+ */
+export const ZONA_PLATAFORMA = "America/Bogota";
+
+/**
+ * El instante en que ARRANCA ese día de calendario en esa zona.
+ *
+ * Un `<input type="date">` entrega "2026-08-17", y `new Date("2026-08-17")` es la
+ * medianoche **UTC**: en Colombia eso son las 7 de la tarde del 16. Una promoción
+ * definida así empezaba y terminaba cinco horas antes de lo que decía la pantalla,
+ * y el cliente veía un día menos del que se le había prometido.
+ */
+export function inicioDelDiaEnZona(fecha: Date, timeZone: string): Date {
+  const zonificado = new TZDate(
+    fecha.getUTCFullYear(),
+    fecha.getUTCMonth(),
+    fecha.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+    assertTimeZone(timeZone),
+  );
+  return new Date(zonificado.getTime());
+}
+
+/**
+ * El instante en que TERMINA ese día, exclusivo: el arranque del día siguiente.
+ *
+ * Exclusivo porque es como se compara en `listaVigente` (`hasta > ahora`), y
+ * porque "termina el 31" quiere decir que el 31 todavía cuenta entero.
+ */
+export function finDelDiaEnZona(fecha: Date, timeZone: string): Date {
+  return inicioDelDiaEnZona(new Date(fecha.getTime() + DIA_MS), timeZone);
+}
+
+/**
+ * El último día que cubre una ventana cuyo fin es exclusivo.
+ *
+ * Sirve para volver a mostrar lo que la persona escribió: si la promo termina el
+ * arranque del 1 de septiembre, el día que hay que decir es el 31 de agosto.
+ */
+export function diaFinalDeVentana(finExclusivo: Date): Date {
+  return new Date(finExclusivo.getTime() - 1);
+}
+
 export function assertTimeZone(timeZone: string): string {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone });

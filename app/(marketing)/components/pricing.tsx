@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Check, Sparkles, Building2, Store, PhoneCall, ArrowRight } from "lucide-react";
-import { cotizar, type ListaDePrecios, type Periodicidad } from "@/lib/billing/precios";
+import { cotizar, mensualDeLaLista, type ListaDePrecios, type Periodicidad } from "@/lib/billing/precios";
+import { AvisoPromocion } from "@/features/facturacion/components/aviso-promocion";
 import { formatCop } from "@/lib/money";
 
 /**
@@ -16,9 +17,22 @@ import { formatCop } from "@/lib/money";
  * al año y el texto decía "(2 meses gratis)", que es otro número. Prometer un
  * precio distinto del que se cobra es la peor clase de bug.
  */
-export function Pricing({ lista }: { lista: ListaDePrecios }) {
+export function Pricing({
+  lista,
+  base,
+  promo,
+}: {
+  lista: ListaDePrecios;
+  /** La lista de siempre, para poder decir de cuánto bajó una promoción. */
+  base: ListaDePrecios;
+  /** La promoción vigente, si hay alguna. */
+  promo: ListaDePrecios | null;
+}) {
   const [sucursales, setSucursales] = useState<1 | 2 | "3+">(1);
   const [frecuencia, setFrecuencia] = useState<"mensual" | "6meses" | "12meses">("12meses");
+
+  /** En miles, que es como se lee un precio de un vistazo en un botón. */
+  const enMiles = (sedes: number) => `$${Math.round(mensualDeLaLista(lista, sedes) / 1000)}k`;
 
   const calcularPrecio = () => {
     if (sucursales === "3+") return null;
@@ -61,6 +75,17 @@ export function Pricing({ lista }: { lista: ListaDePrecios }) {
             Sin límite de mesas, meseros, comandas ni pantallas conectadas. 7 días de prueba gratis sin ingresar tarjeta de crédito.
           </p>
 
+          {promo && (
+            <div className="mx-auto max-w-xl pt-2 text-left">
+              <AvisoPromocion
+                promo={promo}
+                base={base}
+                sedes={sucursales === "3+" ? 3 : sucursales}
+                timeZone="America/Bogota"
+              />
+            </div>
+          )}
+
           {/* Selectores de Sucursales y Frecuencia */}
           <div className="pt-6 flex flex-col items-center gap-5">
             
@@ -80,7 +105,7 @@ export function Pricing({ lista }: { lista: ListaDePrecios }) {
                   }`}
                 >
                   <Store className="size-3.5" />
-                  <span>1 SUCURSAL ($50k/mes)</span>
+                  <span>1 SUCURSAL ({enMiles(1)}/mes)</span>
                 </button>
                 <button
                   type="button"
@@ -92,7 +117,7 @@ export function Pricing({ lista }: { lista: ListaDePrecios }) {
                   }`}
                 >
                   <Store className="size-3.5" />
-                  <span>2 SUCURSALES ($80k/mes)</span>
+                  <span>2 SUCURSALES ({enMiles(2)}/mes)</span>
                 </button>
                 <button
                   type="button"

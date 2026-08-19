@@ -7,7 +7,7 @@ import {
 } from "@/app/(app)/navegacion";
 
 describe("navegación y submenús con insignias", () => {
-  it("seccionesDeCaja asigna la insignia de cuentasPorCobrar a 'Cobrar cuentas' cuando usaMesas es true", () => {
+  it("seccionesDeCaja asigna la insignia de cuentasPorCobrar a 'Cobrar cuentas' cuando el negocio cobra cuentas", () => {
     const seccionesConMesas = seccionesDeCaja(true, 3);
     expect(seccionesConMesas).toEqual([
       { titulo: "Cobrar cuentas", vista: "", insignia: 3 },
@@ -16,7 +16,7 @@ describe("navegación y submenús con insignias", () => {
     ]);
   });
 
-  it("seccionesDeCaja no incluye 'Cobrar cuentas' cuando usaMesas es false", () => {
+  it("seccionesDeCaja no incluye 'Cobrar cuentas' cuando no hay nada que cobrar", () => {
     const seccionesSinMesas = seccionesDeCaja(false, 3);
     expect(seccionesSinMesas).toEqual([
       { titulo: "Cuentas cobradas", vista: "" },
@@ -24,7 +24,7 @@ describe("navegación y submenús con insignias", () => {
     ]);
   });
 
-  it("vistaInicialDeCaja devuelve 'cobros' con mesas y 'cobradas' sin mesas", () => {
+  it("vistaInicialDeCaja entra por cobros si hay cuentas, y por el historial si no", () => {
     expect(vistaInicialDeCaja(true)).toBe("cobros");
     expect(vistaInicialDeCaja(false)).toBe("cobradas");
   });

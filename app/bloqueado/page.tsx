@@ -10,7 +10,7 @@ import { requireBusiness } from "@/lib/auth/dal";
 // eslint-disable-next-line no-restricted-imports -- Buscar las OTRAS sedes de la persona cruza negocios: no hay un businessId con el cual acotar.
 import { rootDb } from "@/lib/db/root";
 import { listaVigenteDeLaBase } from "@/lib/billing/lista";
-import { cotizar, listaParaNegocio } from "@/lib/billing/precios";
+import { cotizar } from "@/lib/billing/precios";
 import { formatCop } from "@/lib/money";
 import { enlaceWhatsapp } from "@/lib/soporte";
 
@@ -36,11 +36,11 @@ export default async function BloqueadoPage() {
 
   const suscripcion = await rootDb.subscription.findUnique({
     where: { businessId: ctx.business.id },
-    select: { priceCop: true, status: true },
+    select: { status: true },
   });
 
   const sedes = await sedesDelPropietario(ctx.user.id);
-  const lista = listaParaNegocio(await listaVigenteDeLaBase(), suscripcion?.priceCop);
+  const lista = await listaVigenteDeLaBase();
   const mensual = cotizar({ lista, sedes, periodicidad: "MENSUAL" });
 
   // Las otras sedes de esta persona que sí estén al día: si tiene dónde trabajar

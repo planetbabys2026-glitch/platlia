@@ -8,6 +8,10 @@ import {
   formatTimeInTimeZone,
   isSameBusinessDay,
   parseBusinessDate,
+  inicioDelDiaEnZona,
+  finDelDiaEnZona,
+  diaFinalDeVentana,
+  ZONA_PLATAFORMA,
 } from "@/lib/time";
 
 // Bogotá es UTC-5 todo el año: no hay horario de verano en Colombia.
@@ -137,5 +141,44 @@ describe("formato para el tiquete", () => {
   it("rellena con cero a dos dígitos, para que las columnas no bailen", () => {
     const instante = new Date("2026-01-02T14:05:00Z"); // 09:05 local
     expect(formatDateTimeInTimeZone(instante, "America/Bogota")).toBe("2026-01-02 09:05");
+  });
+});
+
+describe("la ventana de una promoción", () => {
+  /**
+   * Un `<input type="date">` entrega "2026-08-17" y `new Date(...)` lo pone en
+   * medianoche UTC, que en Colombia son las 7 de la tarde del día anterior. Así
+   * una promo empezaba y terminaba cinco horas antes de lo escrito, y el cliente
+   * leía "hasta el 30" cuando el superadmin había puesto el 31.
+   */
+  const escrita = (iso: string) => new Date(iso);
+
+  it("empieza a la medianoche de Colombia, no a la de Londres", () => {
+    const inicio = inicioDelDiaEnZona(escrita("2026-08-17"), ZONA_PLATAFORMA);
+    expect(inicio.toISOString()).toBe("2026-08-17T05:00:00.000Z");
+    expect(formatDayInTimeZone(inicio, ZONA_PLATAFORMA)).toBe("2026-08-17");
+  });
+
+  it("el día que se escribe como fin cuenta entero", () => {
+    const fin = finDelDiaEnZona(escrita("2026-08-31"), ZONA_PLATAFORMA);
+    // Exclusivo: arranca el 1 de septiembre, así que el 31 entra completo.
+    expect(fin.toISOString()).toBe("2026-09-01T05:00:00.000Z");
+
+    const ultimoInstanteDel31 = new Date("2026-09-01T04:59:59.000Z");
+    expect(fin > ultimoInstanteDel31).toBe(true);
+  });
+
+  it("vuelve a mostrar el día que la persona escribió", () => {
+    const fin = finDelDiaEnZona(escrita("2026-08-31"), ZONA_PLATAFORMA);
+    expect(formatDayInTimeZone(diaFinalDeVentana(fin), ZONA_PLATAFORMA)).toBe("2026-08-31");
+  });
+
+  it("una promo de un solo día dura ese día entero", () => {
+    const desde = inicioDelDiaEnZona(escrita("2026-12-25"), ZONA_PLATAFORMA);
+    const hasta = finDelDiaEnZona(escrita("2026-12-25"), ZONA_PLATAFORMA);
+    const mediodia = new Date("2026-12-25T17:00:00Z"); // 12:00 en Bogotá
+
+    expect(desde <= mediodia && hasta > mediodia).toBe(true);
+    expect(hasta.getTime() - desde.getTime()).toBe(86_400_000);
   });
 });

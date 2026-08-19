@@ -15,7 +15,7 @@ import { formatTurno } from "@/lib/turns";
  * cocina— se prueba sin levantar una pantalla.
  */
 
-export type TipoAviso = "COCINA_NUEVA_COMANDA" | "DOMICILIO_NUEVO";
+export type TipoAviso = "COCINA_NUEVA_COMANDA" | "DOMICILIO_NUEVO" | "IMPRESION_FALLIDA";
 
 export type Aviso = {
   /** `orderId:tipo:ts`. El cliente descarta repetidos con esto. */
@@ -33,6 +33,24 @@ export type Aviso = {
 };
 
 export type DatosAviso =
+  | {
+      /**
+       * Un papel que no salió después de tres intentos.
+       *
+       * Va por el canal de avisos y no por un contador porque es una noticia, no
+       * un número: alguien tiene que enterarse AHORA de que la comanda no llegó a
+       * la plancha. Sin esto, el fallo quedaba en una fila de la base que nadie
+       * mira hasta que el cliente reclama.
+       */
+      tipo: "IMPRESION_FALLIDA";
+      orderId: string;
+      code: number;
+      impresora: string;
+      /** "RECIBO" | "COMANDA". */
+      documento: string;
+      motivo: string | null;
+      ts?: number;
+    }
   | {
       tipo: "COCINA_NUEVA_COMANDA";
       orderId: string;
@@ -81,6 +99,19 @@ function limpio(texto: string | null | undefined): string | null {
 export function describirAviso(datos: DatosAviso): Aviso {
   const ts = datos.ts ?? Date.now();
   const base = { id: `${datos.orderId}:${datos.tipo}:${ts}`, orderId: datos.orderId, code: datos.code, ts };
+
+  if (datos.tipo === "IMPRESION_FALLIDA") {
+    const que = datos.documento === "RECIBO" ? "El recibo" : "La comanda";
+    return {
+      ...base,
+      tipo: "IMPRESION_FALLIDA",
+      titulo: `No imprimió · ${datos.impresora}`,
+      // El motivo técnico va en el detalle: quien lo lee está parado al lado de
+      // la impresora y "conexión rechazada" le dice si es papel o es red.
+      detalle: `${que} del pedido #${datos.code}. ${limpio(datos.motivo) ?? "Sin detalle"}`,
+      href: "/administracion/configuracion?vista=impresoras",
+    };
+  }
 
   if (datos.tipo === "DOMICILIO_NUEVO") {
     const cliente = limpio(datos.cliente);
