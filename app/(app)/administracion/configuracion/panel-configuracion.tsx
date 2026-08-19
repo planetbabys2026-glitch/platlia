@@ -26,6 +26,7 @@ type PanelConfiguracionProps = {
   };
   settings: {
     deliveryEnabled: boolean;
+    deliveryPaused: boolean;
     deliveryFeeCop: number;
     inventoryEnabled: boolean;
     recipesEnabled: boolean;
@@ -42,6 +43,10 @@ type PanelConfiguracionProps = {
     cashRoundingCop: number;
     requireOpenCashSession: boolean;
     turnNumberMax: number;
+    scheduleEnabled: boolean;
+    scheduleOpeningTime: string;
+    scheduleClosingTime: string;
+    scheduleStatus: string;
     receiptWidth: ReceiptWidth;
     receiptHeader: string | null;
     receiptFooter: string | null;
@@ -54,6 +59,7 @@ type PanelConfiguracionProps = {
     qrMenuHeaderTitle: string | null;
     qrMenuHeaderSubtitle: string | null;
     qrMenuAccent: string;
+    estimatedPrepTimeText: string | null;
     facturacionElectronicaHabilitada: boolean;
     paquetesDocumentosDisponibles: number;
     documentosEmitidosConsumidos: number;
@@ -133,6 +139,7 @@ export function PanelConfiguracion({
             <FormularioModulos
               mesasHabilitado={mesasHabilitado}
               deliveryEnabled={settings.deliveryEnabled}
+              deliveryPaused={settings.deliveryPaused}
               deliveryFeeCop={settings.deliveryFeeCop}
               inventoryEnabled={settings.inventoryEnabled}
               recipesEnabled={settings.recipesEnabled}
@@ -191,6 +198,7 @@ export function PanelConfiguracion({
                 qrMenuHeaderTitle: settings.qrMenuHeaderTitle,
                 qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
                 qrMenuAccent: settings.qrMenuAccent,
+                estimatedPrepTimeText: settings.estimatedPrepTimeText,
                 slug,
                 mesas,
                 deliveryEnabled: settings.deliveryEnabled,
@@ -206,7 +214,7 @@ export function PanelConfiguracion({
             <div>
               <h2 className="font-semibold text-lg">Parámetros Operativos y Recibos</h2>
               <p className="text-muted-foreground text-xs">
-                Configuración de jornada de negocio, propina sugerida, redondeo en efectivo y encabezados de impresión.
+                Configuración de jornada de negocio, horarios de atención, propina sugerida, redondeo en efectivo y recibos.
               </p>
             </div>
             <FormularioOperacion
@@ -219,6 +227,10 @@ export function PanelConfiguracion({
                 cashRoundingCop: settings.cashRoundingCop,
                 requireOpenCashSession: settings.requireOpenCashSession,
                 turnNumberMax: settings.turnNumberMax,
+                scheduleEnabled: settings.scheduleEnabled,
+                scheduleOpeningTime: settings.scheduleOpeningTime,
+                scheduleClosingTime: settings.scheduleClosingTime,
+                scheduleStatus: settings.scheduleStatus,
                 receiptWidth: settings.receiptWidth,
                 receiptHeader: settings.receiptHeader,
                 receiptFooter: settings.receiptFooter,

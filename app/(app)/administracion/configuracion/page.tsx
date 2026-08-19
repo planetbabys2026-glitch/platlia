@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
+import { parseExtraSettings } from "@/features/negocio/extra-settings";
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
 import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
@@ -53,6 +54,8 @@ export default async function ConfiguracionPage() {
    * así que no queda ningún secreto en esta tabla que pueda colarse.
    */
 
+  const extra = parseExtraSettings(settings.rolePermissions);
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -66,6 +69,12 @@ export default async function ConfiguracionPage() {
         negocio={negocio}
         settings={{
           ...settings,
+          scheduleEnabled: extra.scheduleEnabled,
+          scheduleOpeningTime: extra.scheduleOpeningTime,
+          scheduleClosingTime: extra.scheduleClosingTime,
+          scheduleStatus: extra.scheduleStatus,
+          deliveryPaused: extra.deliveryPaused,
+          estimatedPrepTimeText: extra.estimatedPrepTimeText,
           faltantesParaFacturar: faltantesParaFacturar(settings, plataformaFacturaConfigurada()),
         }}
         facturacion={facturacion}

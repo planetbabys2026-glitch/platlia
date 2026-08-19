@@ -23,6 +23,8 @@ import { tenantDb } from "@/lib/db/tenant";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
+import { evaluarEstadoNegocio } from "@/features/negocio/horarios";
+import { parseExtraSettings } from "@/features/negocio/extra-settings";
 import { resolverModificadores } from "@/features/pedidos/modificadores";
 import { verificarYDescontarStockReceta } from "@/lib/inventory/stock";
 
@@ -74,6 +76,30 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
 
     if (!settings.qrMenuEnabled) {
       return { ok: false, error: "El menú digital QR no está activado para este negocio." };
+    }
+
+    const extra = parseExtraSettings(settings.rolePermissions);
+    const estadoNegocio = evaluarEstadoNegocio({
+      timeZone: settings.timeZone,
+      scheduleEnabled: extra.scheduleEnabled,
+      scheduleOpeningTime: extra.scheduleOpeningTime,
+      scheduleClosingTime: extra.scheduleClosingTime,
+      scheduleStatus: extra.scheduleStatus,
+    });
+    if (!estadoNegocio.abierto) {
+      return {
+        ok: false,
+        error: estadoNegocio.razon || "El establecimiento se encuentra cerrado en este momento.",
+      };
+    }
+
+    if (input.type === "DOMICILIO") {
+      if (!settings.deliveryEnabled || extra.deliveryPaused) {
+        return {
+          ok: false,
+          error: "Los pedidos a domicilio no están disponibles en este momento por alta demanda o decisión del establecimiento.",
+        };
+      }
     }
 
     const businessDate = currentBusinessDate(settings);

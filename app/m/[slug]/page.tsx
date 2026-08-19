@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getSettings } from "@/features/negocio/queries";
+import { evaluarEstadoNegocio } from "@/features/negocio/horarios";
+import { parseExtraSettings } from "@/features/negocio/extra-settings";
 // eslint-disable-next-line no-restricted-imports -- Ruta pública para resolver el negocio por su slug público
 import { rootDb } from "@/lib/db/root";
 import { tenantDb } from "@/lib/db/tenant";
@@ -161,6 +163,15 @@ export default async function MenuQrPublicPage({
       })
     : null;
 
+  const extra = parseExtraSettings(settings.rolePermissions);
+  const estadoNegocio = evaluarEstadoNegocio({
+    timeZone: settings.timeZone,
+    scheduleEnabled: extra.scheduleEnabled,
+    scheduleOpeningTime: extra.scheduleOpeningTime,
+    scheduleClosingTime: extra.scheduleClosingTime,
+    scheduleStatus: extra.scheduleStatus,
+  });
+
   return (
     <ClienteMenuQr
       business={business}
@@ -177,10 +188,13 @@ export default async function MenuQrPublicPage({
         qrMenuAccent: settings.qrMenuAccent,
         turnNumberMax: settings.turnNumberMax,
         deliveryEnabled: settings.deliveryEnabled,
+        deliveryPaused: extra.deliveryPaused,
         deliveryFeeCop: settings.deliveryFeeCop,
         tipSuggestionEnabled: settings.tipSuggestionEnabled,
         tipSuggestionRateBp: settings.tipSuggestionRateBp,
+        estimatedPrepTimeText: extra.estimatedPrepTimeText,
       }}
+      estadoNegocio={estadoNegocio}
       categorias={categorias}
       productos={productos}
       placeholderUrl={placeholder?.imageUrl ?? null}
