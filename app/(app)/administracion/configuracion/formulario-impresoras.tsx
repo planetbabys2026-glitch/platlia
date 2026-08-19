@@ -97,6 +97,8 @@ export function FormularioImpresoras({
    * caja, y hacerle elegir entre tres archivos parecidos es la forma más fácil de
    * que se baje el que no es.
    */
+  const hayDescargas = descargas.some((d) => d.disponible);
+
   const soDetectado: "windows" | "linux" | "mac" | null =
     typeof navigator === "undefined"
       ? null
@@ -496,25 +498,43 @@ export function FormularioImpresoras({
             {/* El código viaja en el NOMBRE del archivo: el programa lo lee de sí
                 mismo. Nadie copia un token de 43 caracteres a un archivo de texto,
                 que era lo que había antes y ningún cajero iba a hacer. */}
-            <div className="flex flex-wrap gap-2">
-              {descargas
-                .filter((d) => d.disponible)
-                .map((d) => (
-                  <a
-                    key={d.so}
-                    href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo)}`}
-                    className={cn(
-                      "rounded-lg px-3 py-2 text-xs font-bold transition-all",
-                      d.so === soDetectado
-                        ? "bg-brand text-brand-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Bajar para {d.etiqueta}
-                    {d.so === soDetectado ? " · este equipo" : ""}
-                  </a>
-                ))}
-            </div>
+            {hayDescargas ? (
+              <div className="flex flex-wrap gap-2">
+                {descargas
+                  .filter((d) => d.disponible)
+                  .map((d) => (
+                    <a
+                      key={d.so}
+                      href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo)}`}
+                      className={cn(
+                        "rounded-lg px-3 py-2 text-xs font-bold transition-all",
+                        d.so === soDetectado
+                          ? "bg-brand text-brand-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Bajar para {d.etiqueta}
+                      {d.so === soDetectado ? " · este equipo" : ""}
+                    </a>
+                  ))}
+              </div>
+            ) : (
+              /* Sin ejecutables publicados los botones desaparecían y no quedaba
+                 NADA en su lugar: el equipo aparecía registrado, el código a la
+                 vista, y ningún archivo que bajar ni una palabra sobre por qué.
+                 Es un problema del servidor, así que se dice como tal, con lo que
+                 hay que hacer y a quién le toca. */
+              <p
+                role="alert"
+                className="rounded-lg border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
+              >
+                <span className="font-bold">El programa no está publicado en este servidor.</span>{" "}
+                El equipo quedó registrado y el código sirve, pero falta subir los
+                ejecutables: se compilan con <code className="font-mono">pnpm agente:build</code> y
+                se dejan donde apunta <code className="font-mono">DESCARGAS_AGENTE_DIR</code>. No es
+                algo que se resuelva desde esta pantalla.
+              </p>
+            )}
 
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground">

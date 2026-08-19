@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
-import { env } from "@/lib/env";
+import { carpetaDeDescargas } from "@/lib/printing/descargas";
 
 /**
  * Entrega el programa con el código de emparejamiento **en el nombre del archivo**.
@@ -37,8 +37,7 @@ export async function GET(req: Request) {
   const objetivo = ARCHIVOS[so];
   if (!objetivo) return new Response("Sistema no reconocido", { status: 404 });
 
-  const carpeta = env.DESCARGAS_AGENTE_DIR ?? path.join(process.cwd(), "public", "descargas");
-  const ruta = path.join(carpeta, objetivo.archivo);
+  const ruta = path.join(carpetaDeDescargas(), objetivo.archivo);
   if (!existsSync(ruta)) {
     return new Response(
       "Todavía no está compilado el programa para ese sistema. Se genera con `pnpm agente:build`.",

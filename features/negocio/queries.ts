@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { cache } from "react";
 import { tenantDb } from "@/lib/db/tenant";
+import { carpetaDeDescargas, EJECUTABLES } from "@/lib/printing/descargas";
 
 /**
  * Los parámetros de operación de la empresa.
@@ -109,15 +110,12 @@ export async function getConfiguracionDeImpresion(businessId: string) {
  * mirando una página de error sin saber si es culpa suya.
  */
 export function getDescargasDelAgente() {
-  const carpeta = path.join(process.cwd(), "public", "descargas");
+  // La carpeta la decide `carpetaDeDescargas()` y no este archivo: en el VPS es
+  // un volumen, no `public/`. Cuando cada uno resolvía la ruta por su cuenta, el
+  // panel escondía los botones mientras la ruta servía el archivo perfectamente.
+  const carpeta = carpetaDeDescargas();
 
-  const archivos = [
-    { so: "windows" as const, etiqueta: "Windows", archivo: "platlia-impresion-windows.exe" },
-    { so: "linux" as const, etiqueta: "Linux", archivo: "platlia-impresion-linux" },
-    { so: "mac" as const, etiqueta: "macOS", archivo: "platlia-impresion-mac" },
-  ];
-
-  return archivos.map((a) => ({
+  return EJECUTABLES.map((a) => ({
     ...a,
     url: `/descargas/${a.archivo}`,
     disponible: existsSync(path.join(carpeta, a.archivo)),
