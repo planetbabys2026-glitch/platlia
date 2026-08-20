@@ -16,6 +16,13 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORIGEN="$RAIZ/agente-impresion"
 DESTINO="$RAIZ/public/descargas"
 
+# Go se instala en /usr/local/go y ese bin NO queda en el PATH de una shell no
+# interactiva, así que el script decía "falta Go" en máquinas donde estaba
+# instalado. Se agrega antes de rendirse.
+if ! command -v go >/dev/null 2>&1 && [ -x /usr/local/go/bin/go ]; then
+  export PATH="$PATH:/usr/local/go/bin"
+fi
+
 if ! command -v go >/dev/null 2>&1; then
   echo "Falta Go. Instalalo desde https://go.dev/dl/ y volvé a intentar." >&2
   exit 1

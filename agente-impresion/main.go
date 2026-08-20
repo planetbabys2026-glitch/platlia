@@ -37,6 +37,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -114,7 +115,7 @@ func main() {
 	// venció, no hay internet— tiene que haber una pantalla que lo diga. Sin esto,
 	// un fallo de emparejamiento sería un programa que se abre y se cierra sin
 	// dejar rastro.
-	direccion, err := levantarPagina(emparejarDesdeLaPagina)
+	direccion, err := levantarPagina(emparejarDesdeLaPagina, configurarDesdeLaPagina)
 	if err != nil {
 		log.Fatalf("no pude abrir la página local: %v", err)
 	}
@@ -159,13 +160,9 @@ func arrancar() bool {
 	// que se abrió puede ser Descargas —que se vacía— o un pendrive que se saca.
 	if cfg, err := leerConfiguracionVecina(); err == nil && cfg.Token != "" {
 		log.Printf("configuración encontrada junto al ejecutable")
-		if err := guardarConfiguracion(cfg); err != nil {
-			log.Printf("aviso: no pude guardar la configuración: %v", err)
+		if err := adoptarConfiguracion(cfg); err != nil {
+			log.Printf("no pude adoptarla: %v", err)
 		}
-		if err := instalarse(); err != nil {
-			log.Printf("aviso: no pude instalarme del todo: %v", err)
-		}
-		aplicarConfiguracion(cfg)
 		return true
 	}
 
@@ -184,14 +181,21 @@ func arrancar() bool {
 	return true
 }
 
-// emparejarDesdeLaPagina canjea un código, guarda todo y deja el programa listo.
+// adoptarConfiguracion deja el programa listo con una configuración ya resuelta.
 //
-// La usan los dos caminos —el código del nombre del archivo y el que alguien
-// escribe en la página— para que no haya dos versiones de "quedar configurado".
-func emparejarDesdeLaPagina(codigo string) error {
-	cfg, err := emparejar(servidorHorneado, codigo)
-	if err != nil {
-		return err
+// Es el único lugar donde se "queda configurado", y por ahí pasan los cuatro
+// caminos posibles: el archivo al lado del ejecutable, el código en el nombre, el
+// código escrito en la página y el archivo pegado en la página. Si cada uno
+// hiciera lo suyo, tres de ellos se olvidarían de algún paso tarde o temprano.
+func adoptarConfiguracion(cfg configuracion) error {
+	if cfg.Token == "" {
+		return errors.New("a esa configuración le falta el token")
+	}
+	if cfg.URL == "" {
+		cfg.URL = servidorHorneado
+	}
+	if cfg.Respaldo == "" {
+		cfg.Respaldo = filepath.Join(carpetaDeDatos(), "respaldo")
 	}
 
 	if err := guardarConfiguracion(cfg); err != nil {
@@ -199,13 +203,50 @@ func emparejarDesdeLaPagina(codigo string) error {
 	}
 
 	// Recién acá se copia a su lugar definitivo y se anota para arrancar solo: si
-	// el emparejamiento falla, no queda nada instalado a medias.
+	// lo anterior falla, no queda nada instalado a medias.
 	if err := instalarse(); err != nil {
 		log.Printf("aviso: no pude instalarme del todo: %v", err)
 	}
 
 	aplicarConfiguracion(cfg)
+	return nil
+}
+
+// emparejarDesdeLaPagina canjea un código y deja el programa listo.
+func emparejarDesdeLaPagina(codigo string) error {
+	cfg, err := emparejar(servidorHorneado, codigo)
+	if err != nil {
+		return err
+	}
+	if err := adoptarConfiguracion(cfg); err != nil {
+		return err
+	}
 	log.Printf("emparejado como %q", cfg.Nombre)
+	return nil
+}
+
+// configurarDesdeLaPagina toma el `agente.json` pegado a mano en la página local.
+//
+// Es el camino que faltaba y por el que la pantalla mentía: pedía un código de 12
+// caracteres, pero el panel de Platlia entrega un ARCHIVO. Quien llegaba hasta acá
+// tenía el archivo en la mano y ninguna casilla donde ponerlo.
+func configurarDesdeLaPagina(texto string) error {
+	texto = strings.TrimSpace(texto)
+	if texto == "" {
+		return errors.New("no pegaste nada")
+	}
+
+	var cfg configuracion
+	if err := json.Unmarshal([]byte(texto), &cfg); err != nil {
+		return errors.New(
+			"eso no parece el archivo de configuración: copialo entero, con las llaves { } incluidas",
+		)
+	}
+
+	if err := adoptarConfiguracion(cfg); err != nil {
+		return err
+	}
+	log.Printf("configurado a mano como %q", cfg.Nombre)
 	return nil
 }
 

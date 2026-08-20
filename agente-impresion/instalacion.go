@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -209,10 +210,16 @@ func instalarse() error {
 	if err != nil {
 		return err
 	}
-	// En Windows no se puede sobrescribir un ejecutable en uso: si ya había una
-	// versión corriendo, se aparta antes.
+	// Ningún sistema deja reemplazar un ejecutable que está corriendo, así que si
+	// ya había una versión viva hay que apartarla antes. Windows lo resuelve
+	// renombrando; en Linux el kernel devuelve ETXTBSY y hay que parar el servicio
+	// —salvo que el servicio seamos nosotros, en cuyo caso nos estaríamos matando
+	// en mitad de la instalación—. `registrarArranque` lo vuelve a levantar al final.
 	if runtime.GOOS == "windows" {
 		_ = os.Rename(destino, destino+".viejo")
+	}
+	if runtime.GOOS == "linux" && !soyElServicio() {
+		_ = exec.Command("systemctl", "--user", "stop", unidadLinux).Run()
 	}
 	if err := os.WriteFile(destino, datos, 0o755); err != nil {
 		return err
@@ -265,6 +272,27 @@ func arranqueWindows(ruta string) error {
 	return cmd.Run()
 }
 
+const unidadLinux = "platlia-impresion.service"
+
+// soyElServicio dice si a ESTE proceso lo lanzó systemd como la unidad del agente.
+//
+// Hace falta antes de pararla o reiniciarla: si la unidad somos nosotros, esas dos
+// cosas son matarnos a nosotros mismos a mitad de la instalación.
+//
+// No sirve mirar `INVOCATION_ID`. systemd la pone en el servicio, pero **los hijos
+// la heredan**, y en un escritorio moderno la propia terminal cuelga de una unidad
+// (`app-gnome-…service`): todo lo que alguien abre a mano la trae puesta, así que
+// da "sí" siempre. Lo único que no miente es el PID.
+func soyElServicio() bool {
+	salida, err := exec.Command(
+		"systemctl", "--user", "show", unidadLinux, "-p", "MainPID", "--value",
+	).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(salida)) == strconv.Itoa(os.Getpid())
+}
+
 func arranqueLinux(ruta string) error {
 	carpeta := filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user")
 	if err := os.MkdirAll(carpeta, 0o755); err != nil {
@@ -290,7 +318,23 @@ WantedBy=default.target
 	}
 
 	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
-	return exec.Command("systemctl", "--user", "enable", "platlia-impresion.service").Run()
+	if err := exec.Command("systemctl", "--user", "enable", unidadLinux).Run(); err != nil {
+		return err
+	}
+
+	// `enable` solo lo deja anotado para el próximo arranque, y en Linux eso deja un
+	// hueco que no existe en los otros dos sistemas: acá el programa se abre desde
+	// una terminal, así que al cerrarla se muere y el local deja de imprimir hasta
+	// que alguien reinicie la máquina. En Windows el proceso ya quedó suelto y sin
+	// ventana, y en macOS `launchctl load -w` arranca la copia instalada en el acto.
+	//
+	// `restart` y no `start` para que una reinstalación levante el binario nuevo:
+	// con `start`, una unidad que ya estaba corriendo la versión vieja se quedaba
+	// con ella y la actualización no se aplicaba hasta el próximo reinicio.
+	if !soyElServicio() {
+		_ = exec.Command("systemctl", "--user", "restart", unidadLinux).Run()
+	}
+	return nil
 }
 
 func arranqueMac(ruta string) error {

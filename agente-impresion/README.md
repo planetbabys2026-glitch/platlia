@@ -49,6 +49,19 @@ Si el navegador le cambió el nombre al archivo, o si se bajó desde otra
 computadora, la página local muestra un campo para escribir el código a mano. Es el
 plan B, no el camino.
 
+## La página local acepta las dos cosas
+
+`http://127.0.0.1:9777` es la pantalla del programa sin configurar, y **el campo
+principal es para pegar el `agente.json`**; el código de 12 caracteres quedó plegado
+abajo. Estaba al revés y era una trampa: la pantalla pedía un código mientras el panel
+de Platlia entregaba un archivo, así que quien llegaba hasta ahí tenía lo que hacía
+falta en la mano y ninguna casilla donde ponerlo.
+
+Los cuatro caminos —archivo al lado del ejecutable, código en el nombre, código escrito
+a mano, archivo pegado— terminan todos en `adoptarConfiguracion`, que es el único lugar
+donde se guarda, se instala y se registra el arranque. Con cuatro versiones de "quedar
+configurado", tres se olvidan de algún paso tarde o temprano.
+
 ## El otro camino: instalación asistida con `agente.json`
 
 El de arriba supone que el programa se baja **desde el servidor**, porque el código
@@ -79,6 +92,44 @@ El token **se muestra una sola vez** —de la base solo queda su hash— y pedir
 puerta y no tiene sentido que convivan. Conviene borrar el `agente.json` de la
 carpeta desde donde se abrió el programa: ya quedó guardado con permisos 0600 en la
 carpeta de datos, y en Descargas es un secreto de larga vida a la vista.
+
+## Linux y macOS: el permiso de ejecución
+
+El navegador guarda el archivo **sin permiso de ejecución** —no es algo que el
+servidor pueda mandar— así que el doble clic no hace nada y desde la terminal sale
+`Permiso denegado`. Y en Linux los ejecutables no llevan extensión: que el archivo
+se llame `platlia-impresion` a secas es lo normal, no está incompleto.
+
+```bash
+cd ~/Descargas
+chmod +x platlia-impresion
+./platlia-impresion            # con el agente.json al lado
+```
+
+En macOS, además, Gatekeeper bloquea un binario sin firmar la primera vez: se abre
+con **clic derecho → Abrir**, que ofrece el botón para permitirlo.
+
+**En Linux `enable` no alcanza.** Es el único de los tres sistemas donde el programa
+se abre desde una terminal, así que al cerrarla se moría y el local dejaba de
+imprimir hasta el próximo reinicio: `arranqueLinux` hace `systemctl --user restart`
+además de `enable`. En Windows el proceso ya quedó suelto y sin ventana, y en macOS
+`launchctl load -w` levanta la copia instalada en el acto.
+
+Para saber si hay que arrancar el servicio o no, se compara el **PID** contra el
+`MainPID` de la unidad. `INVOCATION_ID` no sirve: systemd la pone en el servicio pero
+**los hijos la heredan**, y en un escritorio moderno la terminal misma cuelga de una
+unidad (`app-gnome-…service`), así que todo lo que se abre a mano la trae puesta.
+
+Y reinstalar sobre un servicio andando pide pararlo antes: el kernel rechaza escribir
+sobre un ejecutable en ejecución (`ETXTBSY`, *"el archivo de texto está ocupado"*).
+Es el equivalente del `os.Rename` que ya se hacía en Windows.
+
+Si el servicio tiene que seguir vivo con la sesión cerrada —una PC sin nadie
+logueado—, hace falta habilitar el *lingering* una sola vez:
+
+```bash
+sudo loginctl enable-linger $USER
+```
 
 ## Compilar
 

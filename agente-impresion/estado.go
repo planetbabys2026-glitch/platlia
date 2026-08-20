@@ -92,7 +92,10 @@ func (e *estado) instantanea() vistaEstado {
 }
 
 // levantarPagina abre el servidor local y devuelve su dirección.
-func levantarPagina(alEmparejar func(codigo string) error) (string, error) {
+func levantarPagina(
+	alEmparejar func(codigo string) error,
+	alConfigurar func(archivo string) error,
+) (string, error) {
 	var escucha net.Listener
 	var err error
 	puerto := puertoBase
@@ -115,20 +118,16 @@ func levantarPagina(alEmparejar func(codigo string) error) (string, error) {
 		fmt.Fprint(w, paginaHTML(elEstado.instantanea()))
 	})
 
-	// El formulario de rescate: solo hace falta si el navegador le cambió el
-	// nombre al archivo o si se bajó en otra computadora.
+	// Pegar el `agente.json`. Es el camino normal cuando el programa no se bajó
+	// desde el propio Platlia, que es lo que pasa cuando lo instala nuestro equipo.
+	mux.HandleFunc("/configurar", func(w http.ResponseWriter, r *http.Request) {
+		responder(w, r, func() error { return alConfigurar(r.FormValue("configuracion")) })
+	})
+
+	// El código de 12 caracteres: solo sirve si el archivo se bajó desde Platlia
+	// en esta misma computadora y el navegador le cambió el nombre.
 	mux.HandleFunc("/emparejar", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-		codigo := r.FormValue("codigo")
-		if err := alEmparejar(codigo); err != nil {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprint(w, paginaError(err.Error()))
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		responder(w, r, func() error { return alEmparejar(r.FormValue("codigo")) })
 	})
 
 	go func() {
@@ -136,6 +135,22 @@ func levantarPagina(alEmparejar func(codigo string) error) (string, error) {
 	}()
 
 	return fmt.Sprintf("http://127.0.0.1:%d", puerto), nil
+}
+
+// responder corre lo que se pidió y pinta el resultado. Los dos formularios hacen
+// lo mismo con el error y con el éxito; escribirlo dos veces era la forma de que
+// uno de los dos se olvidara de redirigir.
+func responder(w http.ResponseWriter, r *http.Request, hacer func() error) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	if err := hacer(); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, paginaError(err.Error()))
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 const estilos = `
@@ -167,6 +182,14 @@ const estilos = `
     width: 100%; margin-top: 12px; padding: 14px; font-size: 16px; font-weight: 700;
     background: #FF4E1F; color: #171512; border: 0; border-radius: 10px; cursor: pointer;
   }
+  textarea {
+    width: 100%; box-sizing: border-box; padding: 12px; font-size: 13px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; line-height: 1.5;
+    background: #0F0E0C; color: #EDE7DA; border: 1px solid #3A3733; border-radius: 10px;
+    resize: vertical;
+  }
+  details { margin-top: 24px; border-top: 1px dashed #3A3733; padding-top: 16px; }
+  summary { cursor: pointer; color: #C9C2AF; font-size: 14px; }
   code { background: #0F0E0C; padding: 2px 6px; border-radius: 4px; }
 </style>`
 
@@ -176,16 +199,28 @@ func paginaHTML(e vistaEstado) string {
 <div class="caja">
   <span class="chip esperando">Falta un paso</span>
   <h1>Conectá esta computadora</h1>
-  <p>Escribí el código que te muestra Platlia en
-     <b>Configuración → Impresoras</b>. Son 12 caracteres.</p>
-  <form method="post" action="/emparejar">
-    <input name="codigo" placeholder="XXXX-XXXX-XXXX" autofocus autocomplete="off">
+  <p>En Platlia entrá a <b>Configuración → Impresoras</b>, registrá este equipo y
+     tocá <b>Ver el archivo de configuración</b>. Pegá acá abajo lo que te muestre.</p>
+  <form method="post" action="/configurar">
+    <textarea name="configuracion" rows="7" autofocus
+      placeholder='{&#10;  "url": "https://platlia.com",&#10;  "token": "...",&#10;  "nombre": "PC de la caja"&#10;}'></textarea>
     <button type="submit">Conectar</button>
   </form>
-  <p style="margin-top:20px;font-size:13px">
-    Normalmente esto no hace falta: el archivo que se baja desde Platlia ya trae el
-    código adentro. Aparece si el navegador le cambió el nombre al archivo.
+  <p style="margin-top:12px;font-size:13px">
+    Si preferís no pegarlo, guardá ese archivo como <code>agente.json</code> en esta
+    misma carpeta y volvé a abrir el programa: hace exactamente lo mismo.
   </p>
+  <details>
+    <summary>Tengo un código de 12 caracteres</summary>
+    <form method="post" action="/emparejar">
+      <input name="codigo" placeholder="XXXX-XXXX-XXXX" autocomplete="off">
+      <button type="submit">Conectar con el código</button>
+    </form>
+    <p style="font-size:13px">
+      Es el que trae adentro el archivo cuando se baja desde Platlia en esta misma
+      computadora. Vence en una hora y sirve una sola vez.
+    </p>
+  </details>
 </div>`
 	}
 
@@ -234,10 +269,12 @@ func paginaHTML(e vistaEstado) string {
 func paginaError(motivo string) string {
 	return `<!doctype html><meta charset="utf-8"><title>Platlia · impresión</title>` + estilos + `
 <div class="caja">
-  <span class="chip mal">No pude conectar</span>
-  <h1>Ese código no sirvió</h1>
+  <span class="chip mal">No funcionó</span>
+  <h1>No pude conectar</h1>
   <p>` + html.EscapeString(motivo) + `</p>
-  <p>Pedí uno nuevo en Platlia: <b>Configuración → Impresoras → Volver a instalar</b>.</p>
+  <p>En Platlia: <b>Configuración → Impresoras</b>. Con <b>Ver el archivo de
+     configuración</b> sale uno nuevo; el código de 12 caracteres se pide con
+     <b>Volver a instalar</b> y vence en una hora.</p>
   <form method="get" action="/"><button type="submit">Probar de nuevo</button></form>
 </div>`
 }

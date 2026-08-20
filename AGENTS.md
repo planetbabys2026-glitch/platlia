@@ -922,6 +922,31 @@ permisos de administrador** (`HKCU\…\Run`, `systemd --user`, LaunchAgent: pedi
 elevación en la caja de un bar es la forma más rápida de que alguien cancele el cuadro
 y nunca más lo abra) y abre el navegador en su página de estado.
 
+**La página local acepta el archivo, no solo el código.** Pedía un código de 12
+caracteres mientras el panel entregaba un `agente.json`: quien llegaba a esa pantalla
+tenía lo que hacía falta en la mano y ninguna casilla donde ponerlo. Ahora el campo
+principal es el archivo pegado y el código quedó plegado abajo. Los cuatro caminos
+—archivo al lado del ejecutable, código en el nombre, código escrito, archivo pegado—
+pasan por `adoptarConfiguracion`, el único lugar donde se guarda, se instala y se
+registra el arranque.
+
+**En Linux el arranque automático tiene tres trampas que los otros dos sistemas no
+tienen.** (a) `systemctl --user enable` solo anota la unidad para el próximo reinicio, y
+como acá el programa se abre desde una terminal, al cerrarla el local dejaba de imprimir
+hasta que alguien reiniciara: hace falta `restart` además de `enable` —`restart` y no
+`start`, para que una reinstalación levante el binario nuevo en vez de quedarse con el
+viejo ya cargado—. (b) Para saber si hay que arrancarla se compara el **PID** contra el
+`MainPID` de la unidad; **`INVOCATION_ID` no sirve**, porque systemd la pone en el
+servicio pero los hijos la heredan y en un escritorio moderno la terminal misma cuelga de
+`app-gnome-…service`, así que todo lo abierto a mano la trae puesta y la guarda daba "sí"
+siempre. (c) Reinstalar sobre un servicio andando exige pararlo antes: el kernel rechaza
+escribir sobre un ejecutable en ejecución (`ETXTBSY`), que es el mismo problema que en
+Windows resuelve el `os.Rename` previo.
+
+**El navegador guarda el archivo sin permiso de ejecución** y eso no se puede mandar por
+HTTP: en Linux y macOS hay un `chmod +x` inevitable antes del primer arranque. En Windows
+no hace falta nada.
+
 **No hay ventana.** En Windows se compila con `-H windowsgui`: una consola negra
 abierta todo el día es una ventana que alguien cierra sin querer. Lo que se mira es
 `http://127.0.0.1:9777`, servida por el propio agente —`agente-impresion/estado.go`—,
