@@ -155,6 +155,12 @@ export const guardarProducto = defineAction({
       sortOrder: input.sortOrder,
       hasRecipe: input.hasRecipe,
       recipeNeedsModifiers: input.recipeNeedsModifiers,
+      // Los dos regímenes de stock son excluyentes: lo que se mide por sus
+      // insumos no se mide además por unidades. Marcar la receta apaga el stock
+      // directo acá y no en una validación aparte, porque el formulario de la
+      // carta no muestra `trackStock` —lo enciende Inventario— y una regla que
+      // vive en una pantalla que no existe no la aplica nadie.
+      ...(input.hasRecipe ? { trackStock: false } : {}),
     };
 
     // Los grupos asignados se sincronizan junto con el producto: si el update

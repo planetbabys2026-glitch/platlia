@@ -86,6 +86,7 @@ export const modulosSchema = z.object({
   ).default(0),
   inventoryEnabled: casillaModulo,
   recipesEnabled: casillaModulo,
+  permitirVentaSinStock: casillaModulo,
 });
 
 export const turneroSchema = z.object({

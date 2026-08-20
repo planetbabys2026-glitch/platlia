@@ -38,6 +38,7 @@ type AppShellProps = {
   usaDomicilios?: boolean;
   puedeVerInventario: boolean;
   usaRecetas?: boolean;
+  usaInventario?: boolean;
   puedeFacturar?: boolean;
   esPropietario?: boolean;
   /** Contadores calculados en el servidor, para que la primera pintura ya traiga el número. */
@@ -228,6 +229,7 @@ function Shell({
   usaDomicilios = true,
   puedeVerInventario,
   usaRecetas,
+  usaInventario,
   puedeFacturar,
   esPropietario,
   children,
@@ -248,6 +250,7 @@ function Shell({
     usaDomicilios,
     puedeVerInventario,
     usaRecetas,
+    usaInventario,
     puedeFacturar,
     esPropietario,
     role,

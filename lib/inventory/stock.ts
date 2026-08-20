@@ -7,6 +7,24 @@ import {
   type OpcionConInsumos,
   type RenglonDeReceta,
 } from "@/lib/inventory/receta";
+import { costoUnitarioDeVenta } from "@/lib/inventory/costo";
+
+/**
+ * Prisma contesta P2025 cuando un `update` no encuentra la fila. Con la guarda de
+ * stock en el `where`, eso significa exactamente "otro se llevó las últimas".
+ *
+ * Se identifica por el código y no importando el namespace `Prisma`: este archivo
+ * lo comparten el servidor y los tests, y arrastrar el cliente base acá rompería
+ * la regla de que solo `lib/db/` lo importa.
+ */
+function esFilaNoEncontrada(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2025"
+  );
+}
 
 type TxClient = Omit<TenantDb, "$transaction" | "$connect" | "$disconnect" | "$extends">;
 
@@ -19,6 +37,12 @@ interface StockOptions {
    * descontaría el arroz de la receta base y no la carne.
    */
   modifierOptionIds?: string[];
+  /**
+   * `BusinessSettings.permitirVentaSinStock`: deja pasar la venta aunque no
+   * alcance, y el stock queda negativo. El negativo es el punto —es lo que el
+   * arqueo tiene que ver—: dejarlo en cero escondería el faltante.
+   */
+  permitirVentaSinStock?: boolean;
 }
 
 export interface ProductoStockCalculo {
@@ -204,6 +228,7 @@ const SELECT_PARA_DESCUENTO = {
   name: true,
   trackStock: true,
   stockQty: true,
+  costCop: true,
   hasRecipe: true,
   recipeNeedsModifiers: true,
   recipeItems: {
@@ -266,6 +291,14 @@ async function resolverReceta(
  * Verifica disponibilidad y descuenta: insumos de la receta efectiva y/o stock
  * directo del producto. Registra el Kardex de VENTA.
  *
+ * Devuelve el **costo unitario** de lo vendido, que es lo que el renglón congela
+ * en `unitCostCopSnapshot`. Sale de acá y no de una segunda consulta porque el
+ * producto y su receta ya están cargados: preguntarlos otra vez sería pagar dos
+ * veces la misma lectura por cada renglón de cada pedido.
+ *
+ * `null` significa "no se conocía el costo" —inventario apagado, o producto sin
+ * costear— y NO cero: un cero llega al informe como margen del 100%.
+ *
  * Si algo no alcanza lanza `ErrorDeUsuario` nombrando el insumo que frena, sin
  * haber escrito nada: la transacción de quien llama se encarga del resto.
  */
@@ -275,13 +308,19 @@ export async function verificarYDescontarStockReceta(
   productId: string,
   quantity: number,
   options?: StockOptions,
-) {
-  if (quantity <= 0) return;
+): Promise<{ unitCostCop: number | null }> {
+  if (quantity <= 0) return { unitCostCop: null };
 
-  const { referenceId, customNotes, inventoryEnabled = true, modifierOptionIds = [] } = options ?? {};
+  const {
+    referenceId,
+    customNotes,
+    inventoryEnabled = true,
+    modifierOptionIds = [],
+    permitirVentaSinStock = false,
+  } = options ?? {};
 
   const resuelto = await resolverReceta(tx, productId, modifierOptionIds, true);
-  if (!resuelto) return;
+  if (!resuelto) return { unitCostCop: null };
   const { producto, receta } = resuelto;
 
   // Un producto cuya receta depende de lo que se elija no se puede vender sin
@@ -294,37 +333,92 @@ export async function verificarYDescontarStockReceta(
   }
 
   // Si el negocio no lleva inventario activo, el stock no se audita ni se descuenta en la venta.
-  if (!inventoryEnabled) return;
+  if (!inventoryEnabled) return { unitCostCop: null };
 
-  if (producto.trackStock && producto.stockQty < quantity) {
-    throw new ErrorDeUsuario(
-      `Stock insuficiente de "${producto.name}". Disponibles: ${producto.stockQty}, solicitados: ${quantity}.`,
-    );
-  }
+  const unitCostCop = costoUnitarioDeVenta({
+    trackStock: producto.trackStock,
+    costCop: producto.costCop ?? 0,
+    receta,
+  });
 
-  const frena = insumoQueFrena(receta, quantity);
-  if (frena) {
-    throw new ErrorDeUsuario(
-      `Stock insuficiente del insumo "${frena.insumo.name}" para preparar "${producto.name}". Requerido: ${frena.requerido} ${frena.insumo.unit}, disponible en inventario: ${frena.insumo.stockCurrent} ${frena.insumo.unit}.`,
-    );
+  // Los dos chequeos previos existen por el mensaje, no por la garantía: nombran
+  // qué falta ("no hay pechuga") en vez de un "stock insuficiente" que manda a
+  // alguien a revisar la bodega entera. La garantía real la da la guarda que va
+  // en el `where` de cada update, más abajo.
+  if (!permitirVentaSinStock) {
+    if (producto.trackStock && producto.stockQty < quantity) {
+      throw new ErrorDeUsuario(
+        `Stock insuficiente de "${producto.name}". Disponibles: ${producto.stockQty}, solicitados: ${quantity}.`,
+      );
+    }
+
+    const frena = insumoQueFrena(receta, quantity);
+    if (frena) {
+      throw new ErrorDeUsuario(
+        `Stock insuficiente del insumo "${frena.insumo.name}" para preparar "${producto.name}". Requerido: ${frena.requerido} ${frena.insumo.unit}, disponible en inventario: ${frena.insumo.stockCurrent} ${frena.insumo.unit}.`,
+      );
+    }
   }
 
   if (producto.trackStock) {
-    await tx.product.update({
-      where: { id: producto.id },
-      data: { stockQty: { decrement: quantity } },
+    // El descuento va con la guarda adentro del `where`, no después de un
+    // chequeo: dos meseros agregando la última cerveza desde sus dos tablets
+    // pasaban los dos la verificación y el stock terminaba en −1. Es el mismo
+    // `updateMany` condicionado con el que se reclama un trabajo de impresión o
+    // se evita la doble emisión ante la DIAN.
+    let despues: { stockQty: number };
+    try {
+      despues = await tx.product.update({
+        where: permitirVentaSinStock
+          ? { id: producto.id }
+          : { id: producto.id, stockQty: { gte: quantity } },
+        data: { stockQty: { decrement: quantity } },
+        select: { stockQty: true },
+      });
+    } catch (error) {
+      if (esFilaNoEncontrada(error)) {
+        throw new ErrorDeUsuario(
+          `Se acabó "${producto.name}" mientras se agregaba al pedido. Revisá el stock antes de reintentar.`,
+        );
+      }
+      throw error;
+    }
+
+    await tx.inventoryMovement.create({
+      data: {
+        businessId,
+        productId: producto.id,
+        type: "VENTA",
+        quantity: -quantity,
+        stockAfter: despues.stockQty,
+        unitCostCop: producto.costCop ?? 0,
+        referenceId: referenceId ?? null,
+        notes: customNotes ?? `Venta de ${producto.name} x${quantity}`,
+      },
     });
   }
 
   for (const renglon of receta) {
     const insumo = renglon.inventoryItem;
     const descuentoTotal = renglon.quantityRequired * quantity;
-    const nuevoStock = insumo.stockCurrent - descuentoTotal;
 
-    await tx.inventoryItem.update({
-      where: { id: insumo.id },
-      data: { stockCurrent: { decrement: descuentoTotal } },
-    });
+    let despues: { stockCurrent: number };
+    try {
+      despues = await tx.inventoryItem.update({
+        where: permitirVentaSinStock
+          ? { id: insumo.id }
+          : { id: insumo.id, stockCurrent: { gte: descuentoTotal } },
+        data: { stockCurrent: { decrement: descuentoTotal } },
+        select: { stockCurrent: true },
+      });
+    } catch (error) {
+      if (esFilaNoEncontrada(error)) {
+        throw new ErrorDeUsuario(
+          `Se acabó "${insumo.name}" mientras se preparaba "${producto.name}". Revisá el inventario antes de reintentar.`,
+        );
+      }
+      throw error;
+    }
 
     await tx.inventoryMovement.create({
       data: {
@@ -332,13 +426,18 @@ export async function verificarYDescontarStockReceta(
         inventoryItemId: insumo.id,
         type: "VENTA",
         quantity: -descuentoTotal,
-        stockAfter: nuevoStock,
+        // El valor que devolvió el propio update, no una resta sobre la lectura
+        // vieja: con dos ventas simultáneas esa resta escribía un saldo que nunca
+        // existió, y el Kardex es justamente lo que se mira cuando no cuadra.
+        stockAfter: despues.stockCurrent,
         unitCostCop: insumo.costCop ?? 0,
         referenceId: referenceId ?? null,
         notes: customNotes ?? `Venta de ${producto.name} x${quantity}`,
       },
     });
   }
+
+  return { unitCostCop };
 }
 
 /**
@@ -365,20 +464,34 @@ export async function restaurarStockReceta(
   const { producto, receta } = resuelto;
 
   if (producto.trackStock) {
-    await tx.product.update({
+    const despues = await tx.product.update({
       where: { id: producto.id },
       data: { stockQty: { increment: quantity } },
+      select: { stockQty: true },
+    });
+
+    await tx.inventoryMovement.create({
+      data: {
+        businessId,
+        productId: producto.id,
+        type: "DEVOLUCION",
+        quantity,
+        stockAfter: despues.stockQty,
+        unitCostCop: producto.costCop ?? 0,
+        referenceId: referenceId ?? null,
+        notes: customNotes ?? `Devolución por anulación de ${producto.name} x${quantity}`,
+      },
     });
   }
 
   for (const renglon of receta) {
     const insumo = renglon.inventoryItem;
     const reintegroTotal = renglon.quantityRequired * quantity;
-    const nuevoStock = insumo.stockCurrent + reintegroTotal;
 
-    await tx.inventoryItem.update({
+    const despues = await tx.inventoryItem.update({
       where: { id: insumo.id },
       data: { stockCurrent: { increment: reintegroTotal } },
+      select: { stockCurrent: true },
     });
 
     await tx.inventoryMovement.create({
@@ -387,7 +500,7 @@ export async function restaurarStockReceta(
         inventoryItemId: insumo.id,
         type: "DEVOLUCION",
         quantity: reintegroTotal,
-        stockAfter: nuevoStock,
+        stockAfter: despues.stockCurrent,
         unitCostCop: insumo.costCop ?? 0,
         referenceId: referenceId ?? null,
         notes: customNotes ?? `Devolución por anulación de ${producto.name} x${quantity}`,
@@ -407,20 +520,21 @@ export async function ajustarStockCantidadReceta(
   cantidadAnterior: number,
   cantidadNueva: number,
   options?: StockOptions,
-) {
+): Promise<{ unitCostCop: number | null }> {
   const diferencia = cantidadNueva - cantidadAnterior;
-  if (diferencia === 0) return;
+  if (diferencia === 0) return { unitCostCop: null };
 
   if (diferencia > 0) {
-    await verificarYDescontarStockReceta(tx, businessId, productId, diferencia, {
+    return verificarYDescontarStockReceta(tx, businessId, productId, diferencia, {
       ...options,
       customNotes: options?.customNotes ?? `Aumento de cantidad en pedido x${diferencia}`,
     });
-  } else {
-    const reintegro = Math.abs(diferencia);
-    await restaurarStockReceta(tx, businessId, productId, reintegro, {
-      ...options,
-      customNotes: options?.customNotes ?? `Reducción de cantidad en pedido x${reintegro}`,
-    });
   }
+
+  const reintegro = Math.abs(diferencia);
+  await restaurarStockReceta(tx, businessId, productId, reintegro, {
+    ...options,
+    customNotes: options?.customNotes ?? `Reducción de cantidad en pedido x${reintegro}`,
+  });
+  return { unitCostCop: null };
 }

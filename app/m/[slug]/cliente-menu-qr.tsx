@@ -29,6 +29,7 @@ import { SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { acentoSirveComoTexto, mezclarHacia, textoSobre } from "@/lib/contraste";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
+import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,7 @@ type ClienteMenuQrProps = {
   };
   settings: {
     inventoryEnabled: boolean;
+    permitirVentaSinStock: boolean;
     qrMenuEnabled: boolean;
     qrMenuBgMode: string;
     qrMenuBgColor: string;
@@ -147,6 +149,14 @@ export function ClienteMenuQr({
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
+  /**
+   * "Se acabó la cerveza", dicho arriba de la barra del pedido.
+   *
+   * Las tarjetas ya se pintan agotadas, así que esto es el respaldo para el caso
+   * en que se acabe entre que cargó la carta y el comensal tocó: sin un lugar
+   * donde decirlo, el toque simplemente no hacía nada.
+   */
+  const [avisoStock, setAvisoStock] = useState<string | null>(null);
   const [pedidoConfirmado, setPedidoConfirmado] = useState<{
     orderId: string;
     code: number;
@@ -338,6 +348,17 @@ export function ClienteMenuQr({
       .filter((g) => g.productos.length > 0);
   }, [categorias, productosFiltrados]);
 
+  /**
+   * Cuántas unidades de un producto ya hay en el carrito, sumando todas sus
+   * combinaciones: dos menús del día con proteínas distintas son dos renglones
+   * pero descuentan del mismo stock.
+   */
+  const enCarritoDelProducto = (productId: string) =>
+    Object.values(carrito).reduce(
+      (acc, i) => (i.producto.id === productId ? acc + i.quantity : acc),
+      0,
+    );
+
   // Manejo de Carrito
   const agregarCombinacion = (
     producto: Producto,
@@ -345,6 +366,23 @@ export function ClienteMenuQr({
     quantity: number,
     notes: string,
   ) => {
+    // El menú QR no tenía ninguna guarda de stock: el comensal armaba el pedido
+    // entero y la negativa llegaba recién al confirmar, cuando ya había escrito
+    // su nombre, su teléfono y su dirección.
+    if (settings.inventoryEnabled && !settings.permitirVentaSinStock) {
+      const disp = calcularStockDisponibleProducto(producto, true);
+      if (disp !== null && enCarritoDelProducto(producto.id) + quantity > disp) {
+        setAvisoStock(
+          disp <= 0
+            ? `Se acabó ${producto.name}.`
+            : `Solo quedan ${disp} de ${producto.name} y ya los tenés en el pedido.`,
+        );
+        return;
+      }
+    }
+
+    setAvisoStock(null);
+
     const lineKey = claveDeLinea(
       producto.id,
       opciones.map((o) => o.id),
@@ -519,12 +557,24 @@ export function ClienteMenuQr({
                   const conModificadores = tieneModificadores(producto);
                   const foto = producto.imageUrl || placeholderUrl;
 
+                  // Lo que faltaba en esta pantalla: la carta traía el stock desde
+                  // el servidor y nadie lo miraba. `null` = el producto no se mide.
+                  const disponibles = calcularStockDisponibleProducto(
+                    producto,
+                    settings.inventoryEnabled,
+                  );
+                  const sinStock =
+                    disponibles !== null && disponibles <= 0 && !settings.permitirVentaSinStock;
+                  const quedanPocas =
+                    disponibles !== null && disponibles > 0 && disponibles <= 5;
+                  const sePuedePedir = producto.isAvailable && !sinStock;
+
                   return (
                     <Card
                       key={producto.id}
                       className={cn(
                         "bg-white/5 backdrop-blur-md border-white/10 text-[color:var(--qr-texto)] overflow-hidden transition-all duration-300 hover:border-[var(--qr-acento)]/60 hover:bg-white/[0.08] shadow-md hover:shadow-xl hover:scale-[1.01] rounded-2xl group",
-                        !producto.isAvailable && "opacity-50 grayscale",
+                        !sePuedePedir && "opacity-50 grayscale",
                       )}
                     >
                       <CardContent className="p-3.5 flex gap-3.5 items-center">
@@ -564,9 +614,14 @@ export function ClienteMenuQr({
                           <div className="flex items-center justify-between gap-2 pt-1.5">
                             <span className="numeral text-base font-black text-[color:var(--qr-texto)]">
                               {formatCop(producto.priceCop)}
+                              {quedanPocas && sePuedePedir && (
+                                <span className="text-rotulo ml-2 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 font-bold text-[color:var(--qr-texto-2)]">
+                                  quedan {disponibles}
+                                </span>
+                              )}
                             </span>
 
-                            {!producto.isAvailable ? (
+                            {!sePuedePedir ? (
                               <Badge variant="outline" className="border-destructive/50 text-destructive-soft text-xs font-bold">
                                 Agotado
                               </Badge>
@@ -1003,6 +1058,15 @@ export function ClienteMenuQr({
                 ───────────────────────────────────────────────────────────── */}
             {totalItems > 0 && (
               <div className="fixed bottom-0 inset-x-0 z-30 mx-auto max-w-md p-3">
+                {avisoStock && (
+                  <button
+                    type="button"
+                    onClick={() => setAvisoStock(null)}
+                    className="mb-2 w-full rounded-xl border border-white/20 bg-black/70 px-3 py-2 text-left text-sm font-semibold text-[color:var(--qr-texto)] backdrop-blur-md"
+                  >
+                    {avisoStock}
+                  </button>
+                )}
                 {/* Lo que lleva pedido, a la vista.
                     Antes esta barra decía cuántos y cuánto, pero no QUÉ: para
                     saber si ya había pedido la cerveza había que abrir el

@@ -131,13 +131,11 @@ export type ProductoTerminadoItem = {
   imageUrl: string | null;
   trackStock: boolean;
   stockQty: number;
+  stockMin: number;
+  /** Costo unitario promedio ponderado, neto de impuesto. */
+  costCop: number;
   isAvailable: boolean;
   category: { id: string; name: string };
-  recipeItems: Array<{
-    id: string;
-    quantityRequired: number;
-    inventoryItem: { id: string; name: string; unit: string; costCop: number; stockCurrent: number };
-  }>;
 };
 
 export function VistaInventario({
@@ -808,21 +806,20 @@ function ModalNuevaFactura({
       inventoryItemId: insumo.id,
     }));
 
-    const itemsProductos: ItemCatalogoCompra[] = finishedProducts.map((prod) => {
-      const insumoVinculado = prod.recipeItems?.[0]?.inventoryItem;
-      return {
-        id: prod.id,
-        key: `producto-${prod.id}`,
-        name: prod.name,
-        sku: prod.sku,
-        unit: insumoVinculado?.unit ?? "UNIDAD",
-        costCop: insumoVinculado?.costCop ?? 0,
-        stockCurrent: prod.stockQty,
-        tipo: "PRODUCTO",
-        productId: prod.id,
-        inventoryItemId: insumoVinculado?.id,
-      };
-    });
+    // Un producto de reventa se cuenta por unidades y su costo es propio: ya no hay
+    // insumo espejo del cual leerlos, y la línea de compra viaja con `productId`.
+    const itemsProductos: ItemCatalogoCompra[] = finishedProducts.map((prod) => ({
+      id: prod.id,
+      key: `producto-${prod.id}`,
+      name: prod.name,
+      sku: prod.sku,
+      unit: "UNIDAD",
+      costCop: prod.costCop,
+      stockCurrent: prod.stockQty,
+      tipo: "PRODUCTO",
+      productId: prod.id,
+      inventoryItemId: undefined,
+    }));
 
     return [...itemsInsumos, ...itemsProductos];
   }, [inventoryItems, finishedProducts]);
@@ -1645,9 +1642,15 @@ function CardProductoTerminado({
   const [stockInput, setStockInput] = useState(String(producto.stockQty));
   const [isPending, startTransition] = useTransition();
 
+  // El umbral es el mínimo que cargó el negocio, no un 5 escrito acá adentro: un
+  // bar que vende cinco cajas de cerveza por noche no tiene el mismo "poco" que
+  // uno que vende cinco botellas de whisky.
+  const minimo = producto.stockMin > 0 ? producto.stockMin : 5;
   const esSinStock = producto.stockQty <= 0;
-  const esBajoStock = producto.stockQty > 0 && producto.stockQty <= 5;
-  const costoCompra = producto.recipeItems[0]?.inventoryItem.costCop ?? 0;
+  const esBajoStock = producto.stockQty > 0 && producto.stockQty <= minimo;
+  // El costo vive en el producto. Antes salía de `recipeItems[0]`, que solo
+  // acertaba en el espejo 1:1 y daba cero en cualquier otro caso.
+  const costoCompra = producto.costCop;
   const gananciaCop = producto.priceCop - costoCompra;
 
   const handleSubmitStock = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1872,12 +1875,21 @@ function ModalNuevoProductoTerminado({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold">Stock Inicial Disponible (Unidades) *</label>
-            <Input name="stockQty" type="number" min="0" defaultValue="12" required className="text-xs font-bold" />
-            <p className="text-rotulo text-muted-foreground">
-              Unidades reales iniciales disponibles en refrigerador/bodega.
-            </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Stock Inicial (Unidades) *</label>
+              <Input name="stockQty" type="number" min="0" defaultValue="12" required className="text-xs font-bold" />
+              <p className="text-rotulo text-muted-foreground">
+                Unidades reales en refrigerador o bodega.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Mínimo de Reposición</label>
+              <Input name="stockMin" type="number" min="0" defaultValue="0" className="text-xs font-bold" />
+              <p className="text-rotulo text-muted-foreground">
+                Desde acá para abajo avisa que hay que reponer.
+              </p>
+            </div>
           </div>
 
           <Button type="submit" disabled={isPending} className="w-full bg-brand text-brand-foreground text-xs font-bold h-9">
@@ -1902,7 +1914,7 @@ function ModalEditarProductoTerminado({
 }) {
   const [isPending, startTransition] = useTransition();
 
-  const costoActual = producto.recipeItems[0]?.inventoryItem.costCop ?? 0;
+  const costoActual = producto.costCop;
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1967,9 +1979,15 @@ function ModalEditarProductoTerminado({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold">Stock Físico Disponible (Unidades) *</label>
-            <Input name="stockQty" type="number" min="0" defaultValue={producto.stockQty} required className="text-xs font-bold" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Stock Físico (Unidades) *</label>
+              <Input name="stockQty" type="number" min="0" defaultValue={producto.stockQty} required className="text-xs font-bold" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Mínimo de Reposición</label>
+              <Input name="stockMin" type="number" min="0" defaultValue={producto.stockMin} className="text-xs font-bold" />
+            </div>
           </div>
 
           <Button type="submit" disabled={isPending} className="w-full bg-brand text-brand-foreground text-xs font-bold h-9">

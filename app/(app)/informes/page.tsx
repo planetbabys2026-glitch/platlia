@@ -4,6 +4,7 @@ import { AppModule } from "@/generated/prisma/enums";
 import {
   getAlertasInventario,
   getAnulaciones,
+  getCostoYMargen,
   getPorMetodoDePago,
   getPorTarifa,
   getProductosMasVendidos,
@@ -54,8 +55,8 @@ export default async function InformesPage({
    * entrada del menú, y la sección viaja en la URL —igual que la jornada— así que
    * se puede enlazar y compartir.
    */
-  const seccion = ["productos", "anulaciones", "inventario"].includes(vista ?? "")
-    ? (vista as "productos" | "anulaciones" | "inventario")
+  const seccion = ["productos", "costos", "anulaciones", "inventario"].includes(vista ?? "")
+    ? (vista as "productos" | "costos" | "anulaciones" | "inventario")
     : "ventas";
 
   let dia: Date;
@@ -68,15 +69,17 @@ export default async function InformesPage({
   const anterior = new Date(dia.getTime() - DIA_MS);
   const hoy = currentBusinessDate(settings);
 
-  const [resumen, resumenAnterior, porMetodo, porTarifa, top, anulaciones, alertasStock] = await Promise.all([
-    getResumenDeJornada(ctx.business.id, dia),
-    getResumenDeJornada(ctx.business.id, anterior),
-    getPorMetodoDePago(ctx.business.id, dia),
-    getPorTarifa(ctx.business.id, dia),
-    getProductosMasVendidos(ctx.business.id, dia),
-    getAnulaciones(ctx.business.id, dia),
-    getAlertasInventario(ctx.business.id),
-  ]);
+  const [resumen, resumenAnterior, porMetodo, porTarifa, top, anulaciones, alertasStock, margen] =
+    await Promise.all([
+      getResumenDeJornada(ctx.business.id, dia),
+      getResumenDeJornada(ctx.business.id, anterior),
+      getPorMetodoDePago(ctx.business.id, dia),
+      getPorTarifa(ctx.business.id, dia),
+      getProductosMasVendidos(ctx.business.id, dia),
+      getAnulaciones(ctx.business.id, dia),
+      getAlertasInventario(ctx.business.id),
+      getCostoYMargen(ctx.business.id, dia),
+    ]);
 
   const variacion = variacionPorcentual(resumen.ventasCop, resumenAnterior.ventasCop);
   const ticket = promedioCop(resumen.ventasCop, resumen.pedidos);
@@ -254,6 +257,120 @@ export default async function InformesPage({
         </CardContent>
       </Card>
 
+      )}
+
+      {seccion === "costos" && !margen.inventarioActivo && (
+        <Card className="border-border/80 bg-card">
+          <CardContent className="space-y-2 pt-5">
+            <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+              Costos y margen
+            </h2>
+            {/* Con el inventario apagado no hay costos, y decir "margen 100%"
+                sería mentir por omisión: cada plato costó algo, solo que este
+                sistema no lo sabe. */}
+            <p className="text-muted-foreground text-sm">
+              El inventario no está activo, así que no hay costos cargados y no se puede calcular
+              la ganancia real. Activalo en{" "}
+              <Link href="/administracion/configuracion?vista=modulos" className="text-brand font-semibold">
+                Configuración → Módulos
+              </Link>{" "}
+              y cargá el costo de cada insumo y de cada producto de reventa.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {seccion === "costos" && margen.inventarioActivo && (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Indicador
+              titulo="VENTA NETA"
+              valor={formatCop(margen.ventaNetaCop)}
+              detalle="Base gravable, sin el impuesto que se entrega"
+            />
+            <Indicador titulo="COSTO DE VENTAS" valor={formatCop(margen.costoCop)} detalle="Insumos y mercadería consumidos" />
+            <Indicador
+              titulo="UTILIDAD BRUTA"
+              valor={formatCop(margen.utilidadCop)}
+              isPositive={margen.utilidadCop > 0}
+              detalle={margen.utilidadCop < 0 ? "Se vendió por debajo del costo" : undefined}
+            />
+            <Indicador
+              titulo="MARGEN"
+              valor={margen.margenPct === null ? "—" : `${margen.margenPct}%`}
+              detalle={margen.margenPct === null ? "Sin ventas en la jornada" : "De cada peso vendido"}
+            />
+          </div>
+
+          {margen.renglonesSinCosto > 0 && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning-soft">
+              <AlertTriangle className="size-4 shrink-0 text-warning mt-0.5" />
+              <span>
+                <strong className="text-foreground font-bold">
+                  {margen.renglonesSinCosto} de {margen.renglonesTotales} renglones
+                </strong>{" "}
+                se vendieron sin costo conocido, así que la utilidad de arriba está por encima de la
+                real. Suele ser porque el producto todavía no tiene costo cargado, o porque se vendió
+                antes de activar el inventario.
+              </span>
+            </div>
+          )}
+
+          <Card className="border-border/80 bg-card">
+            <CardContent className="space-y-4 pt-5">
+              <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+                <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                  Ganancia por producto
+                </h2>
+                <span className="font-mono text-rotulo text-muted-foreground">DE MAYOR A MENOR</span>
+              </div>
+
+              {margen.productos.length === 0 ? (
+                <Vacio />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[34rem]">
+                    <thead>
+                      <tr className="font-mono text-rotulo text-muted-foreground uppercase tracking-[0.14em]">
+                        <th className="text-left font-normal pb-2">Producto</th>
+                        <th className="text-right font-normal pb-2">Unid.</th>
+                        <th className="text-right font-normal pb-2">Venta neta</th>
+                        <th className="text-right font-normal pb-2">Costo</th>
+                        <th className="text-right font-normal pb-2">Utilidad</th>
+                        <th className="text-right font-normal pb-2">Margen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-border/60 divide-y divide-dashed">
+                      {margen.productos.map((p) => (
+                        <tr key={p.productId}>
+                          <td className="py-2.5 pr-3 font-medium text-foreground">
+                            {p.nombre}
+                            {p.renglonesSinCosto > 0 && (
+                              <span className="text-rotulo text-warning-soft ml-2 font-mono">SIN COSTO</span>
+                            )}
+                          </td>
+                          <td className="numeral py-2.5 text-right text-muted-foreground">{p.unidades}</td>
+                          <td className="numeral py-2.5 text-right text-foreground">{formatCop(p.ventaNetaCop)}</td>
+                          <td className="numeral py-2.5 text-right text-muted-foreground">{formatCop(p.costoCop)}</td>
+                          <td
+                            className={`numeral py-2.5 text-right font-bold ${
+                              p.utilidadCop < 0 ? "text-destructive-soft" : "text-foreground"
+                            }`}
+                          >
+                            {formatCop(p.utilidadCop)}
+                          </td>
+                          <td className="numeral py-2.5 text-right text-muted-foreground">
+                            {p.margenPct === null ? "—" : `${p.margenPct}%`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {seccion === "anulaciones" && (anulaciones.renglones.length > 0 || anulaciones.pedidosAnulados > 0) && (

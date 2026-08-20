@@ -47,9 +47,17 @@ export async function getPurchaseInvoices(businessId: string) {
   });
 }
 
+/**
+ * Los productos de reventa: los que se compran y se venden tal cual.
+ *
+ * Filtra por `hasRecipe: false` —el complemento exacto de `getProductRecipes`—
+ * así que un plato con escandallo no aparece acá pidiendo un stock propio que no
+ * le corresponde. El costo sale de `Product.costCop` y no de `recipeItems[0]`,
+ * que solo acertaba en el caso 1:1 y daba cero en cualquier otro.
+ */
 export async function getFinishedProducts(businessId: string) {
   return tenantDb(businessId).product.findMany({
-    where: { deletedAt: null, active: true },
+    where: { deletedAt: null, active: true, hasRecipe: false },
     orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
     select: {
       id: true,
@@ -59,16 +67,11 @@ export async function getFinishedProducts(businessId: string) {
       imageUrl: true,
       trackStock: true,
       stockQty: true,
+      stockMin: true,
+      costCop: true,
       isAvailable: true,
       category: {
         select: { id: true, name: true },
-      },
-      recipeItems: {
-        select: {
-          id: true,
-          quantityRequired: true,
-          inventoryItem: { select: { id: true, name: true, unit: true, costCop: true, stockCurrent: true } },
-        },
       },
     },
   });
@@ -154,19 +157,35 @@ export async function getProductRecipes(businessId: string) {
   return { products, inventoryItems };
 }
 
+/**
+ * Cuánto vale lo que hay en el local y cuánto está por debajo del mínimo.
+ *
+ * Suma los **dos** regímenes: los insumos de receta y los productos de reventa
+ * con stock directo. Antes contaba solo los primeros, y como el alta de una
+ * bebida fabricaba un insumo espejo que nunca se descontaba, la valorización
+ * subía con cada compra y no bajaba nunca con las ventas.
+ */
 export async function getInventorySummary(businessId: string) {
-  const items = await tenantDb(businessId).inventoryItem.findMany({
-    where: { deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      unit: true,
-      stockCurrent: true,
-      stockMin: true,
-      costCop: true,
-    },
-  });
+  const db = tenantDb(businessId);
+
+  const [items, productos] = await Promise.all([
+    db.inventoryItem.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        unit: true,
+        stockCurrent: true,
+        stockMin: true,
+        costCop: true,
+      },
+    }),
+    db.product.findMany({
+      where: { deletedAt: null, active: true, trackStock: true, hasRecipe: false },
+      select: { id: true, stockQty: true, stockMin: true, costCop: true },
+    }),
+  ]);
 
   let valorTotalCOP = 0;
   let bajoStockCount = 0;
@@ -178,8 +197,15 @@ export async function getInventorySummary(businessId: string) {
     }
   }
 
+  for (const prod of productos) {
+    valorTotalCOP += Math.max(0, prod.stockQty) * prod.costCop;
+    if (prod.stockQty <= prod.stockMin) {
+      bajoStockCount++;
+    }
+  }
+
   return {
-    totalItems: items.length,
+    totalItems: items.length + productos.length,
     valorTotalCOP,
     bajoStockCount,
     items,

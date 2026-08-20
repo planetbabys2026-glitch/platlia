@@ -92,6 +92,12 @@ export default async function MenuQrPublicPage({
         imageUrl: true,
         isAvailable: true,
         categoryId: true,
+        // Los tres campos del régimen de stock directo. Sin ellos el menú QR no
+        // podía decir que una cerveza se acabó: el comensal armaba el pedido
+        // entero y recién al confirmar le contestaba que no había.
+        trackStock: true,
+        stockQty: true,
+        recipeNeedsModifiers: true,
         hasRecipe: true,
         recipeItems: {
           select: {
@@ -166,6 +172,7 @@ export default async function MenuQrPublicPage({
       business={business}
       settings={{
         inventoryEnabled: settings.inventoryEnabled,
+        permitirVentaSinStock: settings.permitirVentaSinStock,
         qrMenuEnabled: settings.qrMenuEnabled,
         qrMenuBgMode: settings.qrMenuBgMode,
         qrMenuBgColor: settings.qrMenuBgColor,

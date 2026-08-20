@@ -33,6 +33,7 @@ type PanelConfiguracionProps = {
     deliveryEnabled: boolean;
     deliveryFeeCop: number;
     inventoryEnabled: boolean;
+    permitirVentaSinStock: boolean;
     recipesEnabled: boolean;
     turneroMediaMode: string;
     turneroImages: string;
@@ -161,6 +162,7 @@ export function PanelConfiguracion({
               deliveryEnabled={settings.deliveryEnabled}
               deliveryFeeCop={settings.deliveryFeeCop}
               inventoryEnabled={settings.inventoryEnabled}
+              permitirVentaSinStock={settings.permitirVentaSinStock}
               recipesEnabled={settings.recipesEnabled}
             />
           </CardContent>

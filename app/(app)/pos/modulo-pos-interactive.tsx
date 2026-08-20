@@ -171,6 +171,7 @@ type ModuloPosInteractiveProps = {
   pedidoInicial?: PosPedidoDetalle | null;
   settings: {
     inventoryEnabled: boolean;
+    permitirVentaSinStock: boolean;
     deliveryEnabled: boolean;
     deliveryFeeCop?: number;
     requireOpenCashSession: boolean;
@@ -453,7 +454,7 @@ export function ModuloPosInteractive({
     const disp = calcularStockDisponibleProducto(producto, settings.inventoryEnabled);
     const cantActual = enCarritoDelProducto(producto.id);
 
-    if (disp !== null && cantActual + quantity > disp) {
+    if (!settings.permitirVentaSinStock && disp !== null && cantActual + quantity > disp) {
       setErrorGlobal(
         disp <= 0
           ? `Stock insuficiente de insumos para preparar "${producto.name}".`
@@ -516,7 +517,7 @@ export function ModuloPosInteractive({
         const disp = calcularStockDisponibleProducto(prodObj, settings.inventoryEnabled);
         const cantActual = enCarritoDelProducto(item.productId);
 
-        if (disp !== null && cantActual + delta > disp) {
+        if (!settings.permitirVentaSinStock && disp !== null && cantActual + delta > disp) {
           setErrorGlobal(
             `Stock máximo alcanzado para "${prodObj.name}" (${disp} porciones preparables con los insumos actuales).`
           );
@@ -579,7 +580,11 @@ export function ModuloPosInteractive({
       return;
     }
 
-    const errorStock = auditarStockCarritoRecetas(carritoParaAuditar(), carta, settings.inventoryEnabled);
+    const errorStock = auditarStockCarritoRecetas(
+      carritoParaAuditar(),
+      carta,
+      settings.inventoryEnabled && !settings.permitirVentaSinStock,
+    );
     if (errorStock) {
       setErrorGlobal(errorStock);
       return;
@@ -1451,7 +1456,7 @@ export function ModuloPosInteractive({
                               const errorStock = auditarStockCarritoRecetas(
                                 carritoParaAuditar(),
                                 carta,
-                                settings.inventoryEnabled,
+                                settings.inventoryEnabled && !settings.permitirVentaSinStock,
                               );
                               if (errorStock) {
                                 setErrorGlobal(errorStock);

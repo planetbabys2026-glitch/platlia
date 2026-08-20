@@ -363,6 +363,13 @@ model BusinessSettings {
   inventoryEnabled Boolean @default(false)
   recipesEnabled   Boolean @default(false)
 
+  /// Deja cobrar aunque el inventario diga que no queda, y el stock queda en
+  /// negativo. Apagado de fábrica: lo normal es que no se pueda vender lo que no
+  /// hay. Encendido es para el negocio que prefiere no frenar la caja y cuadrar
+  /// en el arqueo, y el negativo es justamente lo que ahí se tiene que ver: un
+  /// stock que se queda en cero esconde el faltante.
+  permitirVentaSinStock Boolean @default(false)
+
   /// Configuración del Menú Digital QR
   qrMenuEnabled        Boolean @default(true)
   qrMenuBgMode         String  @default("SOLID")
@@ -401,7 +408,7 @@ model BusinessSettings {
   responsibilities           String? @default("R-99-PN")
 
   /// Permisos de vista personalizados por rol (JSON serializado)
-  rolePermissions            String  @default("{}")
+  rolePermissions String @default("{}")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -714,10 +721,10 @@ model Printer {
   host String
   port Int    @default(9100)
 
-  width    ReceiptWidth @default(MM80)
+  width     ReceiptWidth @default(MM80)
   /// Manda el pulso que abre el cajón de dinero al terminar de imprimir.
-  abreCajon Boolean     @default(false)
-  active    Boolean     @default(true)
+  abreCajon Boolean      @default(false)
+  active    Boolean      @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -814,7 +821,6 @@ model PrintAgent {
 
   /**
    * Null hasta que el programa se empareja.
-   *
    * El equipo se registra desde el panel ANTES de que exista el programa: en ese
    * momento hay un código de emparejamiento y todavía no un token.
    */
@@ -822,15 +828,14 @@ model PrintAgent {
 
   /**
    * El código que canjea el programa por su token, hasheado y con vencimiento.
-   *
    * Existe para que nadie tenga que copiar un token de 43 caracteres: viaja en el
    * NOMBRE del archivo que se descarga, así que el programa lo lee de sí mismo y
    * se configura solo. Se usa una vez y se vence, que es lo que permite que sea
    * corto.
    */
-  codigoHash      String?   @unique
-  codigoExpiraEn  DateTime? @db.Timestamptz(3)
-  emparejadoEn    DateTime? @db.Timestamptz(3)
+  codigoHash     String?   @unique
+  codigoExpiraEn DateTime? @db.Timestamptz(3)
+  emparejadoEn   DateTime? @db.Timestamptz(3)
 
   ultimoContactoEn DateTime? @db.Timestamptz(3)
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
@@ -898,10 +903,10 @@ model TramoDePrecios {
 /// Se guardan las compras una por una en vez de un contador: así queda el
 /// historial de qué se compró, cuándo y a cuánto.
 model CompraDocumentosDian {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   cantidad Int
   /// Lo que nos costó el paquete. Es dato de plataforma, no se le cobra a nadie.
-  costoCop Int    @default(0)
+  costoCop Int     @default(0)
   nota     String?
 
   compradoEn DateTime @default(now()) @db.Timestamptz(3)
@@ -963,13 +968,31 @@ model Product {
 
   /// Inventario opcional: la mayoría de los bares no lo lleva y no hay que
   /// obligarlos. Cuando trackStock es false, stockQty se ignora.
+  ///
+  /// Es el régimen de stock DIRECTO: una cerveza que se compra y se revende tal
+  /// cual. Es excluyente con `hasRecipe` —lo que se mide por sus insumos no se
+  /// mide además por unidades— porque contar la misma cerveza en los dos lados
+  /// es descontarla dos veces o ninguna, según cuál de los dos mire quien lee.
   trackStock Boolean @default(false)
   stockQty   Int     @default(0)
+
+  /// Costo unitario de compra y mínimo de reposición del régimen directo. Son
+  /// los equivalentes de `InventoryItem.costCop` y `stockMin` para el producto
+  /// que NO tiene receta: sin receta no hay insumo del cual sacarlos, y sin
+  /// costo no hay margen que informar.
+  ///
+  /// `costCop` es promedio ponderado y NETO de impuesto: se recalcula en cada
+  /// factura de compra con `costoPromedioPonderado`, y el margen se compara
+  /// contra la base gravable del renglón vendido, no contra el precio de carta.
+  costCop  Int @default(0)
+  stockMin Int @default(0)
 
   /// Lleva escandallo: descuenta insumos al venderse y aparece en
   /// Inventario → Recetas. Sin esto marcado no tiene receta y no descuenta nada,
   /// por más que le queden `recipeItems` de antes. Es una declaración del dueño,
   /// no una consecuencia de que la tabla tenga filas.
+  ///
+  /// Excluyente con `trackStock`: ver el comentario de arriba.
   hasRecipe Boolean @default(false)
 
   /// La receta depende de lo que se elija al vender: no se descuenta nada hasta
@@ -988,6 +1011,7 @@ model Product {
   orderItems     OrderItem[]
   recipeItems    ProductRecipeItem[]
   modifierGroups ProductModifierGroup[]
+  movements      InventoryMovement[]
 
   @@unique([businessId, sku])
   @@index([businessId, categoryId, sortOrder])
@@ -1132,7 +1156,7 @@ model Order {
   /// pedidos del negocio lo tenían puesto y no servía para filtrar nada —por eso
   /// las consultas de domicilios necesitan el OR de `type`/`channel`—. Los
   /// valores válidos vivían copiados a mano en tres archivos.
-  deliveryStatus DeliveryStatus?
+  deliveryStatus  DeliveryStatus?
 
   /// Cuándo lo aceptó el módulo de domicilios, cuándo salió a la calle y cuándo
   /// llegó. Sin estas marcas no hay forma de saber cuánto tarda un reparto.
@@ -1140,7 +1164,7 @@ model Order {
   dispatchedAt        DateTime? @db.Timestamptz(3)
   deliveredAt         DateTime? @db.Timestamptz(3)
 
-  notes           String?
+  notes String?
 
   /// Facturación Electrónica DIAN (Factus)
   ///
@@ -1173,7 +1197,7 @@ model Order {
   tipCop         Int @default(0)
   deliveryFeeCop Int @default(0)
   totalCop       Int @default(0)
-  paidCop     Int @default(0)
+  paidCop        Int @default(0)
 
   openedById String
   openedBy   User    @relation("OrderOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
@@ -1246,6 +1270,18 @@ model OrderItem {
   lineSubtotalCop Int
   lineTaxCop      Int
   lineTotalCop    Int
+
+  /// Lo que costó preparar este renglón, congelado al venderlo por el mismo
+  /// motivo que la tarifa: un informe de marzo tiene que seguir dando lo mismo
+  /// en diciembre aunque el proveedor haya subido tres veces. Sale de
+  /// `Product.costCop` en el régimen directo y de la suma de la receta efectiva
+  /// —base más los insumos de los modificadores elegidos— en el otro.
+  ///
+  /// NULL no es cero: es "no se conocía el costo" (inventario apagado, producto
+  /// sin costear). La diferencia importa porque con cero el informe anunciaría
+  /// margen del 100%, que es peor que no informar nada.
+  unitCostCopSnapshot Int?
+  lineCostCop         Int?
 
   status OrderItemStatus @default(PENDIENTE)
   notes  String?
@@ -1522,13 +1558,22 @@ model ProductRecipeItem {
 }
 
 /// Historial Kardex de entradas, compras, ventas y ajustes de stock.
+///
+/// Cubre los dos regímenes, y por eso las dos referencias son opcionales: una
+/// fila apunta a un `InventoryItem` (insumo de receta) **o** a un `Product`
+/// (reventa con stock directo), nunca a los dos. Antes solo existía la primera,
+/// así que todo el movimiento de `Product.stockQty` —compras, ventas, ajustes—
+/// pasaba sin dejar ningún rastro que revisar cuando el conteo no cuadra.
 model InventoryMovement {
   id         String   @id @default(cuid())
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  inventoryItemId String
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   type        String
   quantity    Int
@@ -1540,6 +1585,10 @@ model InventoryMovement {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([businessId, inventoryItemId, createdAt])
+  @@index([businessId, productId, createdAt])
+  /// Para barrer una jornada entera sin filtrar por un item: el índice de arriba
+  /// arranca por `inventoryItemId` y no sirve para eso.
+  @@index([businessId, createdAt])
 }
 
 /// Grupo de modificadores reutilizable: "Proteína", "Término de la carne",

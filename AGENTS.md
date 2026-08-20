@@ -544,6 +544,99 @@ ancho fijo separa la palabra de su número como si fueran dos datos.
 **No poner `font-display` y `.numeral` en el mismo elemento**: las dos declaran la familia y se
 pisan. Ese bug estaba en la tarjeta de KPI.
 
+## Inventario: dos regímenes de stock, y son excluyentes
+
+Un producto se mide de UNA de dos maneras, nunca de las dos:
+
+| Régimen | Cuándo | Dónde vive el stock | Dónde vive el costo |
+|---|---|---|---|
+| **Directo** | reventa: una cerveza que se compra y se vende igual | `Product.trackStock` + `stockQty` | `Product.costCop` + `stockMin` |
+| **Por receta** | lo que se prepara: un menú del día | `InventoryItem.stockCurrent` de cada insumo | la suma de la receta efectiva |
+
+Lo elige el dueño marcando **"lleva receta"** al crear o editar el artículo, y por eso
+`hasRecipe` es una declaración y no una consecuencia de que la tabla de recetas tenga filas
+(`componerRecetaEfectiva` lo exige explícitamente).
+
+**Contar la misma cerveza en los dos lados es el bug que originó todo esto.**
+`crearProductoTerminado` creaba el `Product` con `stockQty` **y** un `InventoryItem` espejo unido
+por una receta 1:1, pero sin marcar `hasRecipe`: la venta descontaba solo el primero y la compra
+subía los dos, así que el insumo espejo trepaba para siempre y la valorización del inventario
+inflaba el patrimonio del negocio sin techo. Hoy el alta de reventa crea un `Product` y nada más;
+`guardarReceta` apaga `trackStock` y `guardarProducto` de la carta también, para que la
+exclusividad no dependa de que alguien se acuerde.
+
+**Comprar un insumo sube ese insumo y nada más.** `crearFacturaCompra` tenía una rama que, si la
+línea no traía producto, buscaba *cualquier* plato con ese insumo en su receta y le subía el
+`stockQty`: una bolsa de arroz fabricaba bandejas paisas de la nada. Una línea de factura apunta a
+un insumo **o** a un producto directo; si vienen los dos ids manda el insumo.
+
+**El costo es promedio ponderado y neto de impuesto** (`lib/inventory/costo.ts`, puro y con tests).
+Antes cada factura pisaba `costCop` con el costo de la última compra: diez cervezas caras un martes
+reevaluaban las veinte baratas que ya estaban en la nevera. Dos casos no son promedio y están
+tratados aparte: sin costo previo se adopta el entrante entero —un cero casi nunca significa "me lo
+regalaron", significa "nadie le puso precio"— y con el stock en cero o negativo no hay nada que
+ponderar del lado viejo.
+
+**Activar el inventario NO borra el stock.** La acción corría dos `updateMany` que ponían en cero
+todos los insumos y todos los productos la primera vez que se prendía la casilla: quien cargaba su
+bodega y después activaba el módulo la perdía entera. Poner en cero es una decisión del dueño, con
+su pantalla de ajuste, no el efecto secundario de una casilla.
+
+Las siete acciones de inventario exigen `inventoryEnabled` a mano. **No se usa
+`modulo: AppModule.INVENTARIO`**: ese enum se enciende entero al crear la empresa y no se apaga
+nunca, así que gatear por él no protege de nada. El interruptor real es el de Configuración.
+
+### El descuento es atómico, y la pantalla lo dice antes del toque
+
+**La guarda va en el `where` del update, no en un `if` antes.** Leer el stock y después
+decrementarlo deja pasar a los dos meseros que agregan la última cerveza desde sus dos tablets, y el
+stock termina en −1. Es el mismo `update` condicionado con el que se reclama un trabajo de impresión
+o se evita la doble emisión ante la DIAN; Prisma contesta `P2025` cuando no encuentra la fila y eso
+se traduce a `ErrorDeUsuario`. El chequeo previo sigue existiendo, pero por el **mensaje**: "no hay
+pechuga" es accionable, "stock insuficiente" manda a alguien a revisar la bodega entera.
+
+De paso, `stockAfter` del Kardex sale del valor que devuelve ese update y no de una resta sobre la
+lectura vieja, que con dos ventas simultáneas escribía un saldo que nunca existió.
+
+**El stock directo ahora también deja Kardex.** `InventoryMovement` tiene `productId` y su
+`inventoryItemId` pasó a ser opcional: hasta acá todo el movimiento de `stockQty` —compras, ventas,
+ajustes— pasaba sin dejar rastro, así que cuando el conteo físico no cuadraba no había nada que
+revisar.
+
+**Las cuatro puertas de venta descuentan, pero solo el POS lo mostraba.** El salón
+(`app/(app)/pedido/[id]/carta.tsx`) recibía `stockQty`, `hasRecipe` y `recipeItems` desde `getCarta`
+y miraba únicamente `isAvailable`: el mesero veía la tarjeta tocable, la tocaba, y el error le
+llegaba parado en la mesa. El menú QR no tenía **ninguna** noción de stock, y su consulta ni
+siquiera traía `trackStock`/`stockQty`. Las tres pantallas usan ahora
+`calcularStockDisponibleProducto`, que devuelve `null` para lo que no se mide —distinto de cero—.
+
+**`BusinessSettings.permitirVentaSinStock`** (apagado de fábrica) deja cobrar igual y el stock queda
+**negativo**. El negativo es el punto: es lo que muestra el faltante en el arqueo, y clavarlo en
+cero lo escondería.
+
+**El QR rechaza, no descarta.** `crearPedidoClienteQR` hacía `continue` sobre un producto agotado:
+el comensal tocaba confirmar, el pedido entraba sin ese renglón y nadie le decía nada —ni a él ni a
+la cocina—, así que la primera noticia era la cuenta con un plato menos del que había pedido.
+
+### La ganancia sale del costo congelado, no de la receta de hoy
+
+`OrderItem.unitCostCopSnapshot` y `lineCostCop` se escriben al vender, por el mismo motivo que
+`taxRateBpSnapshot`: reconstruir el costo cruzando el renglón con la receta ACTUAL haría que el
+informe de marzo cambiara cada vez que un proveedor sube un precio en diciembre. El descuento de
+stock corre **antes** del `orderItem.create` en los cuatro caminos, y de ahí sale el costo — hacerlo
+después costaría un `UPDATE` extra por cada producto de cada pedido.
+
+**`null` no es cero.** Significa "no se conocía el costo" (inventario apagado, producto sin costear)
+y es lo que permite a `/informes?vista=costos` decir *"12 de 45 renglones sin costo"* en vez de
+anunciar un margen del 100%. Con el inventario apagado la sección no existe en el menú y la pantalla
+lo dice, en vez de celebrar como hace la vista de alertas.
+
+**El margen se compara contra `lineSubtotalCop`, la base gravable, no contra `lineTotalCop`.** El
+impuesto se cobra para entregarlo: contarlo como ingreso propio infla el margen del negocio entero.
+Por eso también el costo de compra se guarda neto (`PurchaseInvoice.includesTax` ya desagrega la
+base por línea): base contra base. `margenPorcentual` en `lib/money.ts` devuelve `null` sin ventas,
+con la misma convención que `variacionPorcentual`.
+
 ### Un domicilio pasa por domicilios antes que por la cocina
 
 `Order.deliveryStatus` es el enum `DeliveryStatus` y es **nullable**: lo que no es

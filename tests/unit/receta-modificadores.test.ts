@@ -291,12 +291,14 @@ describe("verificarYDescontarStockReceta con modificadores", () => {
     });
 
     expect(tx.inventoryItem.update).toHaveBeenCalledWith({
-      where: { id: "arroz" },
+      where: { id: "arroz", stockCurrent: { gte: 200 } },
       data: { stockCurrent: { decrement: 200 } },
+      select: { stockCurrent: true },
     });
     expect(tx.inventoryItem.update).toHaveBeenCalledWith({
-      where: { id: "res" },
+      where: { id: "res", stockCurrent: { gte: 300 } },
       data: { stockCurrent: { decrement: 300 } },
+      select: { stockCurrent: true },
     });
     // La pechuga no se toca: no se eligió pollo.
     expect(tx.inventoryItem.update).not.toHaveBeenCalledWith(
@@ -372,8 +374,9 @@ describe("verificarYDescontarStockReceta con modificadores", () => {
 
     expect(tx.inventoryItem.update).toHaveBeenCalledTimes(1);
     expect(tx.inventoryItem.update).toHaveBeenCalledWith({
-      where: { id: "arroz" },
+      where: { id: "arroz", stockCurrent: { gte: 150 } },
       data: { stockCurrent: { decrement: 150 } },
+      select: { stockCurrent: true },
     });
   });
 

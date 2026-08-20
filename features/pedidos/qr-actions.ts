@@ -215,7 +215,21 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           },
         });
 
-        if (!producto) continue;
+        // Un producto que ya no está se RECHAZA, no se descarta. Acá había un
+        // `continue`: el comensal tocaba confirmar, el pedido entraba sin ese
+        // renglón y nadie le decía nada —ni a él ni a la cocina—, así que la
+        // primera noticia era la cuenta con un plato menos del que había pedido.
+        if (!producto) {
+          const nombre = await tx.product.findFirst({
+            where: { id: itemInput.productId },
+            select: { name: true },
+          });
+          throw new ErrorDeUsuario(
+            nombre
+              ? `Se acabó ${nombre.name}. Quitalo del pedido para poder confirmarlo.`
+              : "Uno de los productos del pedido ya no está disponible. Revisá el carrito.",
+          );
+        }
 
         const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
           tx,
@@ -232,6 +246,21 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           taxRateBp: producto.taxRate.rateBp,
           taxIncluded: settings.pricesIncludeTax,
         });
+
+        // Antes del create: de acá sale el costo que el renglón congela.
+        const { unitCostCop } = await verificarYDescontarStockReceta(
+          tx,
+          business.id,
+          producto.id,
+          itemInput.quantity,
+          {
+            referenceId: order.id,
+            inventoryEnabled: settings.inventoryEnabled,
+            permitirVentaSinStock: settings.permitirVentaSinStock,
+            customNotes: `Pedido Menú QR x${itemInput.quantity}`,
+            modifierOptionIds: opcionIds,
+          },
+        );
 
         await tx.orderItem.create({
           data: {
@@ -266,17 +295,12 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
              * en que el comensal tocaba "enviar".
              */
             sentToKitchenAt: input.type === "DOMICILIO" ? null : new Date(),
+            unitCostCopSnapshot: unitCostCop,
+            lineCostCop: unitCostCop === null ? null : unitCostCop * itemInput.quantity,
             modifiers: {
               create: snapshots.map((s) => ({ businessId: business.id, ...s })),
             },
           },
-        });
-
-        await verificarYDescontarStockReceta(tx, business.id, producto.id, itemInput.quantity, {
-          referenceId: order.id,
-          inventoryEnabled: settings.inventoryEnabled,
-          customNotes: `Pedido Menú QR x${itemInput.quantity}`,
-          modifierOptionIds: opcionIds,
         });
       }
 

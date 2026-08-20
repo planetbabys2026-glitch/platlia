@@ -69,6 +69,12 @@ type Contexto = {
   usaDomicilios: boolean;
   puedeVerInventario: boolean;
   usaRecetas?: boolean;
+  /**
+   * El negocio lleva inventario. Distinto de `puedeVerInventario`, que además
+   * mira el rol: la sección de costos de Informes la ve cualquiera que tenga
+   * permiso de Informes, pero solo existe si hay costos que informar.
+   */
+  usaInventario?: boolean;
   /** Solo quien puede pagar ve la licencia. */
   puedeFacturar?: boolean;
   esPropietario?: boolean;
@@ -117,6 +123,7 @@ export function construirNavegacion({
   usaDomicilios,
   puedeVerInventario,
   usaRecetas = false,
+  usaInventario = false,
   puedeFacturar,
   esPropietario,
   role,
@@ -201,6 +208,9 @@ export function construirNavegacion({
             secciones: [
               { titulo: "Ventas del día", vista: "" },
               { titulo: "Productos más vendidos", vista: "productos" },
+              // Sin inventario no hay costos, y una sección que solo puede decir
+              // "no hay datos" es una promesa que el producto no cumple.
+              ...(usaInventario ? [{ titulo: "Costos y margen", vista: "costos" }] : []),
               { titulo: "Anulaciones", vista: "anulaciones" },
               { titulo: "Alertas de inventario", vista: "inventario" },
             ],

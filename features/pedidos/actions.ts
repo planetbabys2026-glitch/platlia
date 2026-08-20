@@ -295,6 +295,22 @@ export const agregarItem = defineAction({
         taxIncluded: settings.pricesIncludeTax,
       });
 
+      // El descuento va ANTES de escribir el renglón porque de acá sale el costo
+      // que el renglón congela. Hacerlo después obligaría a un UPDATE extra por
+      // cada producto de cada pedido para volver a escribir lo mismo.
+      const { unitCostCop } = await verificarYDescontarStockReceta(
+        tx,
+        ctx.business.id,
+        producto.id,
+        input.quantity,
+        {
+          referenceId: pedido.id,
+          inventoryEnabled: settings.inventoryEnabled,
+          permitirVentaSinStock: settings.permitirVentaSinStock,
+          modifierOptionIds: opcionIds,
+        },
+      );
+
       await tx.orderItem.create({
         data: {
           businessId: ctx.business.id,
@@ -311,6 +327,8 @@ export const agregarItem = defineAction({
           lineSubtotalCop: linea.lineSubtotalCop,
           lineTaxCop: linea.lineTaxCop,
           lineTotalCop: linea.lineTotalCop,
+          unitCostCopSnapshot: unitCostCop,
+          lineCostCop: unitCostCop === null ? null : unitCostCop * input.quantity,
           notes: input.notes ?? null,
           createdById: ctx.user.id,
           sentToKitchenAt: null,
@@ -320,12 +338,6 @@ export const agregarItem = defineAction({
             create: snapshots.map((s) => ({ businessId: ctx.business.id, ...s })),
           },
         },
-      });
-
-      await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, input.quantity, {
-        referenceId: pedido.id,
-        inventoryEnabled: settings.inventoryEnabled,
-        modifierOptionIds: opcionIds,
       });
 
       await recalcularTotales(tx, pedido.id);
@@ -363,7 +375,8 @@ export const cambiarCantidad = defineAction({
           sentToKitchenAt: true,
           productId: true,
           businessId: true,
-          product: { select: { trackStock: true } },
+          unitCostCopSnapshot: true,
+          product: { select: { trackStock: true, name: true, active: true, isAvailable: true } },
           order: { select: { status: true } },
         },
       });
@@ -381,6 +394,16 @@ export const cambiarCantidad = defineAction({
       if (item.status !== "PENDIENTE" || item.order.status === "CUENTA_PEDIDA") {
         if (input.quantity > item.quantity) {
           const delta = input.quantity - item.quantity;
+
+          // Este es el único camino que crea un renglón CLONANDO los snapshots de
+          // otro, así que era también el único donde nadie volvía a mirar el
+          // producto: se podían seguir sumando unidades de algo archivado o
+          // marcado como agotado media hora antes.
+          if (!item.product.active) throw new ErrorDeUsuario("Ese producto ya no existe.");
+          if (!item.product.isAvailable) {
+            throw new ErrorDeUsuario(`${item.product.name} está marcado como agotado.`);
+          }
+
           const lineaDelta = computeTaxLine({
             unitPriceCop: item.unitPriceCop,
             quantity: delta,
@@ -401,6 +424,25 @@ export const cambiarCantidad = defineAction({
             },
           });
 
+          const { unitCostCop } = await ajustarStockCantidadReceta(
+            tx,
+            item.businessId,
+            item.productId,
+            0,
+            delta,
+            {
+              referenceId: item.orderId,
+              inventoryEnabled: settings.inventoryEnabled,
+              permitirVentaSinStock: settings.permitirVentaSinStock,
+              modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
+            },
+          );
+
+          // El costo del tramo nuevo se mide ahora y no se hereda: la adición se
+          // prepara con los insumos de hoy, que pueden costar otra cosa. Si el
+          // inventario no supo decirlo, cae al del renglón original.
+          const costoUnitario = unitCostCop ?? item.unitCostCopSnapshot;
+
           await tx.orderItem.create({
             data: {
               businessId: item.businessId,
@@ -417,6 +459,8 @@ export const cambiarCantidad = defineAction({
               lineSubtotalCop: lineaDelta.lineSubtotalCop,
               lineTaxCop: lineaDelta.lineTaxCop,
               lineTotalCop: lineaDelta.lineTotalCop,
+              unitCostCopSnapshot: costoUnitario,
+              lineCostCop: costoUnitario === null ? null : costoUnitario * delta,
               notes: item.notes,
               createdById: ctx.user.id,
               sentToKitchenAt: null,
@@ -433,19 +477,6 @@ export const cambiarCantidad = defineAction({
               },
             },
           });
-
-          await ajustarStockCantidadReceta(
-            tx,
-            item.businessId,
-            item.productId,
-            0,
-            delta,
-            {
-              referenceId: item.orderId,
-              inventoryEnabled: settings.inventoryEnabled,
-              modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
-            },
-          );
 
           await recalcularTotales(tx, item.orderId);
           return item.orderId;
@@ -468,6 +499,10 @@ export const cambiarCantidad = defineAction({
           lineSubtotalCop: linea.lineSubtotalCop,
           lineTaxCop: linea.lineTaxCop,
           lineTotalCop: linea.lineTotalCop,
+          // El costo unitario congelado no se toca —es el del momento en que se
+          // agregó—, pero el de la línea sigue a la cantidad.
+          lineCostCop:
+            item.unitCostCopSnapshot === null ? null : item.unitCostCopSnapshot * input.quantity,
         },
       });
 
@@ -480,6 +515,7 @@ export const cambiarCantidad = defineAction({
         {
           referenceId: item.orderId,
           inventoryEnabled: settings.inventoryEnabled,
+          permitirVentaSinStock: settings.permitirVentaSinStock,
           // Los mismos modificadores con los que se descontó. Sin esto, subir de
           // 1 a 2 un plato con carne descuenta el arroz de la receta base y no la
           // carne, y el inventario se va desviando renglón a renglón.
@@ -1539,7 +1575,7 @@ export const procesarVentaPosCompleta = defineAction({
                 .filter((o) => o !== undefined),
             })),
             [{ products: productos }],
-            settings.inventoryEnabled,
+            settings.inventoryEnabled && !settings.permitirVentaSinStock,
           );
           if (problema) throw new ErrorDeUsuario(problema);
         }
@@ -1581,6 +1617,22 @@ export const procesarVentaPosCompleta = defineAction({
             taxIncluded: settings.pricesIncludeTax,
           });
 
+          // El descuento va antes de escribir el renglón: de ahí sale el costo
+          // que se congela, y hacerlo después costaría un UPDATE extra por cada
+          // producto de cada venta.
+          const { unitCostCop } = await verificarYDescontarStockReceta(
+            tx,
+            ctx.business.id,
+            producto.id,
+            itemInput.quantity,
+            {
+              referenceId: pedido.id,
+              inventoryEnabled: settings.inventoryEnabled,
+              permitirVentaSinStock: settings.permitirVentaSinStock,
+              modifierOptionIds: opcionIds,
+            },
+          );
+
           await tx.orderItem.create({
             data: {
               businessId: ctx.business.id,
@@ -1597,6 +1649,8 @@ export const procesarVentaPosCompleta = defineAction({
               lineSubtotalCop: linea.lineSubtotalCop,
               lineTaxCop: linea.lineTaxCop,
               lineTotalCop: linea.lineTotalCop,
+              unitCostCopSnapshot: unitCostCop,
+              lineCostCop: unitCostCop === null ? null : unitCostCop * itemInput.quantity,
               notes: itemInput.notes ?? null,
               createdById: ctx.user.id,
               sentToKitchenAt: debeEnviarACocina ? ahora : null,
@@ -1604,12 +1658,6 @@ export const procesarVentaPosCompleta = defineAction({
                 create: snapshots.map((s) => ({ businessId: ctx.business.id, ...s })),
               },
             },
-          });
-
-          await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, itemInput.quantity, {
-            referenceId: pedido.id,
-            inventoryEnabled: settings.inventoryEnabled,
-            modifierOptionIds: opcionIds,
           });
         }
 

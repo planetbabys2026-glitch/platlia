@@ -283,12 +283,14 @@ export function FormularioModulos({
   deliveryFeeCop = 0,
   inventoryEnabled,
   recipesEnabled,
+  permitirVentaSinStock,
 }: {
   mesasHabilitado: boolean;
   deliveryEnabled: boolean;
   deliveryFeeCop?: number;
   inventoryEnabled: boolean;
   recipesEnabled: boolean;
+  permitirVentaSinStock: boolean;
 }) {
   const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
   const [invChecked, setInvChecked] = useState(inventoryEnabled);
@@ -364,12 +366,25 @@ export function FormularioModulos({
             <AlertTriangle className="size-4 shrink-0 text-warning mt-0.5" />
             <div className="space-y-0.5">
               <strong className="font-bold text-foreground block">
-                ⚠️ Reinicio de stock al activar inventario
+                Hacé un conteo antes de empezar
               </strong>
               <span>
-                Al guardar con el inventario activado, todos los stocks (insumos y productos) se establecerán en <strong>0</strong> para que puedas registrar tu inventario inicial real y evitar saldos negativos por ventas anteriores.
+                Activar el inventario no toca lo que ya tengas cargado. Andá a Inventario y
+                registrá las cantidades reales de bodega: de ahí en adelante cada venta descuenta
+                sola, así que si el punto de partida está mal, todo lo que siga también.
               </span>
             </div>
+          </div>
+        )}
+
+        {invChecked && (
+          <div className="pl-7">
+            <Casilla
+              name="permitirVentaSinStock"
+              label="Permitir vender sin stock"
+              defaultChecked={permitirVentaSinStock}
+              ayuda="Apagado, no se puede vender lo que el inventario dice que no hay. Encendido, la caja no se frena y el stock queda en negativo, que es lo que después muestra el faltante en el arqueo."
+            />
           </div>
         )}
       </div>

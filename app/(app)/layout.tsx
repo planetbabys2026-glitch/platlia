@@ -93,6 +93,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       puedeFacturar={puedeFacturar}
       esPropietario={esPropietario}
       usaRecetas={usaRecetas}
+      usaInventario={usaInventario}
       cocinaInicial={cocinaInicial}
       domiciliosInicial={domiciliosInicial}
       cajaInicial={cajaInicial}
