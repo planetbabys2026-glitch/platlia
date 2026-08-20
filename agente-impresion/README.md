@@ -49,6 +49,22 @@ Si el navegador le cambió el nombre al archivo, o si se bajó desde otra
 computadora, la página local muestra un campo para escribir el código a mano. Es el
 plan B, no el camino.
 
+## Un solo agente por computadora
+
+Cada doble clic abría un proceso más: el 9777 quedaba tomado, el nuevo se corría al 9778
+y andaba igual. En Windows no hay ventana que delate a los anteriores, así que se termina
+mirando la página del primero —vieja y sin configurar— mientras el último escucha en otro
+puerto. Parece que el programa "no toma" el `agente.json` y en realidad se está mirando
+otro proceso.
+
+Ahora el que se abre le pide el puesto al que esté en el 9777 y espera a que lo suelte.
+**Gana el último**, que es lo que espera quien acaba de bajar una versión nueva.
+
+En **Linux y macOS**, además, el proceso que abre una persona es un *instalador*: deja la
+configuración, arranca el servicio del sistema y se retira. El que atiende es systemd o
+launchd, así que cerrar la terminal no apaga nada. En **Windows** no hay a quién pasarle
+la posta, así que ahí el proceso es el agente y se queda corriendo sin ventana.
+
 ## La página local acepta las dos cosas
 
 `http://127.0.0.1:9777` es la pantalla del programa sin configurar, y **el campo

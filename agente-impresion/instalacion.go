@@ -218,8 +218,8 @@ func instalarse() error {
 	if runtime.GOOS == "windows" {
 		_ = os.Rename(destino, destino+".viejo")
 	}
-	if runtime.GOOS == "linux" && !soyElServicio() {
-		_ = exec.Command("systemctl", "--user", "stop", unidadLinux).Run()
+	if hayGestorDeServicios() && !soyElServicio() {
+		detenerServicio()
 	}
 	if err := os.WriteFile(destino, datos, 0o755); err != nil {
 		return err
@@ -274,23 +274,74 @@ func arranqueWindows(ruta string) error {
 
 const unidadLinux = "platlia-impresion.service"
 
-// soyElServicio dice si a ESTE proceso lo lanzó systemd como la unidad del agente.
+const etiquetaMac = "com.platlia.impresion"
+
+// hayGestorDeServicios dice si el sistema tiene quién mantenga el programa vivo.
 //
-// Hace falta antes de pararla o reiniciarla: si la unidad somos nosotros, esas dos
-// cosas son matarnos a nosotros mismos a mitad de la instalación.
+// Linux y macOS sí (systemd y launchd): ahí este proceso es un instalador que se
+// retira y deja al servicio atendiendo. Windows no tiene nada equivalente sin
+// permisos de administrador —lo que hay es una entrada en `HKCU\…\Run`, que solo
+// dispara al iniciar sesión—, así que ahí el proceso ES el agente y se queda.
+func hayGestorDeServicios() bool {
+	return runtime.GOOS == "linux" || runtime.GOOS == "darwin"
+}
+
+// soyElServicio dice si a ESTE proceso lo lanzó el sistema como el servicio.
 //
-// No sirve mirar `INVOCATION_ID`. systemd la pone en el servicio, pero **los hijos
-// la heredan**, y en un escritorio moderno la propia terminal cuelga de una unidad
-// (`app-gnome-…service`): todo lo que alguien abre a mano la trae puesta, así que
-// da "sí" siempre. Lo único que no miente es el PID.
+// Hace falta antes de pararlo o reiniciarlo: si el servicio somos nosotros, esas
+// dos cosas son matarnos a nosotros mismos a mitad de la instalación.
+//
+// En Linux no sirve mirar `INVOCATION_ID`: systemd la pone en el servicio, pero
+// **los hijos la heredan**, y en un escritorio moderno la propia terminal cuelga de
+// una unidad (`app-gnome-…service`), así que todo lo que alguien abre a mano la trae
+// puesta y la guarda da "sí" siempre. Lo único que no miente es el PID.
 func soyElServicio() bool {
-	salida, err := exec.Command(
-		"systemctl", "--user", "show", unidadLinux, "-p", "MainPID", "--value",
-	).Output()
-	if err != nil {
-		return false
+	switch runtime.GOOS {
+	case "linux":
+		salida, err := exec.Command(
+			"systemctl", "--user", "show", unidadLinux, "-p", "MainPID", "--value",
+		).Output()
+		if err != nil {
+			return false
+		}
+		return strings.TrimSpace(string(salida)) == strconv.Itoa(os.Getpid())
+	case "darwin":
+		// launchd adopta a los suyos: un proceso que él lanzó cuelga de él, no de
+		// la terminal desde la que alguien hizo doble clic.
+		return os.Getppid() == 1
 	}
-	return strings.TrimSpace(string(salida)) == strconv.Itoa(os.Getpid())
+	return false
+}
+
+// detenerServicio apaga la copia que esté manejando el sistema.
+//
+// Se llama antes de reemplazar el binario —ningún sistema deja escribir sobre un
+// ejecutable en ejecución— y antes de tomar el puerto. En Linux además evita que
+// `Restart=always` lo reviva a los cinco segundos: un `stop` explícito es una
+// decisión, y systemd no la deshace.
+func detenerServicio() {
+	switch runtime.GOOS {
+	case "linux":
+		_ = exec.Command("systemctl", "--user", "stop", unidadLinux).Run()
+	case "darwin":
+		_ = exec.Command("launchctl", "stop", etiquetaMac).Run()
+	}
+}
+
+// arrancarServicio levanta la copia instalada y devuelve si lo logró.
+func arrancarServicio() error {
+	switch runtime.GOOS {
+	case "linux":
+		return exec.Command("systemctl", "--user", "restart", unidadLinux).Run()
+	case "darwin":
+		if err := exec.Command(
+			"launchctl", "kickstart", "-k", fmt.Sprintf("gui/%d/%s", os.Getuid(), etiquetaMac),
+		).Run(); err == nil {
+			return nil
+		}
+		return exec.Command("launchctl", "start", etiquetaMac).Run()
+	}
+	return errors.New("este sistema no tiene gestor de servicios")
 }
 
 func arranqueLinux(ruta string) error {
@@ -322,18 +373,11 @@ WantedBy=default.target
 		return err
 	}
 
-	// `enable` solo lo deja anotado para el próximo arranque, y en Linux eso deja un
-	// hueco que no existe en los otros dos sistemas: acá el programa se abre desde
-	// una terminal, así que al cerrarla se muere y el local deja de imprimir hasta
-	// que alguien reinicie la máquina. En Windows el proceso ya quedó suelto y sin
-	// ventana, y en macOS `launchctl load -w` arranca la copia instalada en el acto.
-	//
-	// `restart` y no `start` para que una reinstalación levante el binario nuevo:
-	// con `start`, una unidad que ya estaba corriendo la versión vieja se quedaba
-	// con ella y la actualización no se aplicaba hasta el próximo reinicio.
-	if !soyElServicio() {
-		_ = exec.Command("systemctl", "--user", "restart", unidadLinux).Run()
-	}
+	// Acá solo se DEJA ANOTADO. Arrancarlo es cosa de `main`, y recién después de
+	// soltar el puerto de la página local: si se lo arranca desde acá, el servicio
+	// se encuentra el 9777 tomado por nosotros mismos, se corre al 9778 y la
+	// dirección que abrimos en el navegador termina siendo la del proceso que está
+	// por irse.
 	return nil
 }
 

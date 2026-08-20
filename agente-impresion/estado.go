@@ -18,8 +18,12 @@ package main
 import (
 	"fmt"
 	"html"
+	"io"
+	"log"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,6 +31,14 @@ import (
 // El puerto es fijo para que la dirección se pueda anotar y volver a visitar.
 // Si está ocupado se prueba el siguiente.
 const puertoBase = 9777
+
+// Cómo un agente reconoce a otro agente en el puerto, para no confundirlo con
+// cualquier otro programa que lo haya tomado.
+const (
+	rutaMarca      = "/soy-el-agente"
+	marcaDelAgente = "platlia-impresion"
+	cabeceraRelevo = "X-Platlia-Agente"
+)
 
 // vistaEstado son los datos sueltos, sin el candado: es lo que se copia para
 // pintar la página. Copiar la estructura con el mutex adentro es un error que
@@ -95,7 +107,7 @@ func (e *estado) instantanea() vistaEstado {
 func levantarPagina(
 	alEmparejar func(codigo string) error,
 	alConfigurar func(archivo string) error,
-) (string, error) {
+) (string, func() error, error) {
 	var escucha net.Listener
 	var err error
 	puerto := puertoBase
@@ -108,10 +120,34 @@ func levantarPagina(
 		puerto++
 	}
 	if escucha == nil {
-		return "", err
+		return "", nil, err
 	}
 
 	mux := http.NewServeMux()
+
+	mux.HandleFunc(rutaMarca, func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, marcaDelAgente)
+	})
+
+	// El relevo: otro agente que se acaba de abrir nos pide el puesto.
+	//
+	// Solo por POST y con una cabecera nuestra. Sin eso, cualquier página abierta
+	// en esa misma computadora podría apagarle la impresión al local con un
+	// formulario escondido; una cabecera propia obliga al navegador a pedir permiso
+	// primero (preflight), y ese permiso no lo damos.
+	mux.HandleFunc("/relevo", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get(cabeceraRelevo) != "relevo" {
+			http.Error(w, "no", http.StatusForbidden)
+			return
+		}
+		fmt.Fprint(w, "ok")
+		// Después de contestar: si nos fuéramos antes, el que releva no sabría si
+		// llegó a pedirlo.
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			os.Exit(0)
+		}()
+	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -134,7 +170,10 @@ func levantarPagina(
 		_ = http.Serve(escucha, mux)
 	}()
 
-	return fmt.Sprintf("http://127.0.0.1:%d", puerto), nil
+	// Se devuelve cómo cerrarla: cuando este proceso le pasa la posta al servicio
+	// del sistema tiene que soltar el puerto ANTES de arrancarlo, o el servicio se
+	// encuentra el 9777 tomado y se va al 9778.
+	return fmt.Sprintf("http://127.0.0.1:%d", puerto), escucha.Close, nil
 }
 
 // responder corre lo que se pidió y pinta el resultado. Los dos formularios hacen
@@ -151,6 +190,56 @@ func responder(w http.ResponseWriter, r *http.Request, hacer func() error) {
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// pedirRelevo le pide el puesto al agente que ya esté atendiendo el puerto base.
+//
+// Sin esto, cada doble clic sumaba un proceso: el puerto base quedaba tomado, el
+// programa se corría al siguiente y seguía andando igual. En Windows no hay ventana
+// que delate a los anteriores y en Linux quedan sueltos en el fondo, así que la
+// persona termina mirando la página del PRIMERO —vieja y sin configurar— mientras el
+// que acaba de abrir escucha en otro puerto y nadie entiende nada.
+//
+// Gana el último que se abrió, que es lo que espera quien hace doble clic: si acaba
+// de bajar una versión nueva, es esa la que tiene que quedar.
+func pedirRelevo() {
+	base := fmt.Sprintf("http://127.0.0.1:%d", puertoBase)
+	cliente := &http.Client{Timeout: 2 * time.Second}
+
+	res, err := cliente.Get(base + rutaMarca)
+	if err != nil {
+		return // No hay nadie escuchando.
+	}
+	marca, _ := io.ReadAll(io.LimitReader(res.Body, 64))
+	res.Body.Close()
+	if strings.TrimSpace(string(marca)) != marcaDelAgente {
+		// El puerto lo tiene otro programa cualquiera. No es asunto nuestro: nos
+		// correremos al siguiente, como siempre.
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, base+"/relevo", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set(cabeceraRelevo, "relevo")
+	if res, err := cliente.Do(req); err == nil {
+		res.Body.Close()
+	}
+
+	// Esperar a que suelte de verdad: pedirlo y no esperar es correrse al puerto
+	// siguiente igual, que es justo lo que veníamos a evitar.
+	for i := 0; i < 25; i++ {
+		conexion, err := net.DialTimeout(
+			"tcp", fmt.Sprintf("127.0.0.1:%d", puertoBase), 200*time.Millisecond,
+		)
+		if err != nil {
+			return
+		}
+		conexion.Close()
+		time.Sleep(200 * time.Millisecond)
+	}
+	log.Printf("aviso: el agente anterior no soltó el puerto %d", puertoBase)
 }
 
 const estilos = `

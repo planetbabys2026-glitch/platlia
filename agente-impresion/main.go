@@ -111,17 +111,73 @@ func main() {
 	ctx, cancelar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancelar()
 
+	elServicio := soyElServicio()
+
+	// **No puede haber dos.** Antes cada doble clic dejaba un proceso más: el puerto
+	// base quedaba tomado, el programa se corría al siguiente y andaba igual. En
+	// Windows no hay ventana que delate a los anteriores y en Linux quedan sueltos
+	// en el fondo, así que la persona mira la página del PRIMERO —vieja y sin
+	// configurar, con la pantalla de la versión que tuviera— mientras el que acaba
+	// de abrir escucha en otro puerto. Pasó exactamente así.
+	if !elServicio {
+		detenerServicio()
+		pedirRelevo()
+	}
+
 	// La página local se levanta SIEMPRE y primero: si algo sale mal —el código
 	// venció, no hay internet— tiene que haber una pantalla que lo diga. Sin esto,
 	// un fallo de emparejamiento sería un programa que se abre y se cierra sin
 	// dejar rastro.
-	direccion, err := levantarPagina(emparejarDesdeLaPagina, configurarDesdeLaPagina)
+	direccion, cerrarPagina, err := levantarPagina(emparejarDesdeLaPagina, configurarDesdeLaPagina)
 	if err != nil {
 		log.Fatalf("no pude abrir la página local: %v", err)
 	}
 	log.Printf("página local en %s", direccion)
 
 	primeraVez := arrancar()
+
+	// Donde hay gestor de servicios (Linux, macOS) este proceso es un INSTALADOR,
+	// no el agente: deja todo configurado, arranca al servicio y se retira. Si se
+	// quedara, en Linux moriría con la terminal desde la que se abrió y el local
+	// dejaría de imprimir hasta el próximo reinicio; y quedarían dos procesos
+	// peleándose el puerto. En Windows no hay a quién pasarle la posta —lo que hay
+	// es una entrada en `Run`, que solo dispara al iniciar sesión— así que ahí este
+	// proceso sí es el agente y se queda.
+	if !elServicio && hayGestorDeServicios() && configActual().Token != "" {
+		// Soltar el puerto ANTES: si no, el servicio se encuentra el 9777 tomado,
+		// se corre al 9778 y la dirección que abrimos no sería la suya.
+		_ = cerrarPagina()
+		if err := arrancarServicio(); err != nil {
+			log.Printf("aviso: no pude dejarlo como servicio (%v). Sigo yo.", err)
+			if direccion, cerrarPagina, err = levantarPagina(
+				emparejarDesdeLaPagina, configurarDesdeLaPagina,
+			); err != nil {
+				log.Fatalf("y tampoco pude recuperar la página local: %v", err)
+			}
+		} else {
+			log.Printf("listo: de acá en más atiende el servicio del sistema")
+			abrirNavegador(fmt.Sprintf("http://127.0.0.1:%d", puertoBase))
+			return
+		}
+	}
+	// La configuración también puede llegar DESPUÉS, cuando alguien pega el archivo
+	// en la página. La posta se pasa igual: este proceso sigue siendo el instalador,
+	// y si se quedara pasaría lo mismo que arriba —muere con la terminal—.
+	if !elServicio && hayGestorDeServicios() && configActual().Token == "" {
+		go func() {
+			<-listo
+			// Un respiro para que el navegador alcance a recibir la redirección
+			// antes de que se caiga el servidor que se la está contestando.
+			time.Sleep(1500 * time.Millisecond)
+			_ = cerrarPagina()
+			if err := arrancarServicio(); err != nil {
+				log.Printf("aviso: no pude dejarlo como servicio (%v). Sigo yo, sin página.", err)
+				return
+			}
+			log.Printf("configurado desde la página: de acá en más atiende el servicio")
+			cancelar()
+		}()
+	}
 
 	// Solo se abre el navegador cuando hay algo que mostrar: la primera vez, o
 	// cuando falta emparejar. En los arranques de todos los días el programa

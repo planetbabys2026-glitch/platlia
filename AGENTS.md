@@ -922,6 +922,28 @@ permisos de administrador** (`HKCU\…\Run`, `systemd --user`, LaunchAgent: pedi
 elevación en la caja de un bar es la forma más rápida de que alguien cancele el cuadro
 y nunca más lo abra) y abre el navegador en su página de estado.
 
+**No puede haber dos agentes, y gana el último que se abrió.** Cada doble clic dejaba
+un proceso más: el puerto base quedaba tomado, el programa se corría al 9778 y andaba
+igual. En Windows no hay ventana que delate a los anteriores y en Linux quedan sueltos
+en el fondo, así que la persona termina mirando la página del PRIMERO —vieja, sin
+configurar y con la pantalla de la versión que tuviera— mientras el que acaba de abrir
+escucha en otro puerto. Pasó tal cual, y se diagnostica mal: parece que el programa
+"no toma" el `agente.json` cuando en realidad se está mirando otro proceso.
+`pedirRelevo()` le pide el puesto al que esté en el 9777, pero **solo si contesta la
+marca** en `/soy-el-agente`: si el puerto lo tiene cualquier otro programa, no es asunto
+nuestro. El relevo va por POST y con una cabecera propia, que es lo que obliga a un
+navegador a pedir permiso antes (preflight): sin eso, cualquier página abierta en esa
+computadora podría apagarle la impresión al local con un formulario escondido.
+
+**Donde hay gestor de servicios, el doble clic es un INSTALADOR que se retira.** En Linux
+y macOS el proceso que abre una persona deja todo configurado, arranca el servicio y
+**sale**; el que atiende de ahí en más es systemd o launchd. Si se quedara, en Linux
+moriría con la terminal —y quedarían dos procesos peleándose el puerto—. En Windows no
+hay a quién pasarle la posta (`HKCU\…\Run` solo dispara al iniciar sesión), así que ahí
+el proceso sí es el agente y se queda. Por eso `registrarArranque` **solo anota** y nunca
+arranca: el servicio se levanta desde `main`, y recién **después de soltar el puerto**,
+o se encuentra el 9777 tomado por el proceso que está por irse.
+
 **La página local acepta el archivo, no solo el código.** Pedía un código de 12
 caracteres mientras el panel entregaba un `agente.json`: quien llegaba a esa pantalla
 tenía lo que hacía falta en la mano y ninguna casilla donde ponerlo. Ahora el campo
