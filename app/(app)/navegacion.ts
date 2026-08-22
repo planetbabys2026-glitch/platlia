@@ -69,6 +69,12 @@ type Contexto = {
   usaDomicilios: boolean;
   puedeVerInventario: boolean;
   usaRecetas?: boolean;
+  /**
+   * El negocio lleva inventario. Distinto de `puedeVerInventario`, que además
+   * mira el rol: la sección de costos de Informes la ve cualquiera que tenga
+   * permiso de Informes, pero solo existe si hay costos que informar.
+   */
+  usaInventario?: boolean;
   /** Solo quien puede pagar ve la licencia. */
   puedeFacturar?: boolean;
   esPropietario?: boolean;
@@ -96,19 +102,19 @@ export function hrefDeSeccion(item: ItemNav, seccion: SeccionNav): string {
  * Depende de `usaMesas`, que es configuración del negocio y no dato del momento:
  * el enlace sigue siendo estable, que es lo que importaba.
  */
-export function seccionesDeCaja(usaMesas: boolean, cuentasPorCobrar?: number): SeccionNav[] {
+export function seccionesDeCaja(cobraCuentas: boolean, cuentasPorCobrar?: number): SeccionNav[] {
   return [
-    ...(usaMesas
+    ...(cobraCuentas
       ? [{ titulo: "Cobrar cuentas", vista: "", insignia: cuentasPorCobrar }]
       : []),
-    { titulo: "Cuentas cobradas", vista: usaMesas ? "cobradas" : "" },
+    { titulo: "Cuentas cobradas", vista: cobraCuentas ? "cobradas" : "" },
     { titulo: "Movimientos y cierre", vista: "movimientos" },
   ];
 }
 
 /** La vista de entrada de `/caja`, la que va sin `?vista=`. */
-export function vistaInicialDeCaja(usaMesas: boolean): "cobros" | "cobradas" {
-  return usaMesas ? "cobros" : "cobradas";
+export function vistaInicialDeCaja(cobraCuentas: boolean): "cobros" | "cobradas" {
+  return cobraCuentas ? "cobros" : "cobradas";
 }
 
 export function construirNavegacion({
@@ -117,6 +123,7 @@ export function construirNavegacion({
   usaDomicilios,
   puedeVerInventario,
   usaRecetas = false,
+  usaInventario = false,
   puedeFacturar,
   esPropietario,
   role,
@@ -159,9 +166,11 @@ export function construirNavegacion({
             titulo: "Caja",
             href: "/caja",
             icono: CreditCard,
-            insignia: usaMesas ? cuentasPorCobrar : undefined,
+            // Un negocio de puro domicilio también cobra cuentas: atarlo a mesas
+            // le dejaba la caja vacía justo a quien más la necesita.
+            insignia: usaMesas || usaDomicilios ? cuentasPorCobrar : undefined,
             enBarraInferior: true,
-            secciones: seccionesDeCaja(usaMesas, cuentasPorCobrar),
+            secciones: seccionesDeCaja(usaMesas || usaDomicilios, cuentasPorCobrar),
           },
         ]
       : []),
@@ -199,6 +208,9 @@ export function construirNavegacion({
             secciones: [
               { titulo: "Ventas del día", vista: "" },
               { titulo: "Productos más vendidos", vista: "productos" },
+              // Sin inventario no hay costos, y una sección que solo puede decir
+              // "no hay datos" es una promesa que el producto no cumple.
+              ...(usaInventario ? [{ titulo: "Costos y margen", vista: "costos" }] : []),
               { titulo: "Anulaciones", vista: "anulaciones" },
               { titulo: "Alertas de inventario", vista: "inventario" },
             ],
@@ -219,6 +231,7 @@ export function construirNavegacion({
           { titulo: "Turnero TV", vista: "turnero" },
           { titulo: "Menú digital QR", vista: "qr" },
           { titulo: "Operación y recibos", vista: "operacion" },
+    { titulo: "Impresoras", vista: "impresoras" },
           { titulo: "Facturación DIAN", vista: "factus" },
           ...(puedeFacturar ? [{ titulo: "Licencia y sucursales", vista: "licencia" }] : []),
         ],

@@ -7,6 +7,7 @@ import { formatDateTimeInTimeZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { vistaInicialDeCaja } from "../navegacion";
 import { CuentasPorCobrar } from "./cuentas-por-cobrar";
+import { InterruptorDomiciliosQr } from "@/features/domicilios/components/interruptor-qr";
 import { AbrirCaja, CerrarCaja, Movimiento } from "./formularios";
 import { VentasCobradas } from "./ventas-cobradas";
 
@@ -58,7 +59,9 @@ type PanelCajaProps = {
   puedeFacturar: boolean;
   /** Si el negocio sugiere propina al cobrar, y con qué tarifa. */
   propina: { habilitada: boolean; rateBp: number };
-  usaMesas: boolean;
+  cobraCuentas: boolean;
+  /** Null si el negocio no reparte: ahí no hay nada que abrir ni que cerrar. */
+  domiciliosQr: { abierto: boolean } | null;
   timeZone: string;
 };
 
@@ -75,7 +78,8 @@ export function PanelCaja({
   esHoy,
   puedeFacturar,
   propina,
-  usaMesas,
+  cobraCuentas,
+  domiciliosQr,
   timeZone,
 }: PanelCajaProps) {
   /**
@@ -83,7 +87,8 @@ export function PanelCaja({
    * tira de píldoras que había acá se fue: el menú es el único navegador, como
    * en Informes.
    *
-   * La vista de entrada depende de `usaMesas` —un negocio de mostrador no tiene
+   * La vista de entrada depende de si el negocio cobra cuentas —un negocio de
+   * mostrador no tiene
    * cuentas de mesa que cobrar— y sale del mismo lugar que la lista del menú,
    * para que no puedan divergir. Es configuración del negocio, no dato del
    * momento: el enlace sigue llevando siempre al mismo lado.
@@ -91,7 +96,7 @@ export function PanelCaja({
   const [tabActiva] = useVistaEnUrl(
     "vista",
     ["cobros", "cobradas", "movimientos"] as const,
-    vistaInicialDeCaja(usaMesas),
+    vistaInicialDeCaja(cobraCuentas),
   );
 
   return (
@@ -99,7 +104,7 @@ export function PanelCaja({
       {/* ─────────────────────────────────────────────────────────────
           MÓDULO 1: COBRO DE CUENTAS (SALÓN / MESAS)
           ───────────────────────────────────────────────────────────── */}
-      {tabActiva === "cobros" && usaMesas && (
+      {tabActiva === "cobros" && cobraCuentas && (
         <CuentasPorCobrar
           cuentas={cuentas}
           puedeFacturar={puedeFacturar}
@@ -127,6 +132,18 @@ export function PanelCaja({
           ───────────────────────────────────────────────────────────── */}
       {tabActiva === "movimientos" && (
         <div className="space-y-6">
+          {/* El interruptor de los domicilios por QR, en la misma pantalla donde
+              se abre y se cierra el turno.
+              Va acá arriba y fuera del `if` de la caja a propósito: se enciende al
+              abrir —cuando todavía no hay turno— y se apaga al cerrar. Si viviera
+              adentro de una de las dos ramas, faltaría justo en el momento en que
+              hace falta. */}
+          {domiciliosQr && (
+            <div className="mx-auto max-w-md doble:max-w-none">
+              <InterruptorDomiciliosQr abierto={domiciliosQr.abierto} />
+            </div>
+          )}
+
           {!caja ? (
             /* Sin turno abierto */
             <div className="mx-auto max-w-md space-y-6">

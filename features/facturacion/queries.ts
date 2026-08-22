@@ -28,7 +28,6 @@ export async function getFacturacion(businessId: string) {
       select: {
         id: true,
         status: true,
-        priceCop: true,
         trialEndsAt: true,
         currentPeriodStart: true,
         currentPeriodEnd: true,

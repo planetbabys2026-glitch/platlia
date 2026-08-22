@@ -29,6 +29,7 @@ import { SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { acentoSirveComoTexto, mezclarHacia, textoSobre } from "@/lib/contraste";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
+import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,7 @@ type ClienteMenuQrProps = {
   };
   settings: {
     inventoryEnabled: boolean;
+    permitirVentaSinStock: boolean;
     qrMenuEnabled: boolean;
     qrMenuBgMode: string;
     qrMenuBgColor: string;
@@ -87,7 +89,12 @@ type ClienteMenuQrProps = {
     qrMenuAccent: string;
     turnNumberMax: number;
     deliveryEnabled?: boolean;
+<<<<<<< HEAD
     deliveryPaused?: boolean;
+=======
+    /** Si el local está recibiendo domicilios AHORA. Lo mueve el cajero. */
+    qrDeliveryEnabled?: boolean;
+>>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     deliveryFeeCop?: number;
     /** Si el negocio sugiere propina, y con qué tarifa. */
     tipSuggestionEnabled: boolean;
@@ -155,6 +162,14 @@ export function ClienteMenuQr({
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
+  /**
+   * "Se acabó la cerveza", dicho arriba de la barra del pedido.
+   *
+   * Las tarjetas ya se pintan agotadas, así que esto es el respaldo para el caso
+   * en que se acabe entre que cargó la carta y el comensal tocó: sin un lugar
+   * donde decirlo, el toque simplemente no hacía nada.
+   */
+  const [avisoStock, setAvisoStock] = useState<string | null>(null);
   const [pedidoConfirmado, setPedidoConfirmado] = useState<{
     orderId: string;
     code: number;
@@ -207,7 +222,12 @@ export function ClienteMenuQr({
   useEffect(() => {
     if (!pedidoActivoTrack?.id) return;
 
-    const eventSource = new EventSource("/api/domicilios/stream");
+    // Contra la ruta pública del pedido: `/api/domicilios/stream` exige sesión y
+    // licencia, así que a un comensal le contestaba 401 y el rastreo solo avanzaba
+    // con el botón de refrescar.
+    const eventSource = new EventSource(
+      `/api/qr/pedido/${encodeURIComponent(pedidoActivoTrack.id)}/stream`,
+    );
     eventSource.onmessage = async () => {
       // Por id: el pedido de mesa no tiene teléfono, y el número de pedido dejó
       // de servir para consultar porque se adivinaba probando 1, 2, 3…
@@ -251,6 +271,15 @@ export function ClienteMenuQr({
   // Antes esto miraba la etiqueta de la URL, así que `?mesa=lo+que+sea` abría el
   // flujo de mesa sin ninguna mesa detrás.
   const esMesa = Boolean(tableIdParam);
+
+  /**
+   * El local no está recibiendo domicilios en este momento.
+   *
+   * Solo afecta a quien NO está sentado en una mesa: alguien adentro puede pedir
+   * igual, porque para estar ahí el local tuvo que abrir.
+   */
+  const domiciliosCerrados = !esMesa && settings.qrDeliveryEnabled === false;
+
   const logo = settings.qrMenuLogoUrl || business.logoUrl;
   const titulo = settings.qrMenuHeaderTitle || business.name;
   const subtitulo = settings.qrMenuHeaderSubtitle || (esMesa ? `Atención en Mesa ${mesaParam}` : "Menú Digital");
@@ -332,6 +361,17 @@ export function ClienteMenuQr({
       .filter((g) => g.productos.length > 0);
   }, [categorias, productosFiltrados]);
 
+  /**
+   * Cuántas unidades de un producto ya hay en el carrito, sumando todas sus
+   * combinaciones: dos menús del día con proteínas distintas son dos renglones
+   * pero descuentan del mismo stock.
+   */
+  const enCarritoDelProducto = (productId: string) =>
+    Object.values(carrito).reduce(
+      (acc, i) => (i.producto.id === productId ? acc + i.quantity : acc),
+      0,
+    );
+
   // Manejo de Carrito
   const agregarCombinacion = (
     producto: Producto,
@@ -339,6 +379,23 @@ export function ClienteMenuQr({
     quantity: number,
     notes: string,
   ) => {
+    // El menú QR no tenía ninguna guarda de stock: el comensal armaba el pedido
+    // entero y la negativa llegaba recién al confirmar, cuando ya había escrito
+    // su nombre, su teléfono y su dirección.
+    if (settings.inventoryEnabled && !settings.permitirVentaSinStock) {
+      const disp = calcularStockDisponibleProducto(producto, true);
+      if (disp !== null && enCarritoDelProducto(producto.id) + quantity > disp) {
+        setAvisoStock(
+          disp <= 0
+            ? `Se acabó ${producto.name}.`
+            : `Solo quedan ${disp} de ${producto.name} y ya los tenés en el pedido.`,
+        );
+        return;
+      }
+    }
+
+    setAvisoStock(null);
+
     const lineKey = claveDeLinea(
       producto.id,
       opciones.map((o) => o.id),
@@ -428,6 +485,7 @@ export function ClienteMenuQr({
     if (cartList.length === 0) return;
     setErrorEnvio(null);
 
+<<<<<<< HEAD
     if (estadoNegocio && !estadoNegocio.abierto) {
       setErrorEnvio(
         estadoNegocio.razon ||
@@ -440,6 +498,13 @@ export function ClienteMenuQr({
       setErrorEnvio(
         "Los pedidos a domicilio se encuentran pausados temporalmente por alta demanda en el restaurante.",
       );
+=======
+    // La puerta de verdad está en la Server Action; esto evita el viaje y el
+    // mensaje genérico. Puede pasar sin recargar: el cajero cierra los domicilios
+    // mientras alguien tiene la carta abierta.
+    if (domiciliosCerrados) {
+      setErrorEnvio("Por ahora no estamos recibiendo domicilios. Volvé cuando abramos.");
+>>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
       return;
     }
 
@@ -520,12 +585,24 @@ export function ClienteMenuQr({
                   const conModificadores = tieneModificadores(producto);
                   const foto = producto.imageUrl || placeholderUrl;
 
+                  // Lo que faltaba en esta pantalla: la carta traía el stock desde
+                  // el servidor y nadie lo miraba. `null` = el producto no se mide.
+                  const disponibles = calcularStockDisponibleProducto(
+                    producto,
+                    settings.inventoryEnabled,
+                  );
+                  const sinStock =
+                    disponibles !== null && disponibles <= 0 && !settings.permitirVentaSinStock;
+                  const quedanPocas =
+                    disponibles !== null && disponibles > 0 && disponibles <= 5;
+                  const sePuedePedir = producto.isAvailable && !sinStock;
+
                   return (
                     <Card
                       key={producto.id}
                       className={cn(
                         "bg-white/5 backdrop-blur-md border-white/10 text-[color:var(--qr-texto)] overflow-hidden transition-all duration-300 hover:border-[var(--qr-acento)]/60 hover:bg-white/[0.08] shadow-md hover:shadow-xl hover:scale-[1.01] rounded-2xl group",
-                        !producto.isAvailable && "opacity-50 grayscale",
+                        !sePuedePedir && "opacity-50 grayscale",
                       )}
                     >
                       <CardContent className="p-3.5 flex gap-3.5 items-center">
@@ -565,9 +642,14 @@ export function ClienteMenuQr({
                           <div className="flex items-center justify-between gap-2 pt-1.5">
                             <span className="numeral text-base font-black text-[color:var(--qr-texto)]">
                               {formatCop(producto.priceCop)}
+                              {quedanPocas && sePuedePedir && (
+                                <span className="text-rotulo ml-2 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 font-bold text-[color:var(--qr-texto-2)]">
+                                  quedan {disponibles}
+                                </span>
+                              )}
                             </span>
 
-                            {!producto.isAvailable ? (
+                            {!sePuedePedir ? (
                               <Badge variant="outline" className="border-destructive/50 text-destructive-soft text-xs font-bold">
                                 Agotado
                               </Badge>
@@ -703,6 +785,21 @@ export function ClienteMenuQr({
             </p>
           )}
 
+          {/* Los domicilios están cerrados en este momento. Se dice al abrir, por
+              lo mismo que la mesa inválida: dejarlo armar el pedido y rechazárselo
+              al confirmar es enterarlo en el peor momento, ya con la dirección
+              escrita. La carta sigue a la vista: mirar el menú de un local cerrado
+              es exactamente lo que hace alguien que va a pedir mañana. */}
+          {domiciliosCerrados && (
+            <p
+              role="alert"
+              className="mx-auto max-w-xs rounded-lg border border-warning/50 bg-warning/15 px-3 py-2 text-xs font-semibold text-warning-soft"
+            >
+              Por ahora no estamos recibiendo domicilios. Podés ver la carta y volver
+              cuando abramos.
+            </p>
+          )}
+
           <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
             {esMesa ? (
               <Badge variant="default" className="bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] font-extrabold px-3 py-1 text-xs shadow-md">
@@ -769,7 +866,9 @@ export function ClienteMenuQr({
                 <div
                   className={cn(
                     "p-2 rounded-xl border flex flex-col items-center gap-1 transition-all",
-                    ["EN_PREPARACION", "EN_CAMINO", "ENTREGADO"].includes(pedidoActivoTrack.deliveryStatus)
+                    ["EN_PREPARACION", "LISTO", "EN_CAMINO", "ENTREGADO"].includes(
+                      pedidoActivoTrack.deliveryStatus,
+                    )
                       ? "bg-orange-500/20 text-orange-300 border-orange-500/50 shadow-sm"
                       : "bg-white/5 text-[color:var(--qr-texto-3)] border-white/10 opacity-50",
                   )}
@@ -811,8 +910,10 @@ export function ClienteMenuQr({
               <div className="flex justify-between items-center">
                 <span className="text-[color:var(--qr-texto-2)]">Estado de Entrega:</span>
                 <span className="font-extrabold text-[color:var(--qr-texto)]">
-                  {pedidoActivoTrack.deliveryStatus === "PENDIENTE" && "🟡 Recibido por el restaurante"}
+                  {pedidoActivoTrack.deliveryStatus === "POR_CONFIRMAR" &&
+                    "🟡 Recibido. El restaurante lo está confirmando."}
                   {pedidoActivoTrack.deliveryStatus === "EN_PREPARACION" && "🟠 En preparación por la cocina"}
+                  {pedidoActivoTrack.deliveryStatus === "LISTO" && "🟠 Listo, saliendo para tu dirección"}
                   {pedidoActivoTrack.deliveryStatus === "EN_CAMINO" && "🔵 ¡En camino a tu ubicación!"}
                   {pedidoActivoTrack.deliveryStatus === "ENTREGADO" && "🟢 ¡Entregado! Que lo disfrutes."}
                   {pedidoActivoTrack.deliveryStatus === "CANCELADO" && "🔴 Anulado por el restaurante"}
@@ -1025,6 +1126,15 @@ export function ClienteMenuQr({
                 ───────────────────────────────────────────────────────────── */}
             {totalItems > 0 && (
               <div className="fixed bottom-0 inset-x-0 z-30 mx-auto max-w-md p-3">
+                {avisoStock && (
+                  <button
+                    type="button"
+                    onClick={() => setAvisoStock(null)}
+                    className="mb-2 w-full rounded-xl border border-white/20 bg-black/70 px-3 py-2 text-left text-sm font-semibold text-[color:var(--qr-texto)] backdrop-blur-md"
+                  >
+                    {avisoStock}
+                  </button>
+                )}
                 {/* Lo que lleva pedido, a la vista.
                     Antes esta barra decía cuántos y cuánto, pero no QUÉ: para
                     saber si ya había pedido la cerveza había que abrir el
@@ -1267,10 +1377,14 @@ export function ClienteMenuQr({
                     <Button
                       type="button"
                       onClick={enviarPedido}
-                      disabled={cargando}
+                      disabled={cargando || domiciliosCerrados}
                       className="w-full bg-[var(--qr-acento)] hover:bg-[var(--qr-acento)]/90 text-[color:var(--qr-sobre-acento)] font-extrabold h-13 rounded-xl text-sm shadow-xl gap-2"
                     >
-                      {cargando ? "Enviando a la cocina…" : "🚀 Confirmar y Enviar Pedido"}
+                      {domiciliosCerrados
+                        ? "Domicilios cerrados por ahora"
+                        : cargando
+                          ? "Enviando a la cocina…"
+                          : "🚀 Confirmar y Enviar Pedido"}
                     </Button>
                   </div>
                 </div>

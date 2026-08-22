@@ -99,6 +99,7 @@ export const modulosSchema = z.object({
   ).default(0),
   inventoryEnabled: casillaModulo,
   recipesEnabled: casillaModulo,
+  permitirVentaSinStock: casillaModulo,
 });
 
 export const turneroSchema = z.object({
@@ -149,3 +150,70 @@ export const permisosRolesSchema = z.object({
  * plataforma y el rango de numeración lo asigna el superadministrador desde
  * `/superadmin/facturacion`.
  */
+
+// ─── Impresión térmica ───────────────────────────────────────────────────────
+
+/**
+ * Una impresora de la red del local.
+ *
+ * `host` acepta IP o nombre: en una LAN chica lo normal es la IP fija que el
+ * dueño le puso a la impresora, pero algunas se anuncian por nombre y obligar a
+ * escribir un número sería pedirle a alguien que averigüe algo que ya funciona.
+ */
+export const impresoraSchema = z.object({
+  /** Vacío = alta; con id = edición. */
+  id: z.string().trim().optional(),
+  name: z.string().trim().min(2, "Ponele un nombre: 'Caja', 'Cocina'.").max(60),
+  rol: z.enum(["RECIBO", "COMANDA"]),
+  host: z.string().trim().min(3, "Escribí la IP o el nombre en la red.").max(120),
+  port: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? 9100 : Number(v)),
+    z.number().int().min(1).max(65535),
+  ),
+  width: z.enum(ReceiptWidth),
+  abreCajon: casilla,
+  active: casilla,
+});
+
+export const borrarImpresoraSchema = z.object({ id: z.string().trim().min(1) });
+
+/**
+ * A qué impresora va cada estación de cocina.
+ *
+ * Viaja como JSON por la misma razón que los tramos de precios: es una lista de
+ * largo variable y un `<form>` no tiene forma natural de mandarla.
+ */
+export const rutasDeImpresionSchema = z.object({
+  rutas: z.preprocess(
+    (v) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v !== "string" || v.trim() === "") return [];
+      try {
+        const parseado = JSON.parse(v);
+        return Array.isArray(parseado) ? parseado : [];
+      } catch {
+        return [];
+      }
+    },
+    z
+      .array(
+        z.object({
+          stationName: z.string().trim().min(1).max(60),
+          printerId: z.string().trim().min(1),
+        }),
+      )
+      .max(30),
+  ),
+});
+
+export const comandaDestinoSchema = z.object({
+  comandaDestino: z.enum(["KDS", "IMPRESA", "AMBAS"]),
+});
+
+export const agenteImpresionSchema = z.object({
+  nombre: z.string().trim().min(2, "Ponele un nombre: 'PC de la caja'.").max(60),
+});
+
+export const regenerarTokenSchema = z.object({ id: z.string().trim().min(1) });
+
+export const pruebaDeImpresionSchema = z.object({ printerId: z.string().trim().min(1) });

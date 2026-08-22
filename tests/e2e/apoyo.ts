@@ -11,6 +11,19 @@ import { expect, type Page } from "@playwright/test";
 export const CAJERO = { email: "caja@platlia.com", password: "platlia123" };
 export const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
 
+/**
+ * Abrir y cerrar el turno viven en la sección "movimientos" de la caja, y a una
+ * sección se llega por la URL.
+ *
+ * Antes esto era una píldora dentro de la pantalla y los ayudantes la clickeaban.
+ * Cuando las píldoras internas se fueron —el menú pasó a ser el único navegador
+ * de secciones— el clic dejó de encontrar nada, `dejarCajaCerrada` daba por
+ * cerrada una caja que seguía abierta y **toda la suite** fallaba en su
+ * `beforeEach` con un "no encuentro el campo base del turno" que no menciona
+ * nada de esto.
+ */
+const CIERRE_DE_TURNO = "/caja?vista=movimientos";
+
 /** La cuenta de la pantalla de pedido, ya desambiguada del menú lateral. */
 export function laCuenta(page: Page) {
   return page.getByRole("complementary", { name: "La cuenta" });
@@ -132,6 +145,24 @@ export async function ingresar(page: Page, datos = CAJERO) {
 }
 
 /**
+ * El `href` del primer enlace que coincida, o null si no hay ninguno.
+ *
+ * Existe por una trampa cara: **`locator.getAttribute()` espera a que el
+ * elemento aparezca**. Sin pedidos abiertos —que es el caso normal al terminar un
+ * archivo— se quedaba esperando el presupuesto ENTERO de la prueba, y el
+ * `.catch(() => null)` se comía el error, así que el síntoma era una suite lenta
+ * y un `afterEach` que vencía sin decir por qué. Medido: 298 segundos en una sola
+ * vuelta de las veinticinco.
+ *
+ * `count()` no espera: pregunta cuántos hay ahora y contesta.
+ */
+async function primerEnlace(page: Page, selector: string): Promise<string | null> {
+  const enlaces = page.locator(selector);
+  if ((await enlaces.count()) === 0) return null;
+  return enlaces.first().getAttribute("href", { timeout: 5000 }).catch(() => null);
+}
+
+/**
  * Deja sin pedidos vivos, en /salon o en /pos según cuál esté disponible.
  *
  * La caja no cierra con pedidos sin cobrar, así que hay que resolverlos: los que
@@ -150,22 +181,18 @@ export async function cerrarPedidosAbiertos(page: Page) {
   for (let vuelta = 0; vuelta < 25; vuelta++) {
     await page.goto(entrada);
 
-    let href = await page.locator('a[href^="/pedido/"]').first().getAttribute("href").catch(() => null);
+    let href = await primerEnlace(page, 'a[href^="/pedido/"]');
 
     // Una mesa ocupada ya no enlaza a su pedido sino a su pantalla de cuentas:
     // desde que existen las cuentas separadas puede tener varias, y hay que
     // entrar para llegar a ellas. Sin este salto la función veía cero enlaces y
     // se daba por hecha sin cerrar nada, dejando trabada a toda la suite.
     if (!href) {
-      const mesa = await page
-        .locator('a[href^="/salon/mesa/"]')
-        .first()
-        .getAttribute("href")
-        .catch(() => null);
+      const mesa = await primerEnlace(page, 'a[href^="/salon/mesa/"]');
       if (!mesa) return;
 
       await page.goto(mesa);
-      href = await page.locator('a[href^="/pedido/"]').first().getAttribute("href").catch(() => null);
+      href = await primerEnlace(page, 'a[href^="/pedido/"]');
 
       // La mesa quedó sin cuentas entre el listado y esta visita.
       if (!href) continue;
@@ -234,7 +261,7 @@ async function cobrarLoQueEstaEnCaja(page: Page) {
 
     // Con varias cuentas hay que desplegar la que se va a cobrar; con una sola,
     // la caja la abre ya desplegada.
-    const desplegar = page.getByRole("button", { name: /cobrar en caja/i }).first();
+    const desplegar = page.getByRole("button", { name: /^cobrar cuenta$/i }).first();
     if (await desplegar.isVisible().catch(() => false)) await desplegar.click();
 
     const confirmar = page.getByRole("button", { name: /confirmar pago/i }).first();
@@ -257,41 +284,33 @@ async function cobrarLoQueEstaEnCaja(page: Page) {
  * distingue los dos estados: el formulario de apertura.
  */
 export async function dejarCajaCerrada(page: Page) {
-  await page.goto("/caja");
-  await irAlCierreDeTurno(page);
+  await page.goto(CIERRE_DE_TURNO);
 
   const cerrar = page.getByRole("button", { name: /cerrar caja/i });
+  const abrir = page.getByLabel(/base del turno/i);
+
+  // Esperar a que la pantalla diga en cuál de los dos estados está, igual que
+  // `abrirMesa` con la mesa libre y la ocupada. `isVisible()` no espera: sobre
+  // una pantalla que todavía no pintó devuelve "no está", esta función daba por
+  // cerrada una caja que seguía abierta, y el archivo siguiente fallaba al
+  // abrirla con un mensaje que no menciona nada de esto.
+  await expect(cerrar.or(abrir).first()).toBeVisible({ timeout: 15_000 });
+
   if (!(await cerrar.isVisible().catch(() => false))) return;
 
   await cerrarPedidosAbiertos(page);
 
-  await page.goto("/caja");
-  await irAlCierreDeTurno(page);
+  await page.goto(CIERRE_DE_TURNO);
   await page.getByLabel(/cuánto contaste/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
 
   await expect(page.getByLabel(/base del turno/i)).toBeVisible();
 }
 
-/**
- * Pone /caja en la pestaña del cierre.
- *
- * Con cuentas pendientes la pantalla abre en "Cobro de Cuentas", donde el botón
- * de cerrar caja no existe. Sin este paso, `dejarCajaCerrada` veía "no está el
- * botón", daba por cerrada una caja que seguía abierta, y el archivo siguiente
- * fallaba al abrirla con un mensaje que no menciona nada de esto.
- */
-async function irAlCierreDeTurno(page: Page) {
-  const pestana = page.getByRole("button", { name: /movimientos y cierre de turno/i });
-  if (await pestana.isVisible().catch(() => false)) {
-    await pestana.click();
-  }
-}
-
 /** Abre la caja partiendo de donde sea que esté. */
 export async function abrirCaja(page: Page, base = "0") {
   await dejarCajaCerrada(page);
-  await page.goto("/caja");
+  await page.goto(CIERRE_DE_TURNO);
   await page.getByLabel(/base del turno/i).fill(base);
   await page.getByRole("button", { name: /abrir caja/i }).click();
   await expect(page.getByRole("heading", { name: /^caja \d+$/i })).toBeVisible();

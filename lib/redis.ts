@@ -112,3 +112,25 @@ export async function publicarAviso(businessId: string, aviso: Aviso): Promise<v
     // Falla tolerante: sin Redis no hay aviso, pero el pedido ya quedó tomado.
   }
 }
+
+/**
+ * El timbre del agente de impresión.
+ *
+ * A diferencia de los demás canales, este NO es la cola: los trabajos viven en
+ * `PrintJob`, en Postgres. Acá solo viaja un "vení a buscar", porque Pub/Sub es
+ * fire-and-forget y lo que se publica con el agente apagado se pierde. Una
+ * comanda perdida en silencio es un cliente esperando comida que nadie cocinó.
+ */
+export async function publicarImpresion(businessId: string): Promise<void> {
+  const pub = getRedisPublisher();
+  if (!pub) return;
+
+  try {
+    await pub.publish(
+      `impresion:${businessId}`,
+      JSON.stringify({ type: "update", timestamp: Date.now() }),
+    );
+  } catch {
+    // Falla tolerante: el agente igual busca trabajo por su cuenta cada tanto.
+  }
+}

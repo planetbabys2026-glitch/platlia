@@ -22,6 +22,8 @@ import { solicitarSedeAdicional } from "@/features/facturacion/actions";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { enlaceWhatsapp } from "@/lib/soporte";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
+import { cotizarTodas, type ListaDePrecios } from "@/lib/billing/precios";
+import { AvisoPromocion } from "@/features/facturacion/components/aviso-promocion";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
 import { acentoSirveComoTexto } from "@/lib/contraste";
@@ -336,6 +338,7 @@ export function FormularioModulos({
   deliveryFeeCop = 0,
   inventoryEnabled,
   recipesEnabled,
+  permitirVentaSinStock,
 }: {
   mesasHabilitado: boolean;
   deliveryEnabled: boolean;
@@ -343,6 +346,7 @@ export function FormularioModulos({
   deliveryFeeCop?: number;
   inventoryEnabled: boolean;
   recipesEnabled: boolean;
+  permitirVentaSinStock: boolean;
 }) {
   const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
   const [invChecked, setInvChecked] = useState(inventoryEnabled);
@@ -424,12 +428,25 @@ export function FormularioModulos({
             <AlertTriangle className="size-4 shrink-0 text-warning mt-0.5" />
             <div className="space-y-0.5">
               <strong className="font-bold text-foreground block">
-                ⚠️ Reinicio de stock al activar inventario
+                Hacé un conteo antes de empezar
               </strong>
               <span>
-                Al guardar con el inventario activado, todos los stocks (insumos y productos) se establecerán en <strong>0</strong> para que puedas registrar tu inventario inicial real y evitar saldos negativos por ventas anteriores.
+                Activar el inventario no toca lo que ya tengas cargado. Andá a Inventario y
+                registrá las cantidades reales de bodega: de ahí en adelante cada venta descuenta
+                sola, así que si el punto de partida está mal, todo lo que siga también.
               </span>
             </div>
+          </div>
+        )}
+
+        {invChecked && (
+          <div className="pl-7">
+            <Casilla
+              name="permitirVentaSinStock"
+              label="Permitir vender sin stock"
+              defaultChecked={permitirVentaSinStock}
+              ayuda="Apagado, no se puede vender lo que el inventario dice que no hay. Encendido, la caja no se frena y el stock queda en negativo, que es lo que después muestra el faltante en el arqueo."
+            />
           </div>
         )}
       </div>
@@ -618,18 +635,54 @@ export type FormularioLicenciaProps = {
   suscripcion: {
     id: string;
     status: string;
-    priceCop: number;
     trialEndsAt: Date | null;
     currentPeriodStart: Date | null;
     currentPeriodEnd: Date | null;
     graceUntil: Date | null;
   } | null;
   timeZone: string;
+  /** Cuántas sedes cubre la licencia de la cuenta. Es lo que decide el precio. */
+  sedes: number;
+  /** La lista vigente. Es la única fuente del precio, para todos por igual. */
+  lista: ListaDePrecios | null;
+  /** La lista de siempre, para poder decir de cuánto bajó una promoción. */
+  base: ListaDePrecios | null;
+  /** La promoción que está corriendo, si hay alguna. */
+  promo: ListaDePrecios | null;
 };
 
-export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicenciaProps) {
+export function FormularioLicencia({
+  suscripcion,
+  timeZone,
+  sedes,
+  lista,
+  base,
+  promo,
+}: FormularioLicenciaProps) {
   const [openModal, setOpenModal] = useState(false);
   const [estadoSolicitud, accionSolicitud] = useActionState(solicitarSedeAdicional, ESTADO_INICIAL);
+
+  /**
+   * Se cotiza acá con la MISMA función que el checkout y que la portada.
+   *
+   * Antes esta pantalla mostraba `suscripcion.priceCop` a pelo y los planes
+   * estaban escritos a mano en el JSX, con números que ya ni siquiera coincidían
+   * con lo que el sistema cobra: decía "$270.000 semestral" y "$480.000 anual"
+   * cuando el descuento son meses de regalo (seis se pagan cinco, doce se pagan
+   * diez), o sea $250.000 y $500.000.
+   */
+  const cotizaciones = lista ? cotizarTodas(lista, sedes) : null;
+  const mensual = cotizaciones?.find((c) => c.periodicidad === "MENSUAL") ?? null;
+  const tarifaUna = lista ? cotizarTodas(lista, 1) : null;
+  const tarifaDos = lista ? cotizarTodas(lista, 2) : null;
+  /** El mensual es el mismo en las tres periodicidades: lo que cambia es el total. */
+  const mensualDe = (tarifa: typeof cotizaciones) =>
+    tarifa?.find((c) => c.periodicidad === "MENSUAL")?.mensualCop ?? null;
+  const totalDe = (tarifa: typeof cotizaciones, meses: number) =>
+    tarifa?.find((c) => c.mesesOtorgados === meses)?.totalCop ?? null;
+  const mesesGratisDe = (meses: number) =>
+    cotizaciones?.find((c) => c.mesesOtorgados === meses)?.mesesGratis ?? null;
+  const cop = (valor: number | null) => (valor === null ? "—" : formatCop(valor));
 
   const ESTADO_MAP: Record<string, { texto: string; variante: "default" | "secondary" | "destructive" | "outline" }> = {
     PRUEBA: { texto: "En Prueba Gratis", variante: "secondary" },
@@ -656,9 +709,14 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
               {suscripcion?.status === "PRUEBA"
                 ? "$0 COP (Prueba Gratis de 7 días)"
                 : suscripcion
-                ? `${formatCop(suscripcion.priceCop)} / mes`
+                ? `${cop(mensual?.mensualCop ?? null)} / mes`
                 : "Sin suscripción"}
             </span>
+            {suscripcion?.status !== "PRUEBA" && sedes > 1 && (
+              <span className="text-xs text-muted-foreground block">
+                Por tus <span className="numeral">{sedes}</span> sedes, en un solo cobro.
+              </span>
+            )}
           </div>
 
           {infoEstado && (
@@ -667,6 +725,10 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
             </Badge>
           )}
         </div>
+
+        {base && (
+          <AvisoPromocion promo={promo} base={base} sedes={sedes} timeZone={timeZone} />
+        )}
 
         {suscripcion && (
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-2 border-t border-border">
@@ -727,7 +789,9 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
                       defaultValue="2"
                       className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
                     >
-                      <option value="2">2 Sucursales ($80.000 COP / mes)</option>
+                      <option value="2">
+                        2 Sucursales ({cop(mensualDe(tarifaDos))} COP / mes)
+                      </option>
                       <option value="3">3 o más Sucursales (Cotización personalizada multi-sede)</option>
                     </select>
                   </div>
@@ -740,9 +804,18 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
                       defaultValue="1"
                       className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
                     >
-                      <option value="1">Mensual ($50k / 1 sede - $80k / 2 sedes)</option>
-                      <option value="6">Semestral 6 Meses - 10% desc. ($270k / 1 sede - $432k / 2 sedes)</option>
-                      <option value="12">Anual 12 Meses - 20% desc. ($480k / 1 sede - $768k / 2 sedes)</option>
+                      <option value="1">
+                        Mensual ({cop(mensualDe(tarifaUna))} / 1 sede &middot;{" "}
+                        {cop(mensualDe(tarifaDos))} / 2 sedes)
+                      </option>
+                      <option value="6">
+                        Semestral 6 meses ({cop(totalDe(tarifaUna, 6))} / 1 sede &middot;{" "}
+                        {cop(totalDe(tarifaDos, 6))} / 2 sedes)
+                      </option>
+                      <option value="12">
+                        Anual 12 meses ({cop(totalDe(tarifaUna, 12))} / 1 sede &middot;{" "}
+                        {cop(totalDe(tarifaDos, 12))} / 2 sedes)
+                      </option>
                     </select>
                   </div>
 
@@ -773,23 +846,41 @@ export function FormularioLicencia({ suscripcion, timeZone }: FormularioLicencia
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="p-3 rounded-lg border border-border bg-card">
             <span className="font-bold text-foreground block">1 Sucursal</span>
-            <span className="text-base font-extrabold text-success-soft block">$50.000 COP / mes</span>
+            <span className="text-base font-extrabold text-success-soft block numeral">
+              {cop(mensualDe(tarifaUna))} COP / mes
+            </span>
             <span className="text-rotulo text-muted-foreground">Todos los módulos incluidos (Salón, POS, Cocina, Caja, Inventario, Recetas e Informes).</span>
           </div>
 
           <div className="p-3 rounded-lg border border-border bg-card">
             <span className="font-bold text-foreground block">2 Sucursales</span>
-            <span className="text-base font-extrabold text-success-soft block">$80.000 COP / mes</span>
-            <span className="text-rotulo text-muted-foreground">Ahorro de $20.000 COP/mes en la segunda sede.</span>
+            <span className="text-base font-extrabold text-success-soft block numeral">
+              {cop(mensualDe(tarifaDos))} COP / mes
+            </span>
+            <span className="text-rotulo text-muted-foreground">
+              {mensualDe(tarifaUna) !== null && mensualDe(tarifaDos) !== null
+                ? `Ahorro de ${formatCop(mensualDe(tarifaUna)! * 2 - mensualDe(tarifaDos)!)} COP/mes frente a dos licencias sueltas.`
+                : "La segunda sede entra a tarifa reducida."}
+            </span>
           </div>
         </div>
 
+        {/* El descuento son MESES DE REGALO, no un porcentaje: seis se pagan cinco
+            y doce se pagan diez. Un porcentaje sobre pesos enteros deja centavos
+            que hay que redondear en algún lado, y "un mes de regalo" se explica
+            sin calculadora. */}
         <div className="p-3 rounded-lg border border-brand/30 bg-brand/5 text-xs space-y-1">
           <span className="font-bold text-brand block">✨ Descuentos por Pago Anticipado</span>
           <p className="text-muted-foreground">
-            • <strong>6 Meses (Semestral):</strong> 10% de descuento ($270.000 para 1 sede / $432.000 para 2 sedes).<br />
-            • <strong>12 Meses (Anual):</strong> 20% de descuento ($480.000 para 1 sede / $768.000 para 2 sedes).<br />
-            • <strong>3 o más Sucursales:</strong> Contactate con nuestro equipo para definir precio corporativo especial.
+            • <strong>6 Meses (Semestral):</strong> pagás{" "}
+            <span className="numeral">{6 - (mesesGratisDe(6) ?? 0)}</span> y usás{" "}
+            <span className="numeral">6</span> ({cop(totalDe(tarifaUna, 6))} para 1 sede /{" "}
+            {cop(totalDe(tarifaDos, 6))} para 2 sedes).
+            <br />• <strong>12 Meses (Anual):</strong> pagás{" "}
+            <span className="numeral">{12 - (mesesGratisDe(12) ?? 0)}</span> y usás{" "}
+            <span className="numeral">12</span> ({cop(totalDe(tarifaUna, 12))} para 1 sede /{" "}
+            {cop(totalDe(tarifaDos, 12))} para 2 sedes).
+            <br />• <strong>3 o más Sucursales:</strong> Contactate con nuestro equipo para definir precio corporativo especial.
           </p>
         </div>
       </div>

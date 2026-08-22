@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { Role } from "@/generated/prisma/enums";
 import {
   actualizarStockProductoTerminadoSchema,
   crearFacturaCompraSchema,
+  itemRecetaSchema,
+  lineaFacturaItemSchema,
   crearInsumoSchema,
   crearProductoTerminadoSchema,
   crearProveedorSchema,
@@ -13,8 +16,29 @@ import {
   guardarRecetaSchema,
 } from "@/features/inventario/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { getSettings } from "@/features/negocio/queries";
+import { costoPromedioPonderado } from "@/lib/inventory/costo";
 
 const PUEDEN_MANEJAR_INVENTARIO = [Role.ADMINISTRADOR, Role.CAJERO] as const;
+
+/**
+ * El módulo tiene que estar encendido para escribir inventario.
+ *
+ * No alcanza con el rol: estas acciones son POST alcanzables con curl y hasta acá
+ * corrían con el inventario apagado, dejando stock y movimientos en un negocio que
+ * no lleva ninguno. No se usa `modulo: AppModule.INVENTARIO` de `defineAction`
+ * porque ese enum se enciende entero al crear la empresa y nunca se apaga: el
+ * interruptor real es el de Configuración.
+ */
+async function exigirInventarioActivo(businessId: string) {
+  const settings = await getSettings(businessId);
+  if (!settings.inventoryEnabled) {
+    throw new ErrorDeUsuario(
+      "El inventario no está activo para este negocio. Activalo en Configuración → Módulos.",
+    );
+  }
+  return settings;
+}
 
 /**
  * Carga de inventario inicial o nuevo insumo.
@@ -23,6 +47,8 @@ export const crearInsumo = defineAction({
   schema: crearInsumoSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
+    await exigirInventarioActivo(ctx.business.id);
+
     const item = await db.inventoryItem.create({
       data: {
         businessId: ctx.business.id,
@@ -60,6 +86,8 @@ export const editarInsumo = defineAction({
   schema: editarInsumoSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
+    await exigirInventarioActivo(ctx.business.id);
+
     const prev = await db.inventoryItem.findUnique({
       where: { id: input.id },
     });
@@ -103,6 +131,8 @@ export const crearProveedor = defineAction({
   schema: crearProveedorSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
+    await exigirInventarioActivo(ctx.business.id);
+
     await db.supplier.create({
       data: {
         businessId: ctx.business.id,
@@ -120,118 +150,96 @@ export const crearProveedor = defineAction({
 
 /**
  * Registrar factura de compra (Entrada de mercadería/insumos).
- * Suma automáticamente al stock disponible y actualiza costos.
+ *
+ * Suma al stock y **repondera el costo**. Antes pisaba `costCop` con el costo de
+ * la última compra: diez cervezas caras un martes reevaluaban las veinte baratas
+ * que ya estaban en la nevera, el inventario valía de golpe una plata que nadie
+ * pagó y el margen saltaba sin que hubiera pasado nada en el negocio.
+ *
+ * Una línea entra por una de las dos puertas, que son los dos regímenes de stock:
+ * `inventoryItemId` para un insumo de receta, `productId` para un producto de
+ * reventa con stock directo. Nunca las dos.
  */
 export const crearFacturaCompra = defineAction({
   schema: crearFacturaCompraSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
-    let lineas: Array<{
-      inventoryItemId?: string;
-      productId?: string;
-      name?: string;
-      unit?: string;
-      quantity: number;
-      unitCostCop: number;
-      taxRateBp?: number;
-    }> = [];
+    await exigirInventarioActivo(ctx.business.id);
 
+    let crudas: unknown;
     try {
-      lineas = JSON.parse(input.itemsJson);
+      crudas = JSON.parse(input.itemsJson);
     } catch {
       throw new ErrorDeUsuario("Los insumos de la factura tienen un formato inválido.");
     }
 
-    if (!Array.isArray(lineas) || lineas.length === 0) {
-      throw new ErrorDeUsuario("Agregá al menos un insumo o producto a la factura de compra.");
+    // El esquema existía y no validaba nada: las líneas se coercían a mano más
+    // abajo, así que un `quantity` en texto o un costo negativo entraban derecho
+    // a la base.
+    const parseadas = z.array(lineaFacturaItemSchema).safeParse(crudas);
+    if (!parseadas.success || parseadas.data.length === 0) {
+      throw new ErrorDeUsuario(
+        "Agregá al menos un insumo o producto válido a la factura de compra.",
+      );
     }
+    const lineas = parseadas.data;
 
     let subtotal = 0;
     let totalTax = 0;
 
-    // Resolver cada línea garantizando que tenga su inventoryItemId
-    const itemsProcesados: Array<{
-      inventoryItemId: string;
-      productId?: string;
+    type LineaProcesada = {
+      inventoryItemId: string | null;
+      productId: string | null;
       quantity: number;
+      /** Lo que se pagó por unidad, tal cual lo escribió quien carga la factura. */
       unitCostCop: number;
+      /**
+       * El mismo costo NETO de impuesto. Es el que queda como costo del insumo o
+       * del producto, para que el margen compare base contra base: un costo con
+       * IVA contra una venta con impuesto da un margen que no es de nadie.
+       */
+      unitCostNetoCop: number;
       taxRateBp: number;
       totalCop: number;
-    }> = [];
+    };
+
+    const itemsProcesados: LineaProcesada[] = [];
 
     for (const linea of lineas) {
-      const cant = Math.max(1, Math.round(Number(linea.quantity) || 1));
-      const costo = Math.max(0, Math.round(Number(linea.unitCostCop) || 0));
-      const taxBp = Math.max(0, Math.round(Number(linea.taxRateBp) || 0));
+      const cant = linea.quantity;
+      const costo = linea.unitCostCop;
+      const taxBp = linea.taxRateBp;
+      const bruto = cant * costo;
 
-      let lineaSubtotal = cant * costo;
-      let lineaTax = 0;
-
-      if (taxBp > 0) {
-        if (input.includesTax) {
-          const base = Math.round(lineaSubtotal / (1 + taxBp / 10000));
-          lineaTax = lineaSubtotal - base;
-          lineaSubtotal = base;
-        } else {
-          lineaTax = Math.round(lineaSubtotal * (taxBp / 10000));
-        }
+      // Si el costo escrito ya trae el impuesto adentro se desagrega; si no, se
+      // le suma encima. Misma aritmética que `computeTaxLine` de lib/tax.ts.
+      let lineaSubtotal: number;
+      let lineaTax: number;
+      if (input.includesTax) {
+        lineaSubtotal = Math.round((bruto * 10_000) / (10_000 + taxBp));
+        lineaTax = bruto - lineaSubtotal;
+      } else {
+        lineaSubtotal = bruto;
+        lineaTax = Math.round((bruto * taxBp) / 10_000);
       }
 
       subtotal += lineaSubtotal;
       totalTax += lineaTax;
 
-      let inventoryItemId = linea.inventoryItemId;
-
-      if (!inventoryItemId && linea.productId) {
-        // Buscar si el producto ya tiene un insumo vinculado
-        const recipeItem = await db.productRecipeItem.findFirst({
-          where: { productId: linea.productId },
-          select: { inventoryItemId: true },
-        });
-
-        if (recipeItem) {
-          inventoryItemId = recipeItem.inventoryItemId;
-        } else {
-          // Si no tiene insumo, crear el insumo correspondiente para el producto terminado
-          const prod = await db.product.findUnique({
-            where: { id: linea.productId },
-            select: { name: true, sku: true },
-          });
-
-          const nuevoInsumo = await db.inventoryItem.create({
-            data: {
-              businessId: ctx.business.id,
-              name: prod?.name ?? linea.name ?? "Producto",
-              sku: prod?.sku ?? null,
-              unit: "UNIDAD",
-              costCop: costo,
-              stockCurrent: 0,
-              stockMin: 0,
-            },
-          });
-
-          await db.productRecipeItem.create({
-            data: {
-              businessId: ctx.business.id,
-              productId: linea.productId,
-              inventoryItemId: nuevoInsumo.id,
-              quantityRequired: 1,
-            },
-          });
-
-          inventoryItemId = nuevoInsumo.id;
-        }
-      }
-
-      if (!inventoryItemId) {
-        throw new ErrorDeUsuario("Uno de los ítems de la factura no tiene un insumo o producto válido.");
+      if (!linea.inventoryItemId && !linea.productId) {
+        throw new ErrorDeUsuario(
+          "Cada línea de la factura tiene que apuntar a un insumo o a un producto de reventa.",
+        );
       }
 
       itemsProcesados.push({
-        inventoryItemId,
-        productId: linea.productId,
+        inventoryItemId: linea.inventoryItemId ?? null,
+        // Si vienen los dos ids manda el insumo: sumarle stock a los dos
+        // regímenes sería contar la misma mercadería dos veces.
+        productId: linea.inventoryItemId ? null : (linea.productId ?? null),
         quantity: cant,
         unitCostCop: costo,
+        unitCostNetoCop: cant > 0 ? Math.round(lineaSubtotal / cant) : 0,
         taxRateBp: taxBp,
         totalCop: lineaSubtotal + lineaTax,
       });
@@ -239,79 +247,123 @@ export const crearFacturaCompra = defineAction({
 
     const totalFactura = subtotal + totalTax;
 
-    const factura = await db.purchaseInvoice.create({
-      data: {
-        businessId: ctx.business.id,
-        supplierId: input.supplierId ?? null,
-        invoiceNumber: input.invoiceNumber,
-        invoiceDate: new Date(input.invoiceDate),
-        includesTax: input.includesTax,
-        subtotalCop: subtotal,
-        taxCop: totalTax,
-        totalCop: totalFactura,
-        notes: input.notes ?? null,
-        items: {
-          create: itemsProcesados.map((item) => ({
-            businessId: ctx.business.id,
-            inventoryItemId: item.inventoryItemId,
-            quantity: item.quantity,
-            unitCostCop: item.unitCostCop,
-            taxRateBp: item.taxRateBp,
-            totalCop: item.totalCop,
-          })),
-        },
-      },
-    });
-
-    // Actualizar stock de insumos, productos de venta directa y registrar movimientos Kardex de COMPRA
-    for (const item of itemsProcesados) {
-      const insumo = await db.inventoryItem.findUnique({
-        where: { id: item.inventoryItemId },
-      });
-      if (!insumo) continue;
-
-      const nuevoStock = insumo.stockCurrent + item.quantity;
-
-      await db.inventoryItem.update({
-        where: { id: insumo.id },
-        data: {
-          stockCurrent: nuevoStock,
-          costCop: item.unitCostCop,
-        },
-      });
-
-      // Si el ítem corresponde a un producto terminado o está vinculado a uno, incrementar también su stockQty
-      if (item.productId) {
-        await db.product.update({
-          where: { id: item.productId },
-          data: { stockQty: { increment: item.quantity } },
-        });
-      } else {
-        const recipeLink = await db.productRecipeItem.findFirst({
-          where: { inventoryItemId: item.inventoryItemId },
-          select: { productId: true },
-        });
-        if (recipeLink) {
-          await db.product.update({
-            where: { id: recipeLink.productId },
-            data: { stockQty: { increment: item.quantity } },
-          });
-        }
-      }
-
-      await db.inventoryMovement.create({
+    // Todo adentro de una transacción: hasta acá la factura se guardaba primero y
+    // el stock se aplicaba en un bucle aparte, así que un fallo a mitad de camino
+    // dejaba una factura registrada con la mitad de la mercadería adentro.
+    await db.$transaction(async (tx) => {
+      const factura = await tx.purchaseInvoice.create({
         data: {
           businessId: ctx.business.id,
-          inventoryItemId: insumo.id,
-          type: "COMPRA",
-          quantity: item.quantity,
-          stockAfter: nuevoStock,
-          unitCostCop: item.unitCostCop,
-          referenceId: factura.id,
-          notes: `Factura de compra #${input.invoiceNumber}`,
+          supplierId: input.supplierId ?? null,
+          invoiceNumber: input.invoiceNumber,
+          invoiceDate: new Date(input.invoiceDate),
+          includesTax: input.includesTax,
+          subtotalCop: subtotal,
+          taxCop: totalTax,
+          totalCop: totalFactura,
+          notes: input.notes ?? null,
+          items: {
+            // `PurchaseInvoiceItem` cuelga de un insumo y su columna es
+            // obligatoria, así que las líneas de producto directo no dejan
+            // renglón de factura; su rastro es el movimiento de Kardex.
+            create: itemsProcesados
+              .filter((item): item is LineaProcesada & { inventoryItemId: string } =>
+                item.inventoryItemId !== null,
+              )
+              .map((item) => ({
+                businessId: ctx.business.id,
+                inventoryItemId: item.inventoryItemId,
+                quantity: item.quantity,
+                unitCostCop: item.unitCostCop,
+                taxRateBp: item.taxRateBp,
+                totalCop: item.totalCop,
+              })),
+          },
         },
+        select: { id: true },
       });
-    }
+
+      for (const item of itemsProcesados) {
+        if (item.inventoryItemId) {
+          const insumo = await tx.inventoryItem.findFirst({
+            where: { id: item.inventoryItemId, deletedAt: null },
+            select: { id: true, stockCurrent: true, costCop: true },
+          });
+          if (!insumo) throw new ErrorDeUsuario("Uno de los insumos de la factura ya no existe.");
+
+          const actualizado = await tx.inventoryItem.update({
+            where: { id: insumo.id },
+            data: {
+              stockCurrent: { increment: item.quantity },
+              costCop: costoPromedioPonderado(
+                insumo.stockCurrent,
+                insumo.costCop,
+                item.quantity,
+                item.unitCostNetoCop,
+              ),
+            },
+            select: { stockCurrent: true },
+          });
+
+          // Comprar arroz sube el arroz y nada más. Antes, si la línea no traía
+          // producto, se buscaba CUALQUIER plato que tuviera ese insumo en su
+          // receta y se le subía el `stockQty`: una bolsa de arroz fabricaba
+          // bandejas paisas de la nada.
+          await tx.inventoryMovement.create({
+            data: {
+              businessId: ctx.business.id,
+              inventoryItemId: insumo.id,
+              type: "COMPRA",
+              quantity: item.quantity,
+              stockAfter: actualizado.stockCurrent,
+              unitCostCop: item.unitCostNetoCop,
+              referenceId: factura.id,
+              notes: `Factura de compra #${input.invoiceNumber}`,
+            },
+          });
+          continue;
+        }
+
+        const producto = await tx.product.findFirst({
+          where: { id: item.productId as string, deletedAt: null },
+          select: { id: true, name: true, stockQty: true, costCop: true, hasRecipe: true },
+        });
+        if (!producto) throw new ErrorDeUsuario("Uno de los productos de la factura ya no existe.");
+        if (producto.hasRecipe) {
+          throw new ErrorDeUsuario(
+            `"${producto.name}" lleva receta: se compran sus insumos, no el producto terminado.`,
+          );
+        }
+
+        const actualizado = await tx.product.update({
+          where: { id: producto.id },
+          data: {
+            trackStock: true,
+            stockQty: { increment: item.quantity },
+            costCop: costoPromedioPonderado(
+              producto.stockQty,
+              producto.costCop,
+              item.quantity,
+              item.unitCostNetoCop,
+            ),
+          },
+          select: { stockQty: true },
+        });
+
+        await tx.inventoryMovement.create({
+          data: {
+            businessId: ctx.business.id,
+            productId: producto.id,
+            type: "COMPRA",
+            quantity: item.quantity,
+            stockAfter: actualizado.stockQty,
+            unitCostCop: item.unitCostNetoCop,
+            referenceId: factura.id,
+            notes: `Factura de compra #${input.invoiceNumber}`,
+          },
+        });
+      }
+    });
 
     revalidatePath("/inventario");
     revalidatePath("/pos");
@@ -320,57 +372,59 @@ export const crearFacturaCompra = defineAction({
 
 /**
  * Guardar Receta / Escandallo por Producto.
+ *
+ * Guardar una receta apaga el stock directo del producto: los dos regímenes son
+ * excluyentes, y un producto que se mide por sus insumos no se mide además por
+ * unidades sueltas.
  */
 export const guardarReceta = defineAction({
   schema: guardarRecetaSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
-    let items: Array<{ inventoryItemId: string; quantityRequired: number }> = [];
+    await exigirInventarioActivo(ctx.business.id);
 
+    let crudos: unknown;
     try {
-      items = JSON.parse(input.itemsJson);
+      crudos = JSON.parse(input.itemsJson);
     } catch {
       throw new ErrorDeUsuario("Formato de receta inválido.");
     }
 
-    // Borra la receta anterior del producto
-    await db.productRecipeItem.deleteMany({
-      where: { productId: input.productId },
-    });
+    const parseados = z.array(itemRecetaSchema).safeParse(crudos);
+    if (!parseados.success) {
+      throw new ErrorDeUsuario("Alguna línea de la receta tiene una cantidad inválida.");
+    }
+    const items = parseados.data;
 
-    if (Array.isArray(items) && items.length > 0) {
+    await db.$transaction(async (tx) => {
+      const producto = await tx.product.findFirst({
+        where: { id: input.productId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!producto) throw new ErrorDeUsuario("Ese producto no existe.");
+
+      await tx.productRecipeItem.deleteMany({ where: { productId: producto.id } });
+
       for (const item of items) {
-        if (!item.inventoryItemId) continue;
-        const cant = Math.max(1, Math.round(Number(item.quantityRequired) || 1));
-
-        await db.productRecipeItem.create({
+        await tx.productRecipeItem.create({
           data: {
             businessId: ctx.business.id,
-            productId: input.productId,
+            productId: producto.id,
             inventoryItemId: item.inventoryItemId,
-            quantityRequired: cant,
+            quantityRequired: item.quantityRequired,
           },
         });
       }
-    }
 
-    revalidatePath("/inventario");
-  },
-});
-
-/**
- * Actualiza directamente el stock disponible de productos terminados / reventa (cervezas, gaseosas, etc.).
- */
-export const actualizarStockProductoTerminado = defineAction({
-  schema: actualizarStockProductoTerminadoSchema,
-  roles: PUEDEN_MANEJAR_INVENTARIO,
-  async handler({ input, db }) {
-    await db.product.update({
-      where: { id: input.productId },
-      data: {
-        trackStock: true,
-        stockQty: input.stockQty,
-      },
+      // Con receta cargada, el `stockQty` que hubiera quedado de antes deja de
+      // contar: si no, el producto tendría dos disponibilidades distintas y cada
+      // pantalla mostraría la que le tocara mirar.
+      if (items.length > 0) {
+        await tx.product.update({
+          where: { id: producto.id },
+          data: { trackStock: false, stockQty: 0 },
+        });
+      }
     });
 
     revalidatePath("/inventario");
@@ -379,12 +433,70 @@ export const actualizarStockProductoTerminado = defineAction({
 });
 
 /**
- * Alta rápida de bebida o producto terminado de reventa con costo de compra, precio de venta, stock inicial y categoría.
+ * Ajuste manual del stock de un producto de reventa (cervezas, gaseosas).
+ *
+ * Deja movimiento de Kardex, que antes no dejaba ninguno: el `stockQty` se movía
+ * en silencio y cuando el conteo físico no cuadraba no había nada que revisar.
+ */
+export const actualizarStockProductoTerminado = defineAction({
+  schema: actualizarStockProductoTerminadoSchema,
+  roles: PUEDEN_MANEJAR_INVENTARIO,
+  async handler({ input, ctx, db }) {
+    await exigirInventarioActivo(ctx.business.id);
+
+    await db.$transaction(async (tx) => {
+      const previo = await tx.product.findFirst({
+        where: { id: input.productId, deletedAt: null },
+        select: { id: true, name: true, stockQty: true, costCop: true, hasRecipe: true },
+      });
+      if (!previo) throw new ErrorDeUsuario("Ese producto no existe.");
+      if (previo.hasRecipe) {
+        throw new ErrorDeUsuario(
+          `"${previo.name}" lleva receta: su disponibilidad sale de los insumos, no de un stock propio.`,
+        );
+      }
+
+      await tx.product.update({
+        where: { id: previo.id },
+        data: { trackStock: true, stockQty: input.stockQty },
+      });
+
+      if (previo.stockQty !== input.stockQty) {
+        await tx.inventoryMovement.create({
+          data: {
+            businessId: ctx.business.id,
+            productId: previo.id,
+            type: "AJUSTE_MANUAL",
+            quantity: input.stockQty - previo.stockQty,
+            stockAfter: input.stockQty,
+            unitCostCop: previo.costCop,
+            notes: "Ajuste manual de stock de producto de reventa",
+          },
+        });
+      }
+    });
+
+    revalidatePath("/inventario");
+    revalidatePath("/pos");
+  },
+});
+
+/**
+ * Alta rápida de bebida o producto de reventa: costo de compra, precio de venta,
+ * stock inicial, mínimo de reposición y categoría.
+ *
+ * **No crea insumo espejo.** Antes creaba el `Product` con `stockQty` Y un
+ * `InventoryItem` con `stockCurrent` unidos por una receta 1:1, sin marcar
+ * `hasRecipe`: la venta descontaba solo el primero, la compra subía los dos, y el
+ * insumo trepaba para siempre inflando la valorización del inventario. Una cerveza
+ * es una cosa y se cuenta en un lugar.
  */
 export const crearProductoTerminado = defineAction({
   schema: crearProductoTerminadoSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
   async handler({ input, ctx, db }) {
+    await exigirInventarioActivo(ctx.business.id);
+
     let taxRateId = (
       await db.taxRate.findFirst({
         where: { isDefault: true, active: true },
@@ -414,40 +526,37 @@ export const crearProductoTerminado = defineAction({
       taxRateId = newTax.id;
     }
 
-    // 1. Crear Insumo/Item de Inventario correspondiente al Costo de Compra
-    const inventoryItem = await db.inventoryItem.create({
-      data: {
-        businessId: ctx.business.id,
-        name: input.name,
-        unit: "UNIDAD",
-        costCop: input.costCop,
-        stockCurrent: input.stockQty,
-        stockMin: 0,
-      },
-    });
+    await db.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          businessId: ctx.business.id,
+          categoryId: input.categoryId,
+          taxRateId,
+          name: input.name,
+          sku: input.sku,
+          priceCop: input.priceCop,
+          trackStock: true,
+          hasRecipe: false,
+          stockQty: input.stockQty,
+          stockMin: input.stockMin,
+          costCop: input.costCop,
+        },
+        select: { id: true },
+      });
 
-    // 2. Crear Producto Terminado con Precio de Venta
-    const product = await db.product.create({
-      data: {
-        businessId: ctx.business.id,
-        categoryId: input.categoryId,
-        taxRateId,
-        name: input.name,
-        sku: input.sku,
-        priceCop: input.priceCop,
-        trackStock: true,
-        stockQty: input.stockQty,
-      },
-    });
-
-    // 3. Vincular Producto con el Insumo (1 unidad por porción)
-    await db.productRecipeItem.create({
-      data: {
-        businessId: ctx.business.id,
-        productId: product.id,
-        inventoryItemId: inventoryItem.id,
-        quantityRequired: 1,
-      },
+      if (input.stockQty > 0) {
+        await tx.inventoryMovement.create({
+          data: {
+            businessId: ctx.business.id,
+            productId: product.id,
+            type: "INICIAL",
+            quantity: input.stockQty,
+            stockAfter: input.stockQty,
+            unitCostCop: input.costCop,
+            notes: "Stock inicial registrado",
+          },
+        });
+      }
     });
 
     revalidatePath("/inventario");
@@ -457,40 +566,56 @@ export const crearProductoTerminado = defineAction({
 });
 
 /**
- * Edición de nombre, categoría, costo de compra, precio de venta y stock de una bebida o producto terminado.
+ * Edición de nombre, categoría, costo, precio y stock de un producto de reventa.
  */
 export const editarProductoTerminado = defineAction({
   schema: editarProductoTerminadoSchema,
   roles: PUEDEN_MANEJAR_INVENTARIO,
-  async handler({ input, db }) {
-    // 1. Actualizar datos del producto (Nombre, Categoría, SKU, Precio Venta, Stock)
-    await db.product.update({
-      where: { id: input.productId },
-      data: {
-        name: input.name,
-        categoryId: input.categoryId,
-        sku: input.sku,
-        priceCop: input.priceCop,
-        stockQty: input.stockQty,
-      },
-    });
+  async handler({ input, ctx, db }) {
+    await exigirInventarioActivo(ctx.business.id);
 
-    // 2. Actualizar insumo vinculado si existe
-    const recipeItem = await db.productRecipeItem.findFirst({
-      where: { productId: input.productId },
-      select: { inventoryItemId: true },
-    });
+    await db.$transaction(async (tx) => {
+      const previo = await tx.product.findFirst({
+        where: { id: input.productId, deletedAt: null },
+        select: { id: true, name: true, stockQty: true, costCop: true, hasRecipe: true },
+      });
+      if (!previo) throw new ErrorDeUsuario("Ese producto no existe.");
+      if (previo.hasRecipe) {
+        throw new ErrorDeUsuario(
+          `"${previo.name}" lleva receta: editalo desde la carta y ajustá sus insumos.`,
+        );
+      }
 
-    if (recipeItem) {
-      await db.inventoryItem.update({
-        where: { id: recipeItem.inventoryItemId },
+      await tx.product.update({
+        where: { id: previo.id },
         data: {
           name: input.name,
+          categoryId: input.categoryId,
+          sku: input.sku,
+          priceCop: input.priceCop,
+          trackStock: true,
+          stockQty: input.stockQty,
+          stockMin: input.stockMin,
+          // El costo escrito a mano manda sobre el promedio ponderado: es una
+          // corrección deliberada, no una compra.
           costCop: input.costCop,
-          stockCurrent: input.stockQty,
         },
       });
-    }
+
+      if (previo.stockQty !== input.stockQty) {
+        await tx.inventoryMovement.create({
+          data: {
+            businessId: ctx.business.id,
+            productId: previo.id,
+            type: "AJUSTE_MANUAL",
+            quantity: input.stockQty - previo.stockQty,
+            stockAfter: input.stockQty,
+            unitCostCop: input.costCop,
+            notes: `Edición de "${input.name}"`,
+          },
+        });
+      }
+    });
 
     revalidatePath("/inventario");
     revalidatePath("/pos");

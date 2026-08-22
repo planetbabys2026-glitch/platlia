@@ -1,7 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { OrderChannel, OrderItemStatus, OrderStatus, OrderType } from "@/generated/prisma/enums";
+import {
+  type DeliveryStatus,
+  OrderChannel,
+  OrderItemStatus,
+  OrderStatus,
+  OrderType,
+} from "@/generated/prisma/enums";
+import { estadoInicial } from "@/features/domicilios/reglas";
+import { avisarAlAgente } from "@/lib/printing/cola";
+import { encolarComandas } from "@/lib/printing/emitir";
 import { ErrorDeUsuario } from "@/lib/actions/define-action";
 import { licenciaVigente } from "@/lib/auth/reglas";
 import { getSettings } from "@/features/negocio/queries";
@@ -78,6 +87,7 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
       return { ok: false, error: "El menú digital QR no está activado para este negocio." };
     }
 
+<<<<<<< HEAD
     const extra = parseExtraSettings(settings.rolePermissions);
     const estadoNegocio = evaluarEstadoNegocio({
       timeZone: settings.timeZone,
@@ -102,6 +112,27 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
       }
     }
 
+=======
+    /**
+     * Los domicilios por QR se abren y se cierran con el turno.
+     *
+     * Sin esto, un comensal mandaba un domicilio a cualquier hora —con la caja
+     * cerrada, el local vacío y nadie en la cocina— y el pedido quedaba esperando
+     * a que alguien lo descubriera a la mañana siguiente. La pantalla ya lo avisa
+     * al abrir, pero esto es una Server Action pública: es alcanzable con `curl`
+     * sin pasar por ninguna pantalla, así que la puerta se cierra acá.
+     *
+     * Se mira solo para el domicilio: un pedido de mesa lo hace alguien que está
+     * sentado adentro, así que el local está abierto por definición.
+     */
+    if (input.type === "DOMICILIO" && !settings.qrDeliveryEnabled) {
+      return {
+        ok: false,
+        error: "Por ahora no estamos recibiendo domicilios. Escribinos para saber a qué hora abrimos.",
+      };
+    }
+
+>>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     const businessDate = currentBusinessDate(settings);
     const puedeFacturar = puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada());
     const db = tenantDb(business.id);
@@ -188,7 +219,10 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           // vaya a usar nunca.
           docType: puedeFacturar ? (input.docType ?? null) : null,
           docNumber: puedeFacturar ? (input.docNumber ?? null) : null,
-          deliveryStatus: "PENDIENTE",
+          // Un domicilio del QR entra SIN CONFIRMAR: la dirección la escribió el
+          // comensal y nadie la leyó todavía. Un pedido de mesa no tiene reparto.
+          deliveryStatus:
+            input.type === "DOMICILIO" ? estadoInicial(channel) as DeliveryStatus : null,
           deliveryAddress: input.customerAddress ?? null,
           deliveryFeeCop: input.type === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0,
           notes: input.customerAddress ? `Domicilio: ${input.customerAddress}` : null,
@@ -210,7 +244,21 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           },
         });
 
-        if (!producto) continue;
+        // Un producto que ya no está se RECHAZA, no se descarta. Acá había un
+        // `continue`: el comensal tocaba confirmar, el pedido entraba sin ese
+        // renglón y nadie le decía nada —ni a él ni a la cocina—, así que la
+        // primera noticia era la cuenta con un plato menos del que había pedido.
+        if (!producto) {
+          const nombre = await tx.product.findFirst({
+            where: { id: itemInput.productId },
+            select: { name: true },
+          });
+          throw new ErrorDeUsuario(
+            nombre
+              ? `Se acabó ${nombre.name}. Quitalo del pedido para poder confirmarlo.`
+              : "Uno de los productos del pedido ya no está disponible. Revisá el carrito.",
+          );
+        }
 
         const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
           tx,
@@ -227,6 +275,21 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           taxRateBp: producto.taxRate.rateBp,
           taxIncluded: settings.pricesIncludeTax,
         });
+
+        // Antes del create: de acá sale el costo que el renglón congela.
+        const { unitCostCop } = await verificarYDescontarStockReceta(
+          tx,
+          business.id,
+          producto.id,
+          itemInput.quantity,
+          {
+            referenceId: order.id,
+            inventoryEnabled: settings.inventoryEnabled,
+            permitirVentaSinStock: settings.permitirVentaSinStock,
+            customNotes: `Pedido Menú QR x${itemInput.quantity}`,
+            modifierOptionIds: opcionIds,
+          },
+        );
 
         await tx.orderItem.create({
           data: {
@@ -250,18 +313,23 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
             notes: itemInput.notes ?? null,
             createdById: primerMiembro.userId,
             status: OrderItemStatus.PENDIENTE,
-            sentToKitchenAt: new Date(), // ¡El cliente envía el pedido directo a cocina!
+            /**
+             * Un pedido de MESA sí va derecho a la cocina: el comensal está
+             * sentado y la mesa ya está identificada.
+             *
+             * Uno a DOMICILIO no. La dirección, el teléfono y el costo de envío
+             * los escribió alguien que no trabaja acá, y hasta que el módulo de
+             * domicilios no los confirme no hay nada que cocinar. Antes se
+             * sellaba acá y la comanda aparecía en la plancha en el mismo commit
+             * en que el comensal tocaba "enviar".
+             */
+            sentToKitchenAt: input.type === "DOMICILIO" ? null : new Date(),
+            unitCostCopSnapshot: unitCostCop,
+            lineCostCop: unitCostCop === null ? null : unitCostCop * itemInput.quantity,
             modifiers: {
               create: snapshots.map((s) => ({ businessId: business.id, ...s })),
             },
           },
-        });
-
-        await verificarYDescontarStockReceta(tx, business.id, producto.id, itemInput.quantity, {
-          referenceId: order.id,
-          inventoryEnabled: settings.inventoryEnabled,
-          customNotes: `Pedido Menú QR x${itemInput.quantity}`,
-          modifierOptionIds: opcionIds,
         });
       }
 
@@ -292,31 +360,45 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
         cuenta: order.customerName,
         direccion: order.deliveryAddress,
         productos: input.items.length,
+        // Un pedido de mesa por QR va derecho a la plancha, así que su comanda
+        // se encola acá. El domicilio no: la suya sale al confirmarlo.
+        impresos:
+          input.type === "DOMICILIO"
+            ? 0
+            : await encolarComandas(tx, business.id, order.id, order.openedAt),
       };
     });
+
+    if (resultado.impresos > 0) avisarAlAgente(business.id);
 
     // Notificar a cocina, turnero y domicilios vía SSE/Redis
     void publishCocinaUpdate(business.id);
     void publishTurneroUpdate(business.id);
     void publishDomiciliosUpdate(business.id);
 
-    // Los renglones del QR nacen con `sentToKitchenAt` puesto: el cliente manda
-    // el pedido derecho a la cocina, sin mesero de por medio. Así que un pedido
-    // por QR siempre es una comanda nueva, y si además es a domicilio es también
-    // un domicilio nuevo: son dos pantallas distintas y las dos tienen que
-    // enterarse.
-    void publicarAviso(
-      business.id,
-      describirAviso({
-        tipo: "COCINA_NUEVA_COMANDA",
-        orderId: resultado.orderId,
-        code: resultado.code,
-        mesa: resultado.mesaNombre,
-        cuenta: resultado.cuenta,
-        turno: resultado.turnNumber,
-        productos: resultado.productos,
-      }),
-    );
+    /**
+     * A cocina se le avisa solo de lo que le llegó.
+     *
+     * Un pedido de mesa por QR va derecho a la plancha y es una comanda nueva.
+     * Uno a domicilio todavía no: su aviso a cocina lo emite
+     * `confirmarDomicilio`, cuando alguien da por buena la dirección. Antes este
+     * toast saltaba siempre, así que cocina se enteraba de comida que no tenía
+     * que preparar.
+     */
+    if (resultado.type !== "DOMICILIO") {
+      void publicarAviso(
+        business.id,
+        describirAviso({
+          tipo: "COCINA_NUEVA_COMANDA",
+          orderId: resultado.orderId,
+          code: resultado.code,
+          mesa: resultado.mesaNombre,
+          cuenta: resultado.cuenta,
+          turno: resultado.turnNumber,
+          productos: resultado.productos,
+        }),
+      );
+    }
 
     if (resultado.type === "DOMICILIO") {
       void publicarAviso(

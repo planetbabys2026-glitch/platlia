@@ -1,40 +1,56 @@
 import type { Metadata } from "next";
 import {
-  getNegocios,
+  getCuentas,
   getResumenPlataforma,
   getWebhooksConError,
 } from "@/features/superadmin/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireSuperAdmin } from "@/lib/auth/dal";
 import { formatCop } from "@/lib/money";
+import { listaVigenteDeLaBase } from "@/lib/billing/lista";
 import { formatBusinessDate } from "@/lib/time";
-import { TablaNegocios } from "./tabla-negocios";
+import { TablaCuentas } from "./tabla-cuentas";
 
-export const metadata: Metadata = { title: "Negocios" };
+export const metadata: Metadata = { title: "Cuentas" };
 export const dynamic = "force-dynamic";
 
 export default async function SuperAdminPage() {
   // Verifica por su cuenta: el layout no es frontera.
   await requireSuperAdmin();
 
-  const [negocios, resumen, webhooks] = await Promise.all([
-    getNegocios(),
+  const [cuentas, resumen, webhooks, lista] = await Promise.all([
+    getCuentas(),
     getResumenPlataforma(),
     getWebhooksConError(),
+    // La lista vigente: sin ella la consola no puede decir cuánto paga cada
+    // cuenta, solo el `priceCop` de la primera sede.
+    listaVigenteDeLaBase(),
   ]);
+
+  // Se derivan de las cuentas y no de un `count` sobre `business`: contar
+  // negocios inflaba los indicadores con cada sucursal, que es el mismo error
+  // que hacía aparecer a un dueño con dos locales como dos clientes.
+  const sedes = cuentas.reduce((total, c) => total + c.sedes.length, 0);
+  const conLicenciaViva = cuentas.filter((c) =>
+    ["ACTIVA", "PRUEBA"].includes(c.principal.subscription?.status ?? ""),
+  ).length;
 
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Consola de Negocios</h1>
+        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Consola de Cuentas</h1>
         <p className="text-muted-foreground text-sm">
           Gestión inteligente de clientes, licencias y estado operacional de la plataforma.
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <Indicador titulo="Total Negocios" valor={resumen.negocios} />
-        <Indicador titulo="Con Licencia Activa" valor={resumen.conLicenciaViva} />
+        <Indicador
+          titulo="Cuentas"
+          valor={cuentas.length}
+          detalle={`${sedes} ${sedes === 1 ? "sede" : "sedes"} en total`}
+        />
+        <Indicador titulo="Con Licencia Activa" valor={conLicenciaViva} />
         <Indicador titulo="Usuarios Registrados" valor={resumen.usuarios} />
         <Indicador
           titulo="Recaudado Total"
@@ -69,8 +85,8 @@ export default async function SuperAdminPage() {
         </Card>
       )}
 
-      {/* Tabla e Interfaz Interactiva de Negocios */}
-      <TablaNegocios negocios={negocios} />
+      {/* Tabla e Interfaz Interactiva de Cuentas */}
+      <TablaCuentas cuentas={cuentas} lista={lista} />
     </div>
   );
 }

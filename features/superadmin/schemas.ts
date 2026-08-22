@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { finDelDiaEnZona, inicioDelDiaEnZona, ZONA_PLATAFORMA } from "@/lib/time";
 
 /**
  * Esquemas de superadministración.
@@ -117,10 +118,54 @@ const mesesGratis = z.preprocess((v) => Number(v) || 0, z.number().int().min(0).
 /**
  * Una fecha de un `<input type="date">`, que llega vacía cuando no se puso.
  * Vacía significa "sin límite", no "hoy".
+ *
+ * `desde` es el arranque de ese día y `hasta` el arranque del siguiente —o sea
+ * el día que se escribe cuenta entero—, los dos en la zona de la plataforma.
+ * Con `new Date("2026-08-17")` a secas la promoción empezaba a las 7 de la tarde
+ * del 16 hora Colombia y moría un día antes de lo prometido: el superadmin
+ * escribía "hasta el 31" y el cliente leía "hasta el 30".
  */
-const fechaOpcional = z.preprocess(
-  (v) => (typeof v === "string" && v.trim() !== "" ? new Date(v) : null),
-  z.date().nullable(),
+function fechaDeFormulario(borde: "inicio" | "fin") {
+  return z.preprocess((v) => {
+    if (typeof v !== "string" || v.trim() === "") return null;
+    const dia = new Date(v);
+    if (Number.isNaN(dia.getTime())) return null;
+    return borde === "inicio"
+      ? inicioDelDiaEnZona(dia, ZONA_PLATAFORMA)
+      : finDelDiaEnZona(dia, ZONA_PLATAFORMA);
+  }, z.date().nullable());
+}
+
+/**
+ * Los escalones por cantidad de sedes, que viajan como JSON en un campo oculto.
+ *
+ * Son una lista de largo variable y un `<form>` no tiene forma natural de
+ * mandarla; serializarla en un campo evita inventar nombres tipo `tramo[0][x]`
+ * que después hay que volver a parsear a mano.
+ */
+const tramos = z.preprocess(
+  (v) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v !== "string" || v.trim() === "") return [];
+    try {
+      const parseado = JSON.parse(v);
+      return Array.isArray(parseado) ? parseado : [];
+    } catch {
+      return [];
+    }
+  },
+  z
+    .array(
+      z.object({
+        desdeSedes: z.coerce.number().int().min(1, "El tramo arranca en 1 sede o más.").max(999),
+        precioMensualCop: pesos(100_000_000),
+      }),
+    )
+    .max(20, "Veinte tramos son demasiados: el precio dejaría de explicarse solo.")
+    .refine(
+      (lista) => new Set(lista.map((t) => t.desdeSedes)).size === lista.length,
+      "Hay dos tramos que arrancan en la misma cantidad de sedes.",
+    ),
 );
 
 export const guardarListaBaseSchema = z.object({
@@ -128,6 +173,13 @@ export const guardarListaBaseSchema = z.object({
   precioSedeAdicionalCop: pesos(10_000_000),
   mesesGratisSemestral: mesesGratis,
   mesesGratisAnual: mesesGratis,
+  tramos,
+  motivo,
+});
+
+/** Apagar o borrar una promoción. Alcanza con saber cuál y por qué. */
+export const sobrePromocionSchema = z.object({
+  id: z.string().trim().min(1),
   motivo,
 });
 
@@ -139,14 +191,11 @@ export const guardarPromocionSchema = z.object({
   precioSedeAdicionalCop: pesos(10_000_000),
   mesesGratisSemestral: mesesGratis,
   mesesGratisAnual: mesesGratis,
-  desde: fechaOpcional,
-  hasta: fechaOpcional,
+  tramos,
+  desde: fechaDeFormulario("inicio"),
+  hasta: fechaDeFormulario("fin"),
   activa: z.preprocess((v) => v === "true" || v === true || v === "on", z.boolean()),
   motivo,
 });
 
 /** El precio pactado con UNA empresa, que es lo que se le respeta al renovar. */
-export const cambiarPrecioEmpresaSchema = sobreEmpresa.extend({
-  priceCop: pesos(10_000_000),
-  motivo,
-});

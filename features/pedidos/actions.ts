@@ -1,9 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AppModule, OrderChannel, OrderType, Role } from "@/generated/prisma/enums";
+import {
+  AppModule,
+  DeliveryStatus,
+  OrderChannel,
+  OrderType,
+  Role,
+} from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
+import { cerrarComandaAlDespachar } from "@/features/domicilios/despacho";
+import { avisarAlAgente } from "@/lib/printing/cola";
+import { encolarComandas, encolarRecibo } from "@/lib/printing/emitir";
 import { recalcularTotales } from "@/features/pedidos/totales";
 import { modificadoresDeRenglon, resolverModificadores } from "@/features/pedidos/modificadores";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
@@ -194,6 +203,12 @@ export const abrirPedido = defineAction({
             customerPhone: input.customerPhone ?? null,
             deliveryAddress: input.deliveryAddress ?? null,
             deliveryFeeCop: input.type === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0,
+            // Un domicilio que carga el negocio nace CONFIRMADO: quien lo tomó
+            // ya tiene la dirección delante. La confirmación existe para lo que
+            // entra por el menú QR, que llega sin que nadie lo haya mirado.
+            deliveryStatus:
+              input.type === "DOMICILIO" ? DeliveryStatus.EN_PREPARACION : null,
+            deliveryConfirmedAt: input.type === "DOMICILIO" ? new Date() : null,
             notes: input.notes ?? null,
             openedById: ctx.user.id,
           },
@@ -280,6 +295,22 @@ export const agregarItem = defineAction({
         taxIncluded: settings.pricesIncludeTax,
       });
 
+      // El descuento va ANTES de escribir el renglón porque de acá sale el costo
+      // que el renglón congela. Hacerlo después obligaría a un UPDATE extra por
+      // cada producto de cada pedido para volver a escribir lo mismo.
+      const { unitCostCop } = await verificarYDescontarStockReceta(
+        tx,
+        ctx.business.id,
+        producto.id,
+        input.quantity,
+        {
+          referenceId: pedido.id,
+          inventoryEnabled: settings.inventoryEnabled,
+          permitirVentaSinStock: settings.permitirVentaSinStock,
+          modifierOptionIds: opcionIds,
+        },
+      );
+
       await tx.orderItem.create({
         data: {
           businessId: ctx.business.id,
@@ -296,6 +327,8 @@ export const agregarItem = defineAction({
           lineSubtotalCop: linea.lineSubtotalCop,
           lineTaxCop: linea.lineTaxCop,
           lineTotalCop: linea.lineTotalCop,
+          unitCostCopSnapshot: unitCostCop,
+          lineCostCop: unitCostCop === null ? null : unitCostCop * input.quantity,
           notes: input.notes ?? null,
           createdById: ctx.user.id,
           sentToKitchenAt: null,
@@ -305,12 +338,6 @@ export const agregarItem = defineAction({
             create: snapshots.map((s) => ({ businessId: ctx.business.id, ...s })),
           },
         },
-      });
-
-      await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, input.quantity, {
-        referenceId: pedido.id,
-        inventoryEnabled: settings.inventoryEnabled,
-        modifierOptionIds: opcionIds,
       });
 
       await recalcularTotales(tx, pedido.id);
@@ -348,7 +375,8 @@ export const cambiarCantidad = defineAction({
           sentToKitchenAt: true,
           productId: true,
           businessId: true,
-          product: { select: { trackStock: true } },
+          unitCostCopSnapshot: true,
+          product: { select: { trackStock: true, name: true, active: true, isAvailable: true } },
           order: { select: { status: true } },
         },
       });
@@ -366,6 +394,16 @@ export const cambiarCantidad = defineAction({
       if (item.status !== "PENDIENTE" || item.order.status === "CUENTA_PEDIDA") {
         if (input.quantity > item.quantity) {
           const delta = input.quantity - item.quantity;
+
+          // Este es el único camino que crea un renglón CLONANDO los snapshots de
+          // otro, así que era también el único donde nadie volvía a mirar el
+          // producto: se podían seguir sumando unidades de algo archivado o
+          // marcado como agotado media hora antes.
+          if (!item.product.active) throw new ErrorDeUsuario("Ese producto ya no existe.");
+          if (!item.product.isAvailable) {
+            throw new ErrorDeUsuario(`${item.product.name} está marcado como agotado.`);
+          }
+
           const lineaDelta = computeTaxLine({
             unitPriceCop: item.unitPriceCop,
             quantity: delta,
@@ -386,6 +424,25 @@ export const cambiarCantidad = defineAction({
             },
           });
 
+          const { unitCostCop } = await ajustarStockCantidadReceta(
+            tx,
+            item.businessId,
+            item.productId,
+            0,
+            delta,
+            {
+              referenceId: item.orderId,
+              inventoryEnabled: settings.inventoryEnabled,
+              permitirVentaSinStock: settings.permitirVentaSinStock,
+              modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
+            },
+          );
+
+          // El costo del tramo nuevo se mide ahora y no se hereda: la adición se
+          // prepara con los insumos de hoy, que pueden costar otra cosa. Si el
+          // inventario no supo decirlo, cae al del renglón original.
+          const costoUnitario = unitCostCop ?? item.unitCostCopSnapshot;
+
           await tx.orderItem.create({
             data: {
               businessId: item.businessId,
@@ -402,6 +459,8 @@ export const cambiarCantidad = defineAction({
               lineSubtotalCop: lineaDelta.lineSubtotalCop,
               lineTaxCop: lineaDelta.lineTaxCop,
               lineTotalCop: lineaDelta.lineTotalCop,
+              unitCostCopSnapshot: costoUnitario,
+              lineCostCop: costoUnitario === null ? null : costoUnitario * delta,
               notes: item.notes,
               createdById: ctx.user.id,
               sentToKitchenAt: null,
@@ -418,19 +477,6 @@ export const cambiarCantidad = defineAction({
               },
             },
           });
-
-          await ajustarStockCantidadReceta(
-            tx,
-            item.businessId,
-            item.productId,
-            0,
-            delta,
-            {
-              referenceId: item.orderId,
-              inventoryEnabled: settings.inventoryEnabled,
-              modifierOptionIds: await modificadoresDeRenglon(tx, item.id),
-            },
-          );
 
           await recalcularTotales(tx, item.orderId);
           return item.orderId;
@@ -453,6 +499,10 @@ export const cambiarCantidad = defineAction({
           lineSubtotalCop: linea.lineSubtotalCop,
           lineTaxCop: linea.lineTaxCop,
           lineTotalCop: linea.lineTotalCop,
+          // El costo unitario congelado no se toca —es el del momento en que se
+          // agregó—, pero el de la línea sigue a la cantidad.
+          lineCostCop:
+            item.unitCostCopSnapshot === null ? null : item.unitCostCopSnapshot * input.quantity,
         },
       });
 
@@ -465,6 +515,7 @@ export const cambiarCantidad = defineAction({
         {
           referenceId: item.orderId,
           inventoryEnabled: settings.inventoryEnabled,
+          permitirVentaSinStock: settings.permitirVentaSinStock,
           // Los mismos modificadores con los que se descontó. Sin esto, subir de
           // 1 a 2 un plato con carne descuenta el arroz de la receta base y no la
           // carne, y el inventario se va desviando renglón a renglón.
@@ -727,6 +778,9 @@ export const registrarPago = defineAction({
     const settings = await getSettings(ctx.business.id);
 
     const resultado = await db.$transaction(async (tx) => {
+      /** Cuántos papeles quedaron en la cola: decide si hay que tocar el timbre. */
+      let impresos = 0;
+
       const pedido = await tx.order.findFirst({
         where: { id: input.orderId },
         select: {
@@ -740,6 +794,7 @@ export const registrarPago = defineAction({
           tipCop: true,
           tableId: true,
           cashSessionId: true,
+          deliveryStatus: true,
         },
       });
       if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
@@ -829,6 +884,16 @@ export const registrarPago = defineAction({
             ? await siguienteTurnoLibre(tx, pedido.businessDate, settings.turnNumberMax)
             : undefined;
 
+        /**
+         * Facturar un domicilio lo pone en reparto, sin que nadie lo toque.
+         *
+         * Es el paso que el cliente ve: hasta acá el rastreo del menú QR decía
+         * "en preparación" y solo avanzaba si alguien iba al módulo de domicilios
+         * a moverlo a mano. Ahora cobrar es despachar, que es lo que de verdad
+         * pasa en el mostrador.
+         */
+        const despacha = pedido.deliveryStatus === "LISTO";
+
         await tx.order.update({
           where: { id: pedido.id },
           data: {
@@ -839,8 +904,18 @@ export const registrarPago = defineAction({
             // Si el pedido se abrió sin caja, se cuelga de la que lo cobró: el
             // corte tiene que incluirlo.
             cashSessionId: pedido.cashSessionId ?? caja.id,
+            ...(despacha
+              ? { deliveryStatus: "EN_CAMINO" as const, dispatchedAt: new Date() }
+              : {}),
           },
         });
+
+        // La comida se la llevó el repartidor: sale de la pantalla de cocina.
+        if (despacha) await cerrarComandaAlDespachar(tx, pedido.id);
+
+        // El recibo se encola DENTRO de la transacción: encolarlo afuera podría
+        // imprimir el papel de una venta que después no se guardó.
+        impresos += await encolarRecibo(tx, ctx.business.id, pedido.id);
         // La mesa no se libera por haber cobrado ESTA cuenta: se libera cuando no
         // le queda ninguna abierta. Con cuentas separadas, cobrarle a uno de tres
         // dejaba la mesa libre con los otros dos todavía sentados.
@@ -853,6 +928,8 @@ export const registrarPago = defineAction({
         changeCop,
         totales,
         tableId: pedido.tableId,
+        esDomicilio: pedido.deliveryStatus !== null,
+        impresos,
       };
     });
 
@@ -863,6 +940,18 @@ export const registrarPago = defineAction({
     revalidatePath(`/pedido/${input.orderId}`);
     void publishCocinaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
+
+    // Sin esto el panel de domicilios se queda mostrando el pedido en la caja y
+    // el rastreo del comensal no se entera de que su comida salió.
+    if (resultado.esDomicilio) {
+      revalidatePath("/domicilios");
+      void publishDomiciliosUpdate(ctx.business.id);
+    }
+
+    // El timbre va DESPUÉS del commit: antes, el agente podría venir a buscar un
+    // trabajo que todavía no existe y no volvería hasta su próxima ronda.
+    if (resultado.impresos > 0) avisarAlAgente(ctx.business.id);
+
     return resultado;
   },
 });
@@ -1218,7 +1307,12 @@ export const confirmarPedido = defineAction({
 
       const cantNuevos = itemsPendientes.length > 0 ? itemsPendientes.length : pedido.items.length;
 
+      // Solo lo que se acaba de mandar: agregar un plato a una mesa no puede
+      // reimprimir el pedido entero.
+      const impresos = await encolarComandas(tx, ctx.business.id, pedido.id, ahora);
+
       return {
+        impresos,
         turnNumber,
         aviso: describirAviso({
           tipo: "COCINA_NUEVA_COMANDA",
@@ -1242,6 +1336,7 @@ export const confirmarPedido = defineAction({
     // acá sí se levanta un aviso: los otros `publishCocinaUpdate` del archivo
     // —una nota, un renombre, un cobro— mueven el contador y nada más.
     void publicarAviso(ctx.business.id, resultado.aviso);
+    if (resultado.impresos > 0) avisarAlAgente(ctx.business.id);
 
     return { turnNumber: resultado.turnNumber };
   },
@@ -1297,7 +1392,13 @@ export const procesarVentaPosCompleta = defineAction({
         if (input.orderId) {
           const existente = await tx.order.findFirst({
             where: { id: input.orderId },
-            select: { id: true, code: true, turnNumber: true, status: true },
+            select: {
+              id: true,
+              code: true,
+              turnNumber: true,
+              status: true,
+              deliveryStatus: true,
+            },
           });
           if (!existente) throw new ErrorDeUsuario("Ese pedido no existe.");
           if (existente.status === "PAGADA" || existente.status === "ANULADA") {
@@ -1318,6 +1419,20 @@ export const procesarVentaPosCompleta = defineAction({
               customerPhone: input.customerPhone ?? null,
               deliveryAddress: input.deliveryAddress ?? null,
               deliveryFeeCop: input.type === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0,
+              /**
+               * Un pedido parqueado que recién ahora se marca como domicilio
+               * arranca su recorrido; uno que ya lo era, no se toca.
+               *
+               * Reescribirlo siempre mandaría para atrás a uno que la cocina ya
+               * terminó, y le borraría al cliente el "en reparto" que estaba
+               * viendo.
+               */
+              ...(input.type === "DOMICILIO" && existente.deliveryStatus === null
+                ? {
+                    deliveryStatus: DeliveryStatus.EN_PREPARACION,
+                    deliveryConfirmedAt: ahora,
+                  }
+                : {}),
               notes: input.notes ?? null,
               ...datosFiscales,
             },
@@ -1382,6 +1497,12 @@ export const procesarVentaPosCompleta = defineAction({
               customerPhone: input.customerPhone ?? null,
               deliveryAddress: input.deliveryAddress ?? null,
               deliveryFeeCop: input.type === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0,
+              // El domicilio que carga el negocio nace CONFIRMADO: quien lo tomó
+              // ya tiene la dirección delante. La confirmación existe para lo que
+              // entra por el menú QR, que llega sin que nadie lo haya mirado.
+              deliveryStatus:
+                input.type === "DOMICILIO" ? DeliveryStatus.EN_PREPARACION : null,
+              deliveryConfirmedAt: input.type === "DOMICILIO" ? ahora : null,
               notes: input.notes ?? null,
               ...datosFiscales,
               openedById: ctx.user.id,
@@ -1454,7 +1575,7 @@ export const procesarVentaPosCompleta = defineAction({
                 .filter((o) => o !== undefined),
             })),
             [{ products: productos }],
-            settings.inventoryEnabled,
+            settings.inventoryEnabled && !settings.permitirVentaSinStock,
           );
           if (problema) throw new ErrorDeUsuario(problema);
         }
@@ -1496,6 +1617,22 @@ export const procesarVentaPosCompleta = defineAction({
             taxIncluded: settings.pricesIncludeTax,
           });
 
+          // El descuento va antes de escribir el renglón: de ahí sale el costo
+          // que se congela, y hacerlo después costaría un UPDATE extra por cada
+          // producto de cada venta.
+          const { unitCostCop } = await verificarYDescontarStockReceta(
+            tx,
+            ctx.business.id,
+            producto.id,
+            itemInput.quantity,
+            {
+              referenceId: pedido.id,
+              inventoryEnabled: settings.inventoryEnabled,
+              permitirVentaSinStock: settings.permitirVentaSinStock,
+              modifierOptionIds: opcionIds,
+            },
+          );
+
           await tx.orderItem.create({
             data: {
               businessId: ctx.business.id,
@@ -1512,6 +1649,8 @@ export const procesarVentaPosCompleta = defineAction({
               lineSubtotalCop: linea.lineSubtotalCop,
               lineTaxCop: linea.lineTaxCop,
               lineTotalCop: linea.lineTotalCop,
+              unitCostCopSnapshot: unitCostCop,
+              lineCostCop: unitCostCop === null ? null : unitCostCop * itemInput.quantity,
               notes: itemInput.notes ?? null,
               createdById: ctx.user.id,
               sentToKitchenAt: debeEnviarACocina ? ahora : null,
@@ -1519,12 +1658,6 @@ export const procesarVentaPosCompleta = defineAction({
                 create: snapshots.map((s) => ({ businessId: ctx.business.id, ...s })),
               },
             },
-          });
-
-          await verificarYDescontarStockReceta(tx, ctx.business.id, producto.id, itemInput.quantity, {
-            referenceId: pedido.id,
-            inventoryEnabled: settings.inventoryEnabled,
-            modifierOptionIds: opcionIds,
           });
         }
 
@@ -1596,6 +1729,21 @@ export const procesarVentaPosCompleta = defineAction({
           }
         }
 
+        /**
+         * El papel, al final y dentro de la misma transacción.
+         *
+         * La comanda solo si de verdad se mandó a cocina; el recibo solo si la
+         * venta quedó cerrada. Este camino borra y recrea los renglones, así que
+         * `ahora` alcanza para acotar la comanda a lo que se acaba de enviar.
+         */
+        let impresos = 0;
+        if (debeEnviarACocina) {
+          impresos += await encolarComandas(tx, ctx.business.id, pedido.id, ahora);
+        }
+        if (input.accion === "PAGAR_DIRECTO") {
+          impresos += await encolarRecibo(tx, ctx.business.id, pedido.id);
+        }
+
         return {
           orderId: pedido.id,
           code: pedido.code,
@@ -1603,12 +1751,15 @@ export const procesarVentaPosCompleta = defineAction({
           tableId: pedido.tableId,
           mesa: pedido.table?.name ?? null,
           pagado: input.accion === "PAGAR_DIRECTO",
+          impresos,
         };
       }),
     );
 
     const debeEnviarACocinaNotificacion =
       input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
+
+    if (resultado.impresos > 0) avisarAlAgente(ctx.business.id);
 
     revalidatePath("/pos");
     revalidatePath("/caja");

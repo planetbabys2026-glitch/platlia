@@ -1,14 +1,25 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
+<<<<<<< HEAD
 import { getSettings } from "@/features/negocio/queries";
 import { parseExtraSettings } from "@/features/negocio/extra-settings";
+=======
+import {
+  getConfiguracionDeImpresion,
+  getDescargasDelAgente,
+  getSettings,
+} from "@/features/negocio/queries";
+>>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
 import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { faltantesParaFacturar } from "@/lib/billing/factus-habilitacion";
 import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
+import { cuentaDelPropietario } from "@/lib/billing/cuenta";
+import { preciosVigentes } from "@/lib/billing/lista";
 import { tenantDb } from "@/lib/db/tenant";
+import { env } from "@/lib/env";
 import { PanelConfiguracion } from "./panel-configuracion";
 
 export const metadata: Metadata = { title: "Configuración" };
@@ -42,6 +53,46 @@ export default async function ConfiguracionPage() {
   if (!esPropietario && !tienePermisoSeccion(ctx.role, "configuracion", settings.rolePermissions)) {
     notFound();
   }
+
+  /**
+   * El precio de la licencia sale de la CUENTA y de la LISTA, nunca de esta sede.
+   *
+   * La tarjeta pintaba `suscripcion.priceCop` crudo: parado en la sede principal
+   * con dos sedes mostraba solo el precio de la primera, y parado en la segunda
+   * mostraba **$0**, porque la suscripción hija nace en cero. Encima los planes
+   * estaban escritos a mano en el JSX con números que ya no coincidían con lo que
+   * cobra el checkout.
+   *
+   * Va la lista vigente y la cantidad de sedes: `lib/billing/precios.ts` es puro,
+   * así que el componente cliente cotiza con la misma función que el cobro.
+   */
+  // Solo quien administra configura impresoras: una mal apuntada manda las
+  // comandas al cuarto equivocado.
+  const puedeAdministrar = esPropietario || ctx.role === Role.ADMINISTRADOR;
+  const impresion = puedeAdministrar
+    ? {
+        ...(await getConfiguracionDeImpresion(ctx.business.id)),
+        descargas: getDescargasDelAgente(),
+        // La URL sale del entorno y no se escribe a mano en la pantalla: es la
+        // que el agente tiene que poner en su configuración, y una mal copiada
+        // es media hora de alguien preguntándose por qué no conecta.
+        urlDelServidor: env.APP_URL,
+      }
+    : null;
+
+  const cuenta = esPropietario ? await cuentaDelPropietario(ctx.user.id) : null;
+  const precios = esPropietario ? await preciosVigentes() : null;
+  const licencia =
+    esPropietario && precios
+      ? {
+          sedes: cuenta?.sedes ?? 1,
+          lista: precios.vigente,
+          // La base viaja aparte para poder decir de cuánto bajó y hasta cuándo:
+          // una promo sin anunciar se ve igual que la tarifa de siempre.
+          base: precios.base,
+          promo: precios.promo,
+        }
+      : null;
 
   /**
    * Las credenciales de Factus NO cruzan a un componente cliente.
@@ -78,6 +129,8 @@ export default async function ConfiguracionPage() {
           faltantesParaFacturar: faltantesParaFacturar(settings, plataformaFacturaConfigurada()),
         }}
         facturacion={facturacion}
+        licencia={licencia}
+        impresion={impresion}
         mesasHabilitado={ctx.modules.has(AppModule.MESAS)}
         esPropietario={esPropietario}
         slug={negocio.slug}

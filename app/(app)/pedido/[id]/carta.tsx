@@ -12,6 +12,7 @@ import {
 } from "@/features/carta/components/selector-modificadores";
 import { Input } from "@/components/ui/input";
 import { formatCop } from "@/lib/money";
+import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 import { cn } from "@/lib/utils";
 import { useCuenta } from "./cuenta-en-vivo";
 
@@ -39,6 +40,9 @@ export type ProductoDeCarta = ProductoConModificadores & {
   taxRate: { rateBp: number };
 };
 
+/** Umbral de "quedan pocos", el mismo que usa el POS. */
+const POCAS_PORCIONES = 5;
+
 export type CategoriaDeCarta = {
   id: string;
   name: string;
@@ -57,10 +61,12 @@ function TarjetaProducto({
   orderId,
   producto,
   inventoryEnabled = true,
+  permitirVentaSinStock = false,
 }: {
   orderId: string;
   producto: ProductoDeCarta;
   inventoryEnabled?: boolean;
+  permitirVentaSinStock?: boolean;
 }) {
   const cuenta = useCuenta();
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +74,14 @@ function TarjetaProducto({
   const formRef = useRef<HTMLFormElement>(null);
 
   const conModificadores = tieneModificadores(producto);
+
+  // Lo que el POS ya hacía y acá no: la carta venía recibiendo `stockQty`,
+  // `hasRecipe` y `recipeItems` desde `getCarta` y solo miraba `isAvailable`. El
+  // mesero veía la tarjeta tocable, la tocaba, y el error de stock le llegaba
+  // parado en la mesa. `null` significa "este producto no se mide", no cero.
+  const disponibles = calcularStockDisponibleProducto(producto, inventoryEnabled);
+  const sinStock = disponibles !== null && disponibles <= 0;
+  const pocas = disponibles !== null && disponibles > 0 && disponibles <= POCAS_PORCIONES;
 
   // Las opciones elegidas se escriben como campos ocultos repetidos y se envía
   // el mismo formulario de siempre. Así el camino de guardado es uno solo: el
@@ -141,7 +155,10 @@ function TarjetaProducto({
         <Boton
           nombre={producto.name}
           precio={producto.priceCop}
-          disponible={producto.isAvailable}
+          disponible={producto.isAvailable && (!sinStock || permitirVentaSinStock)}
+          agotadoPorStock={sinStock}
+          disponibles={disponibles}
+          pocas={pocas}
           conModificadores={conModificadores}
           onElegir={
             conModificadores
@@ -180,12 +197,20 @@ function Boton({
   nombre,
   precio,
   disponible,
+  agotadoPorStock,
+  disponibles,
+  pocas,
   conModificadores,
   onElegir,
 }: {
   nombre: string;
   precio: number;
   disponible: boolean;
+  /** Se acabó según el inventario, distinto de la marca manual de "agotado". */
+  agotadoPorStock?: boolean;
+  /** Porciones o unidades que alcanzan hoy. `null` = el producto no se mide. */
+  disponibles?: number | null;
+  pocas?: boolean;
   conModificadores?: boolean;
   onElegir?: () => void;
 }) {
@@ -214,11 +239,25 @@ function Boton({
         {nombre}
       </span>
       <span className="numeral text-muted-foreground text-xs font-medium transition-colors duration-200 group-hover:text-foreground">
-        {disponible ? formatCop(precio) : "Agotado"}
+        {disponible || agotadoPorStock ? formatCop(precio) : "Agotado"}
         {disponible && conModificadores && (
           <span className="text-brand ml-1 font-semibold">· a elegir</span>
         )}
       </span>
+      {typeof disponibles === "number" && (
+        <span
+          className={cn(
+            "text-rotulo mt-0.5 w-fit rounded-md border px-1.5 py-0.5 font-bold",
+            agotadoPorStock
+              ? "bg-destructive/10 text-destructive-soft border-destructive/30"
+              : pocas
+                ? "bg-warning/10 text-warning-soft border-warning/30"
+                : "bg-success/10 text-success-soft border-success/30",
+          )}
+        >
+          {agotadoPorStock ? "SIN STOCK" : `${disponibles} disp.`}
+        </span>
+      )}
       <span className="sr-only">
         {pending ? "Agregando" : conModificadores ? "Elegir opciones" : "Agregar al pedido"}
       </span>
@@ -231,11 +270,13 @@ export function Carta({
   categorias,
   editable,
   inventoryEnabled = true,
+  permitirVentaSinStock = false,
 }: {
   orderId: string;
   categorias: CategoriaDeCarta[];
   editable: boolean;
   inventoryEnabled?: boolean;
+  permitirVentaSinStock?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
@@ -313,6 +354,7 @@ export function Carta({
                 orderId={orderId}
                 producto={producto}
                 inventoryEnabled={inventoryEnabled}
+                permitirVentaSinStock={permitirVentaSinStock}
               />
             ))}
           </ul>
@@ -334,6 +376,7 @@ export function Carta({
                     orderId={orderId}
                     producto={producto}
                     inventoryEnabled={inventoryEnabled}
+                    permitirVentaSinStock={permitirVentaSinStock}
                   />
                 ))}
               </ul>

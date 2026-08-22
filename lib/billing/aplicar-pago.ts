@@ -4,7 +4,11 @@ import { consultarFacturaDeSuscripcion, consultarPago, traducirEstado } from "@/
 import { consultarAutorizacion } from "@/lib/billing/preapproval";
 import { sedesDeLaMismaCuenta, sincronizarSedes } from "@/lib/billing/cuenta";
 import { listaVigenteDeLaBase } from "@/lib/billing/lista";
-import { listaParaNegocio, mesesSegunMonto, MESES_POR_PERIODICIDAD } from "@/lib/billing/precios";
+import {
+  mensualDeLaLista,
+  mesesSegunMonto,
+  MESES_POR_PERIODICIDAD,
+} from "@/lib/billing/precios";
 import { aplicarPagoAprobado } from "@/lib/billing/suscripcion";
 
 /** Nadie compra más de un año de una vez: es el tope de seguridad del webhook. */
@@ -43,7 +47,6 @@ export async function aplicarPagoDeMercadoPago(
       id: true,
       businessId: true,
       status: true,
-      priceCop: true,
       trialEndsAt: true,
       currentPeriodStart: true,
       currentPeriodEnd: true,
@@ -67,9 +70,13 @@ export async function aplicarPagoDeMercadoPago(
    * Ante la duda se aplica lo MENOR: equivocarse de menos se arregla con un
    * mensaje a soporte; equivocarse de más es plata regalada que nadie audita.
    */
-  const lista = listaParaNegocio(await listaVigenteDeLaBase(), suscripcion.priceCop);
+  const lista = await listaVigenteDeLaBase();
   const sedes = pago.sedes ?? 1;
-  const mensualCop = lista.precioSedePrincipalCop + lista.precioSedeAdicionalCop * (sedes - 1);
+  // Con `mensualDeLaLista` y no con la fórmula a mano: si la cuenta cae en un
+  // tramo, el mensual es el del tramo, y reconstruirlo sumando daría otro número.
+  // Ahí `mesesSegunMonto` no reconocería el monto y un pago de un año se
+  // aplicaría como un mes.
+  const mensualCop = mensualDeLaLista(lista, sedes);
   const mesesPorMonto = mesesSegunMonto(pago.amountCop, mensualCop, lista);
 
   const mesesCrudos = pago.meses ?? mesesPorMonto ?? 1;

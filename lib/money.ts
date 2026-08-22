@@ -146,6 +146,22 @@ export function variacionPorcentual(actual: number, anterior: number): number | 
   return Math.round(((actual - anterior) / Math.abs(anterior)) * 100);
 }
 
+/**
+ * Qué porción de la venta se queda el negocio, en porcentaje redondeado.
+ *
+ * Devuelve null si no hubo venta, con el mismo criterio que
+ * `variacionPorcentual`: sin base no hay porcentaje, y un 0% inventado se lee
+ * como "vendimos a pérdida" cuando en realidad no se vendió nada.
+ *
+ * La venta que va acá es la **base gravable**, no el total: el impuesto se cobra
+ * para entregarlo, así que contarlo como ingreso propio infla el margen de todo
+ * el negocio en un 8%.
+ */
+export function margenPorcentual(utilidadCop: number, ventaCop: number): number | null {
+  if (ventaCop === 0) return null;
+  return Math.round((utilidadCop / Math.abs(ventaCop)) * 100);
+}
+
 /** Muestra una tasa en puntos básicos como porcentaje: 800 → "8%", 850 → "8,5%". */
 export function formatRateBp(rateBp: number): string {
   assertCop(rateBp, "la tasa en puntos básicos");

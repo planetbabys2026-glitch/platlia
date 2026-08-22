@@ -18,22 +18,29 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
 import { formatDayInTimeZone } from "@/lib/time";
+import { formatCop } from "@/lib/money";
+import { cotizar, type ListaDePrecios } from "@/lib/billing/precios";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-import { actualizarLimiteSucursales, extenderLicencia, suspenderEmpresa } from "@/features/superadmin/actions";
+import {
+  actualizarLimiteSucursales,
+  extenderLicencia,
+  suspenderEmpresa,
+} from "@/features/superadmin/actions";
 import { toast } from "sonner";
-import { 
-  Search, 
-  Calendar, 
-  Users, 
-  LayoutGrid, 
-  Boxes, 
-  Receipt, 
-  Clock, 
+import {
+  Search,
+  Calendar,
+  Users,
+  LayoutGrid,
+  Boxes,
+  Receipt,
+  Clock,
   Settings2,
-  X
+  Store,
+  X,
 } from "lucide-react";
 
-type NegocioItem = {
+type SedeItem = {
   id: string;
   name: string;
   slug: string;
@@ -41,7 +48,6 @@ type NegocioItem = {
   createdAt: Date;
   subscription: {
     status: string;
-    priceCop: number;
     maxBranches: number;
     trialEndsAt: Date | null;
     currentPeriodStart: Date | null;
@@ -53,12 +59,17 @@ type NegocioItem = {
     paquetesDocumentosDisponibles: number;
     documentosEmitidosConsumidos: number;
   } | null;
-  _count: {
-    memberships: number;
-    tables: number;
-    products: number;
-    orders: number;
-  };
+  _count: { memberships: number; tables: number; products: number; orders: number };
+};
+
+type CuentaItem = {
+  clave: string;
+  duenoId: string | null;
+  duenoNombre: string;
+  duenoCorreo: string | null;
+  principal: SedeItem;
+  sedes: SedeItem[];
+  totales: { memberships: number; tables: number; products: number; orders: number };
 };
 
 const ESTADO_LICENCIA: Record<string, { texto: string; color: string }> = {
@@ -69,79 +80,112 @@ const ESTADO_LICENCIA: Record<string, { texto: string; color: string }> = {
   CANCELADA: { texto: "Cancelada", color: "border-[var(--panel-3)] bg-[var(--panel-3)] text-muted-foreground dark:text-foreground" },
 };
 
-export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
+/**
+ * Lo que la cuenta paga por mes, cotizado contra la lista vigente.
+ *
+ * Sale de `ListaDePrecios` y de cuántas sedes tiene, y de ningún otro lado: no
+ * existe un precio por empresa. Si la lista sube, sube para todos; si hay una
+ * promoción vigente, la reciben todos por igual, viejos y nuevos.
+ */
+function precioDeLaCuenta(cuenta: CuentaItem, lista: ListaDePrecios): number | null {
+  if (!cuenta.principal.subscription) return null;
+  return cotizar({ lista, sedes: cuenta.sedes.length, periodicidad: "MENSUAL" }).mensualCop;
+}
+
+export function TablaCuentas({
+  cuentas,
+  lista,
+}: {
+  cuentas: CuentaItem[];
+  lista: ListaDePrecios;
+}) {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<string>("TODOS");
   const [orden, setOrden] = useState<"corte" | "recientes" | "nombre" | "pedidos">("corte");
 
-  // Conteo rápido por categoría
+  // Conteo rápido por categoría. Se mira la licencia de la principal: es la
+  // única que decide, porque las demás sedes viven con sus mismas fechas.
   const conteos = useMemo(() => {
     let enPrueba = 0;
     let alDia = 0;
     let vencidos = 0;
     let suspendidos = 0;
 
-    for (const n of negocios) {
-      if (n.status !== "ACTIVO" || n.subscription?.status === "SUSPENDIDA") {
+    for (const c of cuentas) {
+      const sub = c.principal.subscription;
+      if (c.principal.status !== "ACTIVO" || sub?.status === "SUSPENDIDA") {
         suspendidos++;
-      } else if (n.subscription?.status === "PRUEBA") {
+      } else if (sub?.status === "PRUEBA") {
         enPrueba++;
-      } else if (n.subscription?.status === "ACTIVA") {
+      } else if (sub?.status === "ACTIVA") {
         alDia++;
-      } else if (n.subscription?.status === "VENCIDA") {
+      } else if (sub?.status === "VENCIDA") {
         vencidos++;
       }
     }
 
-    return { todos: negocios.length, enPrueba, alDia, vencidos, suspendidos };
-  }, [negocios]);
+    return { todos: cuentas.length, enPrueba, alDia, vencidos, suspendidos };
+  }, [cuentas]);
 
-  // Filtrado y Ordenamiento
-  const negociosFiltrados = useMemo(() => {
-    return negocios
-      .filter((n) => {
-        // Búsqueda libre
+  const cuentasFiltradas = useMemo(() => {
+    return cuentas
+      .filter((c) => {
+        // Búsqueda libre: alcanza con que coincida el dueño o CUALQUIERA de sus
+        // sedes. Soporte casi siempre tiene a mano el nombre de un local, no el
+        // de la persona.
         const q = busqueda.trim().toLowerCase();
         const coincideBusqueda =
           !q ||
-          n.name.toLowerCase().includes(q) ||
-          n.slug.toLowerCase().includes(q) ||
-          n.id.toLowerCase().includes(q);
+          c.duenoNombre.toLowerCase().includes(q) ||
+          (c.duenoCorreo?.toLowerCase().includes(q) ?? false) ||
+          c.sedes.some(
+            (s) =>
+              s.name.toLowerCase().includes(q) ||
+              s.slug.toLowerCase().includes(q) ||
+              s.id.toLowerCase().includes(q),
+          );
 
         if (!coincideBusqueda) return false;
 
-        // Filtro por estado
+        const sub = c.principal.subscription;
         if (filtroEstado === "TODOS") return true;
-        if (filtroEstado === "PRUEBA") return n.subscription?.status === "PRUEBA";
-        if (filtroEstado === "ACTIVA") return n.subscription?.status === "ACTIVA";
-        if (filtroEstado === "VENCIDA") return n.subscription?.status === "VENCIDA";
+        if (filtroEstado === "PRUEBA") return sub?.status === "PRUEBA";
+        if (filtroEstado === "ACTIVA") return sub?.status === "ACTIVA";
+        if (filtroEstado === "VENCIDA") return sub?.status === "VENCIDA";
         if (filtroEstado === "SUSPENDIDO")
-          return n.status !== "ACTIVO" || n.subscription?.status === "SUSPENDIDA";
+          return c.principal.status !== "ACTIVO" || sub?.status === "SUSPENDIDA";
 
         return true;
       })
       .sort((a, b) => {
         if (orden === "recientes") {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return (
+            new Date(b.principal.createdAt).getTime() -
+            new Date(a.principal.createdAt).getTime()
+          );
         }
         if (orden === "nombre") {
-          return a.name.localeCompare(b.name);
+          return a.duenoNombre.localeCompare(b.duenoNombre);
         }
         if (orden === "pedidos") {
-          return b._count.orders - a._count.orders;
+          return b.totales.orders - a.totales.orders;
         }
         // "corte" - Días restantes ascendente (menor a mayor)
-        const diasA = a.subscription ? diasParaElCorte(a.subscription) ?? 9999 : 9999;
-        const diasB = b.subscription ? diasParaElCorte(b.subscription) ?? 9999 : 9999;
+        const diasA = a.principal.subscription
+          ? diasParaElCorte(a.principal.subscription) ?? 9999
+          : 9999;
+        const diasB = b.principal.subscription
+          ? diasParaElCorte(b.principal.subscription) ?? 9999
+          : 9999;
         return diasA - diasB;
       });
-  }, [negocios, busqueda, filtroEstado, orden]);
+  }, [cuentas, busqueda, filtroEstado, orden]);
 
   return (
     <div className="space-y-4">
       {/* Controles de Búsqueda, Filtro e Indicadores */}
       <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-        
+
         {/* Barra Superior: Búsqueda y Ordenamiento */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="relative flex-1">
@@ -149,7 +193,7 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
             <Input
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por nombre de negocio, slug o ID..."
+              placeholder="Buscar por propietario, correo, sede, slug o ID..."
               className="pl-9 pr-8 text-sm h-10"
             />
             {busqueda && (
@@ -169,12 +213,14 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
             </span>
             <select
               value={orden}
-              onChange={(e) => setOrden(e.target.value as "corte" | "recientes" | "nombre" | "pedidos")}
+              onChange={(e) =>
+                setOrden(e.target.value as "corte" | "recientes" | "nombre" | "pedidos")
+              }
               className="h-10 rounded-md border border-input bg-background px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="corte">Vencimiento más próximo</option>
               <option value="recientes">Más recientes primero</option>
-              <option value="nombre">Nombre (A-Z)</option>
+              <option value="nombre">Propietario (A-Z)</option>
               <option value="pedidos">Mayor actividad (pedidos)</option>
             </select>
           </div>
@@ -183,7 +229,7 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
         {/* Pestañas de Filtros de Estado */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/60">
           <FilterPill
-            label={`Todos (${conteos.todos})`}
+            label={`Todas (${conteos.todos})`}
             activo={filtroEstado === "TODOS"}
             onClick={() => setFiltroEstado("TODOS")}
           />
@@ -200,13 +246,13 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
             colorActive="bg-success text-white"
           />
           <FilterPill
-            label={`Vencidos (${conteos.vencidos})`}
+            label={`Vencidas (${conteos.vencidos})`}
             activo={filtroEstado === "VENCIDA"}
             onClick={() => setFiltroEstado("VENCIDA")}
             colorActive="bg-destructive text-white"
           />
           <FilterPill
-            label={`Suspendidos (${conteos.suspendidos})`}
+            label={`Suspendidas (${conteos.suspendidos})`}
             activo={filtroEstado === "SUSPENDIDO"}
             onClick={() => setFiltroEstado("SUSPENDIDO")}
             colorActive="bg-destructive text-white"
@@ -215,12 +261,12 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
 
       </div>
 
-      {/* Resultados de Negocios */}
-      {negociosFiltrados.length === 0 ? (
+      {/* Resultados */}
+      {cuentasFiltradas.length === 0 ? (
         <Card className="py-12 text-center border-dashed">
           <CardContent className="space-y-2">
             <p className="text-muted-foreground text-sm font-medium">
-              No se encontraron negocios con los filtros aplicados.
+              No se encontraron cuentas con los filtros aplicados.
             </p>
             {busqueda && (
               <Button onClick={() => setBusqueda("")} variant="outline" size="sm">
@@ -232,12 +278,12 @@ export function TablaNegocios({ negocios }: { negocios: NegocioItem[] }) {
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground font-medium px-1">
-            Mostrando <strong>{negociosFiltrados.length}</strong> de {negocios.length} negocios
+            Mostrando <strong>{cuentasFiltradas.length}</strong> de {cuentas.length} cuentas
           </p>
 
           <div className="grid grid-cols-1 gap-3">
-            {negociosFiltrados.map((negocio) => (
-              <TarjetaNegocio key={negocio.id} negocio={negocio} />
+            {cuentasFiltradas.map((cuenta) => (
+              <TarjetaCuenta key={cuenta.clave} cuenta={cuenta} lista={lista} />
             ))}
           </div>
         </div>
@@ -272,34 +318,44 @@ function FilterPill({
   );
 }
 
-function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
-  const sub = negocio.subscription;
+function TarjetaCuenta({ cuenta, lista }: { cuenta: CuentaItem; lista: ListaDePrecios }) {
+  const sub = cuenta.principal.subscription;
   const dias = sub ? diasParaElCorte(sub) : null;
   const infoEstado = sub ? ESTADO_LICENCIA[sub.status] : null;
+  const precio = precioDeLaCuenta(cuenta, lista);
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs transition-all hover:border-brand/40 space-y-3">
-      
-      {/* Encabezado: Nombre, Slug, Badges de Estado */}
+
+      {/* Encabezado: propietario y estado de la licencia */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-base font-bold text-foreground">{negocio.name}</h3>
-            <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
-              {negocio.slug}
-            </span>
+            <h3 className="text-base font-bold text-foreground">{cuenta.duenoNombre}</h3>
+            {cuenta.sedes.length > 1 && (
+              <Badge variant="outline" className="text-rotulo font-semibold border-brand/40 bg-brand/10 text-brand">
+                <Store className="size-3 mr-1" />
+                {cuenta.sedes.length} sedes
+              </Badge>
+            )}
           </div>
+          {cuenta.duenoCorreo && (
+            <p className="text-xs text-muted-foreground">{cuenta.duenoCorreo}</p>
+          )}
           <p className="text-xs text-muted-foreground flex items-center gap-1.5">
             <Calendar className="size-3.5" />
-            <span>Registrado el {formatDayInTimeZone(negocio.createdAt, "America/Bogota")}</span>
+            <span>
+              Cliente desde el{" "}
+              {formatDayInTimeZone(cuenta.principal.createdAt, "America/Bogota")}
+            </span>
           </p>
         </div>
 
         {/* Badges de Licencia y Estado */}
-        <div className="flex items-center gap-2 shrink-0">
-          {negocio.status !== "ACTIVO" && (
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {cuenta.principal.status !== "ACTIVO" && (
             <Badge variant="destructive" className="text-rotulo font-semibold">
-              Suspendido
+              Suspendida
             </Badge>
           )}
 
@@ -310,6 +366,12 @@ function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
           ) : (
             <Badge variant="secondary" className="text-rotulo">
               Sin suscripción
+            </Badge>
+          )}
+
+          {precio !== null && (
+            <Badge variant="outline" className="text-rotulo font-mono font-bold border-border">
+              {formatCop(precio)} / mes
             </Badge>
           )}
 
@@ -334,31 +396,66 @@ function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
         </div>
       </div>
 
+      {/* Las sedes de la cuenta */}
+      <ul className="divide-y divide-border/60 rounded-xl border border-border/60 bg-muted/30 text-xs">
+        {cuenta.sedes.map((sede, i) => (
+          <li key={sede.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-foreground">{sede.name}</span>
+              <span className="font-mono text-rotulo text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {sede.slug}
+              </span>
+              {i === 0 && (
+                <Badge variant="outline" className="text-rotulo border-brand/40 text-brand">
+                  Principal
+                </Badge>
+              )}
+              {sede.status !== "ACTIVO" && (
+                <Badge variant="destructive" className="text-rotulo">
+                  Suspendida
+                </Badge>
+              )}
+            </div>
+            <span className="text-muted-foreground text-rotulo">
+              <span className="numeral">{sede._count.orders}</span> pedidos
+            </span>
+          </li>
+        ))}
+      </ul>
+
       {/* Métricas y Acciones Unificadas */}
       <div className="pt-3 border-t border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted-foreground">
-        
-        {/* Estadísticas de Uso */}
+
+        {/* Estadísticas de Uso, sumadas entre las sedes */}
         <div className="flex flex-wrap items-center gap-4">
           <span className="flex items-center gap-1 font-medium text-foreground">
             <Users className="size-3.5 text-brand" />
-            <span>{negocio._count.memberships} equipo</span>
+            <span>
+              <span className="numeral">{cuenta.totales.memberships}</span> equipo
+            </span>
           </span>
           <span className="flex items-center gap-1 font-medium text-foreground">
             <LayoutGrid className="size-3.5 text-brand" />
-            <span>{negocio._count.tables} mesas</span>
+            <span>
+              <span className="numeral">{cuenta.totales.tables}</span> mesas
+            </span>
           </span>
           <span className="flex items-center gap-1 font-medium text-foreground">
             <Boxes className="size-3.5 text-brand" />
-            <span>{negocio._count.products} productos</span>
+            <span>
+              <span className="numeral">{cuenta.totales.products}</span> productos
+            </span>
           </span>
           <span className="flex items-center gap-1 font-medium text-foreground">
             <Receipt className="size-3.5 text-brand" />
-            <span>{negocio._count.orders} pedidos</span>
+            <span>
+              <span className="numeral">{cuenta.totales.orders}</span> pedidos
+            </span>
           </span>
         </div>
 
         {/* Modal de Acciones de Licencia */}
-        <GestionarLicenciaModal negocio={negocio} />
+        <GestionarLicenciaModal cuenta={cuenta} />
 
       </div>
 
@@ -366,17 +463,33 @@ function TarjetaNegocio({ negocio }: { negocio: NegocioItem }) {
   );
 }
 
-function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
+function GestionarLicenciaModal({ cuenta }: { cuenta: CuentaItem }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [diasExtender, setDiasExtender] = useState<number>(30);
   const [motivoExtender, setMotivoExtender] = useState("");
   const [motivoSuspender, setMotivoSuspender] = useState("");
-  const [maxSucursales, setMaxSucursales] = useState<number>(negocio.subscription?.maxBranches ?? 1);
+  const [maxSucursales, setMaxSucursales] = useState<number>(
+    cuenta.principal.subscription?.maxBranches ?? 1,
+  );
   const [motivoSucursales, setMotivoSucursales] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const suspendido = negocio.status !== "ACTIVO";
+  const suspendido = cuenta.principal.status !== "ACTIVO";
+  // Toda acción de licencia va contra la sede principal: es la que cobra y la
+  // que las acciones sincronizan hacia el resto de la cuenta.
+  const businessId = cuenta.principal.id;
+  const varias = cuenta.sedes.length > 1;
+  const sufijoSedes = varias ? ` (${cuenta.sedes.length} sedes)` : "";
+
+  const documentosAsignados = cuenta.sedes.reduce(
+    (t, s) => t + (s.settings?.paquetesDocumentosDisponibles ?? 0),
+    0,
+  );
+  const documentosEmitidos = cuenta.sedes.reduce(
+    (t, s) => t + (s.settings?.documentosEmitidosConsumidos ?? 0),
+    0,
+  );
 
   const handleExtender = (e: React.FormEvent) => {
     e.preventDefault();
@@ -387,13 +500,15 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
 
     startTransition(async () => {
       const res = await extenderLicencia(ESTADO_INICIAL, {
-        businessId: negocio.id,
+        businessId,
         dias: Number(diasExtender),
         motivo: motivoExtender.trim(),
       });
 
       if (res.ok) {
-        toast.success(`Licencia de ${negocio.name} extendida por ${diasExtender} días.`);
+        toast.success(
+          `Licencia de ${cuenta.duenoNombre} extendida por ${diasExtender} días${sufijoSedes}.`,
+        );
         setOpen(false);
         setMotivoExtender("");
         router.refresh();
@@ -412,14 +527,14 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
 
     startTransition(async () => {
       const res = await suspenderEmpresa(ESTADO_INICIAL, {
-        businessId: negocio.id,
+        businessId,
         suspender: !suspendido,
         motivo: motivoSuspender.trim(),
       });
 
       if (res.ok) {
         toast.success(
-          `Negocio ${negocio.name} ${suspendido ? "reactivado" : "suspendido"} con éxito.`,
+          `Cuenta de ${cuenta.duenoNombre} ${suspendido ? "reactivada" : "suspendida"}${sufijoSedes}.`,
         );
         setOpen(false);
         setMotivoSuspender("");
@@ -439,13 +554,15 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
 
     startTransition(async () => {
       const res = await actualizarLimiteSucursales(ESTADO_INICIAL, {
-        businessId: negocio.id,
+        businessId,
         maxBranches: Number(maxSucursales),
         motivo: motivoSucursales.trim(),
       });
 
       if (res.ok) {
-        toast.success(`Límite de sucursales actualizado a ${maxSucursales} para ${negocio.name}.`);
+        toast.success(
+          `Límite de sucursales actualizado a ${maxSucursales} para ${cuenta.duenoNombre}.`,
+        );
         setOpen(false);
         setMotivoSucursales("");
         router.refresh();
@@ -463,14 +580,16 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
           <span>Gestionar Licencia</span>
         </Button>
       </DialogTrigger>
-      
+
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground">
-            Gestionar Licencia · {negocio.name}
+            Gestionar Licencia · {cuenta.duenoNombre}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Ajusta días de servicio, estado operacional, límite de sucursales o paquetes DIAN.
+            {varias
+              ? `La licencia es de la cuenta: lo que cambies acá alcanza a las ${cuenta.sedes.length} sedes.`
+              : "Ajusta días de servicio, estado operacional, límite de sucursales o paquetes DIAN."}
           </DialogDescription>
         </DialogHeader>
 
@@ -478,7 +597,9 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
           <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="extender" className="text-xs">Extender</TabsTrigger>
             <TabsTrigger value="estado" className="text-xs">Estado</TabsTrigger>
-            <TabsTrigger value="sucursales" className="text-xs">Sucursales ({negocio.subscription?.maxBranches ?? 1})</TabsTrigger>
+            <TabsTrigger value="sucursales" className="text-xs">
+              Sucursales ({cuenta.principal.subscription?.maxBranches ?? 1})
+            </TabsTrigger>
             <TabsTrigger value="factus" className="text-xs">DIAN 🧾</TabsTrigger>
           </TabsList>
 
@@ -547,18 +668,23 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
             </form>
           </TabsContent>
 
-          {/* Pestaña: Estado del Negocio */}
+          {/* Pestaña: Estado de la cuenta */}
           <TabsContent value="estado" className="space-y-4 pt-3">
             <form onSubmit={handleSuspender} className="space-y-4">
               <div className="p-3.5 rounded-xl bg-muted/60 border border-border text-xs space-y-1">
                 <p className="font-semibold text-foreground">
-                  Estado actual: {suspendido ? "SUSPENDIDO" : "ACTIVO"}
+                  Estado actual: {suspendido ? "SUSPENDIDA" : "ACTIVA"}
                 </p>
                 <p className="text-muted-foreground text-rotulo">
                   {suspendido
-                    ? "Al reactivar, los usuarios de este negocio podrán ingresar nuevamente a su panel POS."
-                    : "Al suspender, se bloqueará el acceso al POS y comanda para todos los miembros de este negocio."}
+                    ? "Al reactivar, los usuarios de esta cuenta podrán ingresar nuevamente a su panel POS."
+                    : "Al suspender, se bloqueará el acceso al POS y comanda para todos los miembros de esta cuenta."}
                 </p>
+                {varias && (
+                  <p className="text-warning-soft text-rotulo">
+                    Alcanza a las {cuenta.sedes.length} sedes: {cuenta.sedes.map((s) => s.name).join(", ")}.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -585,8 +711,8 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
                 {isPending
                   ? "Procesando..."
                   : suspendido
-                  ? "Reactivar Negocio"
-                  : "Suspender Negocio"}
+                  ? "Reactivar Cuenta"
+                  : "Suspender Cuenta"}
               </Button>
             </form>
           </TabsContent>
@@ -600,6 +726,13 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
                 </span>
                 <p className="text-muted-foreground text-rotulo leading-relaxed">
                   Define cuántas sucursales puede administrar este propietario (1 por defecto, 2 self-service con prorrateo, 3+ mediante negociación en superadmin).
+                </p>
+                <p className="text-muted-foreground text-rotulo">
+                  Usando <strong className="numeral">{cuenta.sedes.length}</strong> de{" "}
+                  <strong className="numeral">
+                    {cuenta.principal.subscription?.maxBranches ?? 1}
+                  </strong>{" "}
+                  habilitadas.
                 </p>
               </div>
 
@@ -649,12 +782,18 @@ function GestionarLicenciaModal({ negocio }: { negocio: NegocioItem }) {
               <span className="block font-bold text-brand">Facturación Electrónica DIAN</span>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-rotulo">
                 <span>
-                  Asignados: <strong>{negocio.settings?.paquetesDocumentosDisponibles ?? 0} doc.</strong>
+                  Asignados: <strong className="numeral">{documentosAsignados}</strong> doc.
                 </span>
                 <span>
-                  Emitidos: <strong>{negocio.settings?.documentosEmitidosConsumidos ?? 0} doc.</strong>
+                  Emitidos: <strong className="numeral">{documentosEmitidos}</strong> doc.
                 </span>
               </div>
+              {varias && (
+                <p className="text-muted-foreground text-rotulo">
+                  Sumado entre las {cuenta.sedes.length} sedes. El rango de numeración lo autoriza
+                  la DIAN por NIT, así que se asigna sede por sede.
+                </p>
+              )}
             </div>
 
             {/* Se administra en su propia sección y no acá: repartir la bolsa sin

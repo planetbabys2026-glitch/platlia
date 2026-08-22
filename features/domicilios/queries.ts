@@ -1,23 +1,23 @@
 import "server-only";
 
+import type { DeliveryStatus } from "@/generated/prisma/enums";
 import { tenantDb } from "@/lib/db/tenant";
 import { currentBusinessDate } from "@/lib/time";
 import { getSettings } from "@/features/negocio/queries";
+import { DOMICILIOS_EN_CURSO } from "@/features/domicilios/reglas";
 
 /**
- * Qué es un domicilio, para todas las consultas de acá.
+ * Qué es un domicilio: tener estado de reparto.
  *
- * Son dos cosas a la vez: los que alguien tomó por teléfono o por el POS
- * (`type: "DOMICILIO"`) y los que entraron solos por el menú QR
- * (`channel: "DOMICILIO_QR"`). Sin este OR no se puede filtrar por
- * `deliveryStatus`: esa columna es un `String` con default `"PENDIENTE"`, así
- * que **todo** pedido del bar la tiene puesta y contarlos por ahí daría el día
- * entero.
+ * Antes hacía falta un OR entre `type: "DOMICILIO"` y `channel: "DOMICILIO_QR"`
+ * porque `deliveryStatus` era un `String` con `@default("PENDIENTE")` y **todo**
+ * pedido del bar lo traía puesto —una mesa incluida—, así que filtrar por esa
+ * columna devolvía el día entero. Ahora es un enum nullable y la columna dice
+ * exactamente lo que parece decir.
  */
-const ES_DOMICILIO = [{ type: "DOMICILIO" as const }, { channel: "DOMICILIO_QR" as const }];
+const ES_DOMICILIO = { deliveryStatus: { not: null } };
 
-/** Los que todavía no llegaron a destino: lo que la insignia del menú anuncia. */
-export const DOMICILIOS_EN_CURSO = ["PENDIENTE", "EN_PREPARACION", "EN_CAMINO"];
+export { DOMICILIOS_EN_CURSO };
 
 export type DomicilioItem = {
   id: string;
@@ -34,8 +34,11 @@ export type DomicilioPedido = {
   type: string;
   channel: string;
   status: string;
-  deliveryStatus: string;
+  deliveryStatus: DeliveryStatus | null;
   businessDate: Date;
+  deliveryConfirmedAt: Date | null;
+  dispatchedAt: Date | null;
+  deliveredAt: Date | null;
   turnNumber: number | null;
   customerName: string | null;
   customerPhone: string | null;
@@ -60,7 +63,7 @@ export async function getDomicilios(businessId: string): Promise<DomicilioPedido
   const orders = await db.order.findMany({
     where: {
       businessId,
-      OR: ES_DOMICILIO,
+      ...ES_DOMICILIO,
       businessDate,
     },
     orderBy: { openedAt: "desc" },
@@ -72,6 +75,9 @@ export async function getDomicilios(businessId: string): Promise<DomicilioPedido
       status: true,
       deliveryStatus: true,
       businessDate: true,
+      deliveryConfirmedAt: true,
+      dispatchedAt: true,
+      deliveredAt: true,
       turnNumber: true,
       customerName: true,
       customerPhone: true,
@@ -116,9 +122,8 @@ export async function contarDomiciliosActivos(businessId: string): Promise<numbe
 
   return tenantDb(businessId).order.count({
     where: {
-      OR: ES_DOMICILIO,
       businessDate: currentBusinessDate(settings),
-      deliveryStatus: { in: DOMICILIOS_EN_CURSO },
+      deliveryStatus: { in: [...DOMICILIOS_EN_CURSO] },
       status: { not: "ANULADA" },
     },
   });

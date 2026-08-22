@@ -127,6 +127,25 @@ enum OrderStatus {
   ANULADA
 }
 
+/// El recorrido de un domicilio, que NO es el de la cuenta.
+///
+/// `OrderStatus` dice si la venta está cobrada; esto dice dónde está la comida.
+/// Un domicilio puede estar cobrado y todavía en la moto, o entregado y sin
+/// cobrar si el repartidor cobra al llegar.
+///
+/// El orden es el del flujo y ninguna transición se saltea: las reglas puras
+/// están en `features/domicilios/reglas.ts`. `LISTO` es el estado que faltaba
+/// —cocina terminó y todavía no se cobró—, y es lo que decide que un domicilio
+/// aparezca en caja: antes entraba desde que nacía.
+enum DeliveryStatus {
+  POR_CONFIRMAR
+  EN_PREPARACION
+  LISTO
+  EN_CAMINO
+  ENTREGADO
+  CANCELADO
+}
+
 enum OrderItemStatus {
   PENDIENTE
   EN_PREPARACION
@@ -156,6 +175,40 @@ enum CashMovementType {
   EGRESO
   RETIRO
   AJUSTE
+}
+
+/// Para qué sirve cada impresora del local.
+///
+/// No es lo mismo la de la caja que la de la plancha: una imprime el recibo del
+/// cliente y la otra la comanda de la cocina, y en un bar están en dos cuartos
+/// distintos.
+enum PrinterRole {
+  RECIBO
+  COMANDA
+}
+
+/// El recorrido de un trabajo de impresión.
+///
+/// `RECLAMADO` existe porque puede haber más de un agente corriendo —una PC en la
+/// caja y otra en la cocina—: el reclamo con caducidad es lo que evita que dos
+/// impriman el mismo recibo. Es la misma guarda que usa la emisión DIAN.
+enum PrintJobStatus {
+  PENDIENTE
+  RECLAMADO
+  IMPRESO
+  ERROR
+}
+
+/// Adónde va la comanda de cocina.
+///
+/// El KDS no le sirve a todo el mundo: hay cocinas sin pantalla y hay bares que
+/// quieren las dos cosas. Es un ajuste de `BusinessSettings` y no un `AppModule`
+/// porque aquel enum significa "qué superficie usa el negocio", no "cómo sale el
+/// papel".
+enum ComandaDestino {
+  KDS
+  IMPRESA
+  AMBAS
 }
 
 enum ReceiptWidth {
@@ -204,6 +257,10 @@ model Business {
   cashSessions  CashSession[]
   cashMovements CashMovement[]
   payments      SubscriptionPayment[]
+  printers      Printer[]
+  printRoutes   PrintRoute[]
+  printJobs     PrintJob[]
+  printAgents   PrintAgent[]
   auditLogs     AuditLog[]
 
   inventoryItems       InventoryItem[]
@@ -267,7 +324,22 @@ model BusinessSettings {
   /// Valor o tarifa fija del servicio de domicilio en COP.
   deliveryFeeCop  Int     @default(0)
 
+  /// Si el negocio está recibiendo domicilios por QR AHORA MISMO.
+  ///
+  /// `deliveryEnabled` dice si el negocio reparte; esto dice si está abierto en
+  /// este momento, y lo mueve el cajero al abrir y cerrar el turno. Son dos cosas
+  /// distintas: un comensal podía mandar un domicilio a las 4 de la mañana, con la
+  /// caja cerrada y sin nadie en el local, y el pedido esperaba a que alguien
+  /// llegara a la mañana siguiente a descubrirlo.
+  ///
+  /// Arranca APAGADO a propósito: que el primer turno haya que encenderlo es una
+  /// molestia de un clic; que un pedido entre sin que nadie lo espere es un cliente
+  /// esperando comida que nadie está haciendo.
+  qrDeliveryEnabled Boolean @default(false)
+
   /// Impresión térmica. El ancho decide el @page de app/imprimir.
+  comandaDestino ComandaDestino @default(KDS)
+
   receiptWidth  ReceiptWidth @default(MM80)
   receiptHeader String?
   receiptFooter String?
@@ -290,6 +362,13 @@ model BusinessSettings {
   /// Módulos de Inventario y Recetas / Escandallos
   inventoryEnabled Boolean @default(false)
   recipesEnabled   Boolean @default(false)
+
+  /// Deja cobrar aunque el inventario diga que no queda, y el stock queda en
+  /// negativo. Apagado de fábrica: lo normal es que no se pueda vender lo que no
+  /// hay. Encendido es para el negocio que prefiere no frenar la caja y cuadrar
+  /// en el arqueo, y el negativo es justamente lo que ahí se tiene que ver: un
+  /// stock que se queda en cero esconde el faltante.
+  permitirVentaSinStock Boolean @default(false)
 
   /// Configuración del Menú Digital QR
   qrMenuEnabled        Boolean @default(true)
@@ -329,7 +408,7 @@ model BusinessSettings {
   responsibilities           String? @default("R-99-PN")
 
   /// Permisos de vista personalizados por rol (JSON serializado)
-  rolePermissions            String  @default("{}")
+  rolePermissions String @default("{}")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -509,10 +588,16 @@ model Subscription {
   businessId String   @unique
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  status   SubscriptionStatus @default(PRUEBA)
-  /// Precio vigente para esta empresa. Se guarda acá y no como constante para
-  /// poder respetar el precio de los primeros clientes cuando la lista suba.
-  priceCop Int                @default(50000)
+  status SubscriptionStatus @default(PRUEBA)
+
+  /// No hay precio por empresa a propósito.
+  ///
+  /// Antes existía un `priceCop` que se congelaba al registrarse y le ganaba a la
+  /// lista, para respetarle la tarifa a los primeros clientes cuando el precio
+  /// subiera. El efecto era que el número que cobraba el sistema no estaba en
+  /// ninguna pantalla editable: nacía solo y solo se podía cambiar por SQL.
+  /// Hoy el precio sale ÚNICAMENTE de `ListaDePrecios`, que edita el
+  /// superadministrador en /superadmin/precios.
 
   /// Número máximo de sucursales permitidas (1 por defecto, 2 self-service con prorrateo, 3+ controlado por superadmin).
   maxBranches Int @default(1)
@@ -618,12 +703,158 @@ model MpWebhookEvent {
 ///
 /// Una fila sin fechas es la lista base y rige siempre. Una fila con fechas es una
 /// promoción y le gana a la base mientras esté dentro de su ventana.
+/// Una impresora térmica en la red del local.
+///
+/// El servidor NUNCA le habla directamente: la impresora vive en la LAN de la
+/// sucursal, detrás del router del bar, y desde internet no se llega. Lo que hay
+/// acá es la descripción que necesita el agente que sí está en esa red.
+model Printer {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Cómo la llama el personal: "Caja", "Cocina", "Barra".
+  name String
+  rol  PrinterRole
+
+  /// Dónde encontrarla en la LAN. 9100 es el puerto crudo de casi toda térmica.
+  host String
+  port Int    @default(9100)
+
+  width     ReceiptWidth @default(MM80)
+  /// Manda el pulso que abre el cajón de dinero al terminar de imprimir.
+  abreCajon Boolean      @default(false)
+  active    Boolean      @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  rutas PrintRoute[]
+  jobs  PrintJob[]
+
+  @@unique([businessId, name])
+  @@index([businessId, active])
+}
+
+/// A qué impresora va la comanda de cada estación.
+///
+/// `Product.kitchenStation` es texto libre —"Cocina", "Barra", "Parrilla"— sin
+/// tabla ni FK, y el KDS ya agrupa por ese string. Mapear acá en vez de
+/// normalizarlo evita migrar datos escritos a mano y deja el nombre canónico
+/// "Sin estación" como el que recibe la impresora por defecto.
+model PrintRoute {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  stationName String
+  printerId   String
+  printer     Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([businessId, stationName])
+  @@index([businessId])
+}
+
+/// La cola de impresión. Durable a propósito.
+///
+/// Redis Pub/Sub es fire-and-forget: lo que se publica con el agente apagado se
+/// pierde y nadie se entera. Para un contador de pantalla está bien; para una
+/// comanda no. Así que la cola vive acá y Redis queda de timbre —"vení a
+/// buscar"—, que es el mismo papel que ya cumple para cocina y domicilios.
+model PrintJob {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  printerId String
+  printer   Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  /// "RECIBO" | "COMANDA" | "PRUEBA". Para leer la cola sin adivinar.
+  tipo String
+
+  /// Los bytes ESC/POS ya compuestos, en base64. El agente los escribe tal cual
+  /// en el socket: toda la decisión de formato es del servidor, que es donde se
+  /// puede probar.
+  payload String
+
+  /// El mismo tiquete en texto plano. Es lo que mira soporte cuando alguien dice
+  /// "salió mal": decodificar base64 para ver por qué se descuadró una columna no
+  /// lo va a hacer nadie.
+  vistaPrevia String
+
+  estado      PrintJobStatus @default(PENDIENTE)
+  intentos    Int            @default(0)
+  ultimoError String?
+
+  /// El reclamo caduca: un agente que se muere con el trabajo en la mano no lo
+  /// bloquea para siempre.
+  reclamadoPor   String?
+  reclamadoHasta DateTime? @db.Timestamptz(3)
+
+  impresoEn DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([businessId, estado, createdAt])
+  @@index([printerId, estado])
+}
+
+/// El programa que corre en una PC del local y habla con las impresoras.
+///
+/// Se autentica con un token del que se guarda **solo el hash**, igual que
+/// `VerificationToken`: una copia de la base no regala el acceso a la cola de
+/// impresión de nadie. No hay sesión ni cookie —no es un navegador—, así que es
+/// el mismo patrón que el webhook de MercadoPago: la ruta es pública y se
+/// verifica por su cuenta.
+model PrintAgent {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  nombre String
+
+  /**
+   * Null hasta que el programa se empareja.
+   * El equipo se registra desde el panel ANTES de que exista el programa: en ese
+   * momento hay un código de emparejamiento y todavía no un token.
+   */
+  tokenHash String? @unique
+
+  /**
+   * El código que canjea el programa por su token, hasheado y con vencimiento.
+   * Existe para que nadie tenga que copiar un token de 43 caracteres: viaja en el
+   * NOMBRE del archivo que se descarga, así que el programa lo lee de sí mismo y
+   * se configura solo. Se usa una vez y se vence, que es lo que permite que sea
+   * corto.
+   */
+  codigoHash     String?   @unique
+  codigoExpiraEn DateTime? @db.Timestamptz(3)
+  emparejadoEn   DateTime? @db.Timestamptz(3)
+
+  ultimoContactoEn DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([businessId])
+}
+
 model ListaDePrecios {
   id     String @id @default(cuid())
   nombre String
 
   precioSedePrincipalCop Int @default(50000)
   precioSedeAdicionalCop Int @default(30000)
+
+  /// Escalones por cantidad de sedes. Sin ninguno rige la fórmula
+  /// `principal + adicional × (n − 1)`, que es lo razonable hasta dos locales;
+  /// de tres para arriba el precio se negocia y necesita decirse entero.
+  tramos TramoDePrecios[]
 
   /// El descuento son meses de regalo, no un porcentaje: "un mes va de regalo" se
   /// entiende sin calculadora y no deja centavos que redondear.
@@ -640,6 +871,26 @@ model ListaDePrecios {
   @@index([activa, desde, hasta])
 }
 
+/// Un escalón de precio por cantidad de sedes dentro de una lista.
+///
+/// `desdeSedes` es el piso del tramo y no hay techo: manda el tramo de piso más
+/// alto que no supere la cantidad de sedes. Así "3" cubre 3, 4 y 5 hasta que
+/// aparezca un "6", y agregar un escalón nunca obliga a reescribir los otros.
+model TramoDePrecios {
+  id      String         @id @default(cuid())
+  listaId String
+  lista   ListaDePrecios @relation(fields: [listaId], references: [id], onDelete: Cascade)
+
+  desdeSedes       Int
+  precioMensualCop Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([listaId, desdeSedes])
+  @@index([listaId, desdeSedes])
+}
+
 /// Cada compra de documentos electrónicos que Platlia le hace a Factus.
 ///
 /// Es de la plataforma, no de un negocio —como `ListaDePrecios`— y la escribe
@@ -652,10 +903,10 @@ model ListaDePrecios {
 /// Se guardan las compras una por una en vez de un contador: así queda el
 /// historial de qué se compró, cuándo y a cuánto.
 model CompraDocumentosDian {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   cantidad Int
   /// Lo que nos costó el paquete. Es dato de plataforma, no se le cobra a nadie.
-  costoCop Int    @default(0)
+  costoCop Int     @default(0)
   nota     String?
 
   compradoEn DateTime @default(now()) @db.Timestamptz(3)
@@ -717,13 +968,31 @@ model Product {
 
   /// Inventario opcional: la mayoría de los bares no lo lleva y no hay que
   /// obligarlos. Cuando trackStock es false, stockQty se ignora.
+  ///
+  /// Es el régimen de stock DIRECTO: una cerveza que se compra y se revende tal
+  /// cual. Es excluyente con `hasRecipe` —lo que se mide por sus insumos no se
+  /// mide además por unidades— porque contar la misma cerveza en los dos lados
+  /// es descontarla dos veces o ninguna, según cuál de los dos mire quien lee.
   trackStock Boolean @default(false)
   stockQty   Int     @default(0)
+
+  /// Costo unitario de compra y mínimo de reposición del régimen directo. Son
+  /// los equivalentes de `InventoryItem.costCop` y `stockMin` para el producto
+  /// que NO tiene receta: sin receta no hay insumo del cual sacarlos, y sin
+  /// costo no hay margen que informar.
+  ///
+  /// `costCop` es promedio ponderado y NETO de impuesto: se recalcula en cada
+  /// factura de compra con `costoPromedioPonderado`, y el margen se compara
+  /// contra la base gravable del renglón vendido, no contra el precio de carta.
+  costCop  Int @default(0)
+  stockMin Int @default(0)
 
   /// Lleva escandallo: descuenta insumos al venderse y aparece en
   /// Inventario → Recetas. Sin esto marcado no tiene receta y no descuenta nada,
   /// por más que le queden `recipeItems` de antes. Es una declaración del dueño,
   /// no una consecuencia de que la tabla tenga filas.
+  ///
+  /// Excluyente con `trackStock`: ver el comentario de arriba.
   hasRecipe Boolean @default(false)
 
   /// La receta depende de lo que se elija al vender: no se descuenta nada hasta
@@ -742,6 +1011,7 @@ model Product {
   orderItems     OrderItem[]
   recipeItems    ProductRecipeItem[]
   modifierGroups ProductModifierGroup[]
+  movements      InventoryMovement[]
 
   @@unique([businessId, sku])
   @@index([businessId, categoryId, sortOrder])
@@ -880,8 +1150,21 @@ model Order {
   deliveryAddress String?
   docType         String?
   docNumber       String?
-  deliveryStatus  String  @default("PENDIENTE")
-  notes           String?
+  /// Null en todo lo que no es un domicilio: una mesa no tiene reparto.
+  ///
+  /// Antes era un `String` con `@default("PENDIENTE")`, así que **todos** los
+  /// pedidos del negocio lo tenían puesto y no servía para filtrar nada —por eso
+  /// las consultas de domicilios necesitan el OR de `type`/`channel`—. Los
+  /// valores válidos vivían copiados a mano en tres archivos.
+  deliveryStatus  DeliveryStatus?
+
+  /// Cuándo lo aceptó el módulo de domicilios, cuándo salió a la calle y cuándo
+  /// llegó. Sin estas marcas no hay forma de saber cuánto tarda un reparto.
+  deliveryConfirmedAt DateTime? @db.Timestamptz(3)
+  dispatchedAt        DateTime? @db.Timestamptz(3)
+  deliveredAt         DateTime? @db.Timestamptz(3)
+
+  notes String?
 
   /// Facturación Electrónica DIAN (Factus)
   ///
@@ -914,7 +1197,7 @@ model Order {
   tipCop         Int @default(0)
   deliveryFeeCop Int @default(0)
   totalCop       Int @default(0)
-  paidCop     Int @default(0)
+  paidCop        Int @default(0)
 
   openedById String
   openedBy   User    @relation("OrderOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
@@ -931,12 +1214,14 @@ model Order {
   closedAt        DateTime? @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
 
-  items    OrderItem[]
-  payments OrderPayment[]
+  items     OrderItem[]
+  payments  OrderPayment[]
+  printJobs PrintJob[]
 
   @@unique([businessId, businessDate, code])
   @@index([businessId, businessDate, turnNumber])
   @@index([businessId, status])
+  @@index([businessId, deliveryStatus])
   @@index([businessId, businessDate])
   @@index([businessId, tableId, status])
   @@index([businessId, cashSessionId])
@@ -985,6 +1270,18 @@ model OrderItem {
   lineSubtotalCop Int
   lineTaxCop      Int
   lineTotalCop    Int
+
+  /// Lo que costó preparar este renglón, congelado al venderlo por el mismo
+  /// motivo que la tarifa: un informe de marzo tiene que seguir dando lo mismo
+  /// en diciembre aunque el proveedor haya subido tres veces. Sale de
+  /// `Product.costCop` en el régimen directo y de la suma de la receta efectiva
+  /// —base más los insumos de los modificadores elegidos— en el otro.
+  ///
+  /// NULL no es cero: es "no se conocía el costo" (inventario apagado, producto
+  /// sin costear). La diferencia importa porque con cero el informe anunciaría
+  /// margen del 100%, que es peor que no informar nada.
+  unitCostCopSnapshot Int?
+  lineCostCop         Int?
 
   status OrderItemStatus @default(PENDIENTE)
   notes  String?
@@ -1261,13 +1558,22 @@ model ProductRecipeItem {
 }
 
 /// Historial Kardex de entradas, compras, ventas y ajustes de stock.
+///
+/// Cubre los dos regímenes, y por eso las dos referencias son opcionales: una
+/// fila apunta a un `InventoryItem` (insumo de receta) **o** a un `Product`
+/// (reventa con stock directo), nunca a los dos. Antes solo existía la primera,
+/// así que todo el movimiento de `Product.stockQty` —compras, ventas, ajustes—
+/// pasaba sin dejar ningún rastro que revisar cuando el conteo no cuadra.
 model InventoryMovement {
   id         String   @id @default(cuid())
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  inventoryItemId String
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   type        String
   quantity    Int
@@ -1279,6 +1585,10 @@ model InventoryMovement {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([businessId, inventoryItemId, createdAt])
+  @@index([businessId, productId, createdAt])
+  /// Para barrer una jornada entera sin filtrar por un item: el índice de arriba
+  /// arranca por `inventoryItemId` y no sirve para eso.
+  @@index([businessId, createdAt])
 }
 
 /// Grupo de modificadores reutilizable: "Proteína", "Término de la carne",

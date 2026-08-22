@@ -211,17 +211,49 @@ base; una fila con fechas es una promoción y le gana a la base mientras esté e
 precio estaba escrito a mano en seis archivos y ya habían divergido: el schema decía 50.000, el alta
 de la segunda sede 30.000, y la portada calculaba con `* 0.9` y `* 0.8`.
 
-Toda la aritmética está en `lib/billing/precios.ts`, puro y con 30 tests; la consulta a la base, en
+Toda la aritmética está en `lib/billing/precios.ts`, puro y con tests; la consulta a la base, en
 `lib/billing/lista.ts`. **Nunca escribir un precio a mano en una pantalla**: se cotiza con
-`cotizar()`, que es lo que garantiza que la portada prometa lo mismo que cobra el checkout.
+`cotizar()`, que es lo que garantiza que la portada prometa lo mismo que cobra el checkout. La
+pantalla de licencia tenía los planes escritos en el JSX y ya mentían: anunciaba "$270.000 semestral
+con 10% de descuento" cuando el sistema cobra $250.000, porque el descuento son meses de regalo.
 
 **El descuento son meses de regalo, no un porcentaje**: 6 meses se pagan 5 y 12 se pagan 10. Un
 porcentaje sobre pesos enteros deja centavos que hay que redondear en algún lado, y "un mes de
 regalo" se explica sin calculadora.
 
-**`Subscription.priceCop` protege de las SUBAS, no de los descuentos** (`listaParaNegocio`): quien
-entró pagando menos conserva su precio cuando la lista sube, pero una promoción vigente le gana igual
-—una promo es una lista completa, no un descuento que se apile sobre otro precio—.
+**No hay precio por empresa: la lista es la única fuente.** Si la lista sube, sube para todos; lo
+único que mueve el precio por un tiempo es una promoción, y alcanza por igual a los clientes viejos y
+a los nuevos. Antes cada `Subscription` guardaba un `priceCop` que se congelaba al registrarse y le
+ganaba a la lista —para respetarle la tarifa a los primeros clientes—, con dos efectos malos: el
+número que cobraba el sistema no estaba en ninguna pantalla editable (nacía solo y solo se cambiaba
+por SQL), y la pantalla de licencia terminaba anunciando la tarifa congelada de ESA cuenta como si
+fuera el plan público. La columna ya no existe.
+
+**Una promoción se anuncia, y se puede cortar.** `AvisoPromocion`
+(`features/facturacion/components/aviso-promocion.tsx`) va en las tres pantallas que
+muestran precio —portada, licencia y checkout— y dice siempre lo mismo: cuánto es, contra cuánto, y
+hasta cuándo. Sin eso una promo se ve igual que la tarifa de siempre: el número baja sin explicación
+y, cuando termina, sube solo y parece un error de facturación. Por eso `preciosVigentes()` devuelve
+la vigente **y** la base: con una sola no hay contra qué comparar. Y `detenerPromocion` existe aparte
+de "guardar con la casilla apagada" porque cortar una promo es urgente y no puede exigir revisar
+precios, tramos y fechas para llegar a una casilla al pie del formulario.
+
+**La ventana de una promoción se guarda en hora de Colombia, no UTC.** Un `<input type="date">`
+entrega `"2026-08-17"` y `new Date(...)` lo pone a medianoche UTC, que acá son las 7 de la tarde del
+16: la promo empezaba y terminaba cinco horas antes de lo escrito, y el superadministrador ponía
+"hasta el 31" mientras el cliente leía "hasta el 30". `desde` es `inicioDelDiaEnZona` y `hasta` es
+`finDelDiaEnZona` —el arranque del día siguiente, exclusivo, que es como compara `listaVigente`—, así
+que el día que se escribe cuenta entero. Para volver a mostrarlo hay que retroceder con
+`diaFinalDeVentana`. La zona es `ZONA_PLATAFORMA`: la lista es de Platlia y no de un negocio, así que
+no hay `BusinessSettings` del cual sacarla.
+
+**De tres sedes para arriba manda un tramo, no la fórmula.** `TramoDePrecios` cuelga de la lista:
+`desdeSedes` es el piso y no hay techo, así que gana el tramo de piso más alto que no supere la
+cantidad de sedes —"3" cubre 3, 4 y 5 hasta que aparezca un "6"—. El tramo fija el mensual **entero**,
+no un recargo que se sume. Sin tramos rige `principal + adicional × (n − 1)`, que es lo razonable
+hasta dos locales. Todo pasa por `mensualDeLaLista()`: reconstruir el mensual a mano —como hacía
+`aplicar-pago.ts`— hace que `mesesSegunMonto` no reconozca el monto de una cuenta con tramo y un pago
+de un año se aplique como un mes.
 
 **Un pago dice cuántos meses compró.** `aplicarPagoAprobado(sub, pagadoEn, meses)` **exige** el
 parámetro a propósito: antes sumaba `addMonths(desde, 1)` fijo, la cantidad no viajaba a ninguna
@@ -256,8 +288,8 @@ crearla. Fabricar un negocio entero desde un aviso HTTP, con su configuración, 
 membresía, es plata cobrada sin servicio si algo falla a mitad de camino. Antes la segunda sede era
 **gratis**: la guarda decía `cantActual >= maxPermitidas && maxPermitidas >= 2` y con el
 `maxBranches` de fábrica en 1 la segunda parte era falsa. Y la sede nueva **hereda las fechas de la
-cuenta** con `priceCop: 0`; antes nacía con siete días de prueba propios y su propio precio, o sea
-que vencía en otro momento y se cobraba aparte.
+cuenta**; antes nacía con siete días de prueba propios, o sea que vencía en otro momento y se cobraba
+aparte.
 
 ### Cobro automático y avisos
 
@@ -421,6 +453,35 @@ runtime: `next build` importa `lib/env.ts` al recolectar las rutas y aborta sin 
 Las migraciones no corren en el despliegue. Se aplican aparte con `pnpm db:deploy` contra la
 base del VPS, para que un deploy no cambie el esquema mientras hay gente cobrando.
 
+**Los ejecutables del agente de impresión no viajan con el despliegue.** `public/descargas/`
+está en `.gitignore` —son ~7 MB por sistema— y la imagen no trae Go (`providers = ["node"]`), así
+que en el VPS esa carpeta llega vacía. Hay dos salidas y **la de fábrica es la segunda**:
+
+1. **Publicarlos**, y ahí sirve el botón de descarga con el código en el nombre. Van a un
+   volumen del VPS (`DESCARGAS_AGENTE_DIR`) o a un hosting estático cualquiera —Cloudinary, S3,
+   un release de GitHub— con una URL por sistema (`DESCARGAS_AGENTE_URL_WINDOWS`, `_LINUX`,
+   `_MAC`). La URL le gana a la carpeta: si alguien la configuró es porque ahí está el binario al
+   día, y uno viejo olvidado en el volumen sería un agente desactualizado instalándose sin que
+   nadie lo note.
+2. **No publicarlos** y que la instalación la haga nuestro equipo, con el ejecutable en la mano y
+   el `agente.json` que entrega **Configurar a mano**. El servidor deja de repartir binarios.
+
+**Con una URL, el archivo se retransmite; no se redirige.** Parece un rodeo —los 7 MB pasan por el
+servidor— y es la razón de ser de la ruta: el código de emparejamiento viaja en el **nombre** del
+archivo y ese nombre lo pone nuestro `Content-Disposition`. Un `302` al hosting entrega el archivo
+con el nombre que tenga allá, sin código adentro, y el doble clic deja de alcanzar. El efecto
+secundario es útil: del otro lado el archivo puede llamarse de cualquier manera, así que si el
+hosting no acepta subir un `.exe` se sube sin extensión y sale con la que va. Y el hosting caído
+contesta **502**, distinto del 404 de "no está publicado": son dos problemas que arregla gente
+distinta.
+
+El panel **dice cuál de las dos está pasando**: sin ejecutables no esconde los botones —eso era
+un equipo registrado, un código a la vista y ningún archivo, sin una palabra sobre por qué— sino
+que ofrece el archivo de configuración.
+
+Separarlo del build no es solo por Go: la URL del servidor va **horneada** en el binario, así que
+actualizarlo es reemplazar un archivo, no volver a desplegar la aplicación.
+
 ## Marca (Dark Kitchen-Fire)
 
 La paleta cromática se basa en el acero inoxidable de cocina, el papel de tirilla térmica, la tinta de impresión y el fuego de las brasas:
@@ -482,6 +543,178 @@ ancho fijo separa la palabra de su número como si fueran dos datos.
 
 **No poner `font-display` y `.numeral` en el mismo elemento**: las dos declaran la familia y se
 pisan. Ese bug estaba en la tarjeta de KPI.
+
+## Inventario: dos regímenes de stock, y son excluyentes
+
+Un producto se mide de UNA de dos maneras, nunca de las dos:
+
+| Régimen | Cuándo | Dónde vive el stock | Dónde vive el costo |
+|---|---|---|---|
+| **Directo** | reventa: una cerveza que se compra y se vende igual | `Product.trackStock` + `stockQty` | `Product.costCop` + `stockMin` |
+| **Por receta** | lo que se prepara: un menú del día | `InventoryItem.stockCurrent` de cada insumo | la suma de la receta efectiva |
+
+Lo elige el dueño marcando **"lleva receta"** al crear o editar el artículo, y por eso
+`hasRecipe` es una declaración y no una consecuencia de que la tabla de recetas tenga filas
+(`componerRecetaEfectiva` lo exige explícitamente).
+
+**Contar la misma cerveza en los dos lados es el bug que originó todo esto.**
+`crearProductoTerminado` creaba el `Product` con `stockQty` **y** un `InventoryItem` espejo unido
+por una receta 1:1, pero sin marcar `hasRecipe`: la venta descontaba solo el primero y la compra
+subía los dos, así que el insumo espejo trepaba para siempre y la valorización del inventario
+inflaba el patrimonio del negocio sin techo. Hoy el alta de reventa crea un `Product` y nada más;
+`guardarReceta` apaga `trackStock` y `guardarProducto` de la carta también, para que la
+exclusividad no dependa de que alguien se acuerde.
+
+**Comprar un insumo sube ese insumo y nada más.** `crearFacturaCompra` tenía una rama que, si la
+línea no traía producto, buscaba *cualquier* plato con ese insumo en su receta y le subía el
+`stockQty`: una bolsa de arroz fabricaba bandejas paisas de la nada. Una línea de factura apunta a
+un insumo **o** a un producto directo; si vienen los dos ids manda el insumo.
+
+**El costo es promedio ponderado y neto de impuesto** (`lib/inventory/costo.ts`, puro y con tests).
+Antes cada factura pisaba `costCop` con el costo de la última compra: diez cervezas caras un martes
+reevaluaban las veinte baratas que ya estaban en la nevera. Dos casos no son promedio y están
+tratados aparte: sin costo previo se adopta el entrante entero —un cero casi nunca significa "me lo
+regalaron", significa "nadie le puso precio"— y con el stock en cero o negativo no hay nada que
+ponderar del lado viejo.
+
+**Activar el inventario NO borra el stock.** La acción corría dos `updateMany` que ponían en cero
+todos los insumos y todos los productos la primera vez que se prendía la casilla: quien cargaba su
+bodega y después activaba el módulo la perdía entera. Poner en cero es una decisión del dueño, con
+su pantalla de ajuste, no el efecto secundario de una casilla.
+
+Las siete acciones de inventario exigen `inventoryEnabled` a mano. **No se usa
+`modulo: AppModule.INVENTARIO`**: ese enum se enciende entero al crear la empresa y no se apaga
+nunca, así que gatear por él no protege de nada. El interruptor real es el de Configuración.
+
+### El descuento es atómico, y la pantalla lo dice antes del toque
+
+**La guarda va en el `where` del update, no en un `if` antes.** Leer el stock y después
+decrementarlo deja pasar a los dos meseros que agregan la última cerveza desde sus dos tablets, y el
+stock termina en −1. Es el mismo `update` condicionado con el que se reclama un trabajo de impresión
+o se evita la doble emisión ante la DIAN; Prisma contesta `P2025` cuando no encuentra la fila y eso
+se traduce a `ErrorDeUsuario`. El chequeo previo sigue existiendo, pero por el **mensaje**: "no hay
+pechuga" es accionable, "stock insuficiente" manda a alguien a revisar la bodega entera.
+
+De paso, `stockAfter` del Kardex sale del valor que devuelve ese update y no de una resta sobre la
+lectura vieja, que con dos ventas simultáneas escribía un saldo que nunca existió.
+
+**El stock directo ahora también deja Kardex.** `InventoryMovement` tiene `productId` y su
+`inventoryItemId` pasó a ser opcional: hasta acá todo el movimiento de `stockQty` —compras, ventas,
+ajustes— pasaba sin dejar rastro, así que cuando el conteo físico no cuadraba no había nada que
+revisar.
+
+**Las cuatro puertas de venta descuentan, pero solo el POS lo mostraba.** El salón
+(`app/(app)/pedido/[id]/carta.tsx`) recibía `stockQty`, `hasRecipe` y `recipeItems` desde `getCarta`
+y miraba únicamente `isAvailable`: el mesero veía la tarjeta tocable, la tocaba, y el error le
+llegaba parado en la mesa. El menú QR no tenía **ninguna** noción de stock, y su consulta ni
+siquiera traía `trackStock`/`stockQty`. Las tres pantallas usan ahora
+`calcularStockDisponibleProducto`, que devuelve `null` para lo que no se mide —distinto de cero—.
+
+**`BusinessSettings.permitirVentaSinStock`** (apagado de fábrica) deja cobrar igual y el stock queda
+**negativo**. El negativo es el punto: es lo que muestra el faltante en el arqueo, y clavarlo en
+cero lo escondería.
+
+**El QR rechaza, no descarta.** `crearPedidoClienteQR` hacía `continue` sobre un producto agotado:
+el comensal tocaba confirmar, el pedido entraba sin ese renglón y nadie le decía nada —ni a él ni a
+la cocina—, así que la primera noticia era la cuenta con un plato menos del que había pedido.
+
+### La ganancia sale del costo congelado, no de la receta de hoy
+
+`OrderItem.unitCostCopSnapshot` y `lineCostCop` se escriben al vender, por el mismo motivo que
+`taxRateBpSnapshot`: reconstruir el costo cruzando el renglón con la receta ACTUAL haría que el
+informe de marzo cambiara cada vez que un proveedor sube un precio en diciembre. El descuento de
+stock corre **antes** del `orderItem.create` en los cuatro caminos, y de ahí sale el costo — hacerlo
+después costaría un `UPDATE` extra por cada producto de cada pedido.
+
+**`null` no es cero.** Significa "no se conocía el costo" (inventario apagado, producto sin costear)
+y es lo que permite a `/informes?vista=costos` decir *"12 de 45 renglones sin costo"* en vez de
+anunciar un margen del 100%. Con el inventario apagado la sección no existe en el menú y la pantalla
+lo dice, en vez de celebrar como hace la vista de alertas.
+
+**El margen se compara contra `lineSubtotalCop`, la base gravable, no contra `lineTotalCop`.** El
+impuesto se cobra para entregarlo: contarlo como ingreso propio infla el margen del negocio entero.
+Por eso también el costo de compra se guarda neto (`PurchaseInvoice.includesTax` ya desagrega la
+base por línea): base contra base. `margenPorcentual` en `lib/money.ts` devuelve `null` sin ventas,
+con la misma convención que `variacionPorcentual`.
+
+### Un domicilio pasa por domicilios antes que por la cocina
+
+`Order.deliveryStatus` es el enum `DeliveryStatus` y es **nullable**: lo que no es
+un domicilio no tiene estado de reparto. Antes era un `String` con
+`@default("PENDIENTE")`, así que **todos** los pedidos del negocio lo traían puesto
+—una mesa incluida— y filtrar por esa columna devolvía el día entero; por eso las
+consultas necesitaban un OR entre `type` y `channel`. Los valores válidos vivían
+copiados a mano en tres archivos.
+
+El recorrido es `POR_CONFIRMAR → EN_PREPARACION → LISTO → EN_CAMINO → ENTREGADO`,
+más `CANCELADO`. Las reglas están en `features/domicilios/reglas.ts`, puras y con
+tests: se avanza **de a un paso**, no se vuelve atrás, y se anula desde cualquier
+punto menos entregado. Antes `actualizarEstadoDomicilio` escribía el string que le
+mandaran, así que un POST directo saltaba de recién llegado a entregado sin pasar
+por la cocina.
+
+**`LISTO` es el estado que faltaba** y es el que decide que un domicilio aparezca
+en caja. Antes la caja lo listaba desde que nacía: el cajero veía cuentas de comida
+que todavía no existía.
+
+Quién mueve cada paso, que es lo que no hacía nadie:
+
+| Paso | Quién | Dónde |
+|---|---|---|
+| Entra `POR_CONFIRMAR` | el comensal, por QR | `crearPedidoClienteQR` |
+| → `EN_PREPARACION` | domicilios, confirmando dirección y envío | `confirmarDomicilio` |
+| → `LISTO` | **la cocina, sola**, al terminar el último renglón | `avanzarComanda` |
+| → `EN_CAMINO` | **la caja, sola**, al facturar | `registrarPago` |
+| → `ENTREGADO` | domicilios | `actualizarEstadoDomicilio` |
+
+**Los domicilios por QR se abren y se cierran con el turno.**
+`BusinessSettings.qrDeliveryEnabled` arranca **apagado** y lo mueve el cajero
+(`abrirDomiciliosQr`). Es distinto de `deliveryEnabled`, que dice si el negocio
+reparte —configuración, la decide el dueño—: esto dice si está recibiendo AHORA.
+Sin esto un comensal mandaba un domicilio a las cuatro de la mañana, con la caja
+cerrada y el local vacío; el pedido entraba perfecto y esperaba a que alguien lo
+descubriera al otro día, con un cliente del otro lado que ya había dado su
+dirección. La acción vive en `features/domicilios/` y no en `features/negocio/`
+aunque escriba en `BusinessSettings`: la usa la operación, y un cajero no tiene
+permiso de Configuración —dárselo para que pueda cerrar los domicilios a la
+medianoche sería abrirle la puerta a todo lo demás—. El mismo componente
+(`InterruptorDomiciliosQr`) se pinta en `/caja` y en `/domicilios` para que no
+puedan mostrar estados distintos, y **manda el valor explícito, no un alternar**:
+con dos personas tocándolo a la vez desde sus dos pantallas, un alternar deja el
+estado al azar, y acá el azar es un local que se cree cerrado recibiendo pedidos.
+Nada lo apaga solo al cerrar la caja: es un botón, no una consecuencia.
+
+**El QR no manda un domicilio a la cocina.** `crearPedidoClienteQR` ponía
+`sentToKitchenAt` en el mismo commit en que el comensal tocaba "enviar", así que la
+comanda aparecía en la plancha con una dirección que nadie había leído. Ahora ese
+sello lo pone `confirmarDomicilio`, que además es el único momento en que corregir
+dirección, teléfono y `deliveryFeeCop` no cuesta nada —y recalcula el total en la
+misma transacción—. Un domicilio que carga el negocio nace `EN_PREPARACION`: quien
+lo tomó ya tiene la dirección delante.
+
+**Despachar cierra la comanda** (`features/domicilios/despacho.ts`). El KDS muestra
+todo renglón que no esté entregado, y en un domicilio no hay mesero que lo reciba:
+sin esto, cada pedido despachado se quedaba en la pantalla de cocina para siempre.
+
+**Anular delega en `anularPedido`.** Antes escribía `status: "ANULADA"` a mano, sin
+motivo, sin quién, sin bitácora y **sin devolver el stock**: una anulación que no
+devuelve el inventario descuadra el conteo sin que nadie se entere hasta el arqueo.
+
+**El rastreo del comensal tiene su propia ruta.** El menú QR abría un `EventSource`
+contra `/api/domicilios/stream`, que exige sesión y licencia: a un comensal le
+respondía **401**, así que el rastreo solo avanzaba con el botón de refrescar y el
+paso "tu pedido salió" no se veía nunca solo. Ahora va a
+`/api/qr/pedido/[id]/stream`, que **no manda datos del pedido**: emite un "algo
+cambió" y el cliente vuelve a pedir su estado con `consultarEstadoPedidoQR`, que es
+la acción pública que ya decide qué se puede contar. Lo autoriza tener el id, que es
+un cuid.
+
+**La caja no es solo de las mesas.** `seccionesDeCaja` y `vistaInicialDeCaja` reciben
+`cobraCuentas`, que es `usaMesas || usaDomicilios`. Atado a mesas, un negocio de puro
+domicilio abría la caja y no veía nada por cobrar.
+
+**Zonas de entrega y repartidores no existen** —ni modelo, ni columna, ni pantalla—
+aunque el copy de `app/(app)/domicilios/page.tsx` los promete.
 
 ### El menú QR es una ruta pública: todo lo que llega por la URL es del cliente
 
@@ -676,6 +909,168 @@ y controles por debajo de 44px— en los nueve tamaños del handoff:
 pnpm tsx --env-file=.env scripts/revisar-viewports.ts --url http://127.0.0.1:3000
 ```
 
+### Impresión térmica: la cola vive en Postgres, Redis es el timbre
+
+Hasta acá imprimir era abrir una pestaña y llamar a `window.print()`
+(`app/imprimir/pedido/[id]`), y **la comanda de cocina no se imprimía nunca**: solo
+existía en el KDS, así que una cocina sin pantalla no tenía cómo enterarse del
+pedido.
+
+**El servidor nunca le habla a la impresora.** Una térmica del bar vive detrás del
+router del bar y desde internet no se llega. Lo hace `agente-impresion/`, un
+binario en Go sin dependencias que corre en una PC del local: pide trabajo, escribe
+los bytes en el puerto 9100 y confirma. **No decide nada de formato** —los bytes
+llegan armados— para que cambiar el pie del recibo no obligue a actualizar el
+programa en veinte locales.
+
+**La cola es durable a propósito.** Redis Pub/Sub es fire-and-forget: lo que se
+publica con el agente apagado se pierde y nadie se entera. Para un contador de
+pantalla está bien; para una comanda no. Así que `PrintJob` vive en Postgres y
+`publicarImpresion` solo toca el timbre, **después del commit** —antes, el agente
+podría venir a buscar un trabajo que todavía no existe—. Es el mismo patrón de
+`avisos/stream`: snapshot al conectar más reconciliación periódica, en vez de
+confiar en haber estado escuchando.
+
+**El reclamo es exclusivo y caduca** (`reclamarTrabajos`): un `updateMany`
+condicionado, igual que la guarda anti-doble-emisión de la DIAN. Dos agentes
+corriendo —una PC en la caja y otra en la cocina— no imprimen el mismo recibo; y
+un agente que se muere con el trabajo en la mano no lo bloquea para siempre.
+
+**Tres intentos y después se avisa.** Reintentar y callarse es peor que no
+reintentar: nadie sabe que la comanda no llegó a la plancha hasta que el cliente
+pregunta. Al agotarse salta un `Aviso` de tipo `IMPRESION_FALLIDA` —que hereda
+toast, campana y sonido— y sale un correo al dueño y a `OPS_ALERT_EMAIL`.
+
+**Nada de UTF-8.** Una térmica no lo entiende: trabaja con páginas de códigos de un
+byte, y la de la región es CP858. Mandarle UTF-8 imprime "MenÃº" en vez de "Menú", y
+además **corre las columnas**, porque un acento pasaría a ocupar dos caracteres de
+un ancho que se calculó en uno. Eso vive en `lib/printing/escpos.ts`, puro y con
+tests de bytes.
+
+Los tres módulos de composición son puros y separados a propósito: `ticket.ts`
+decide dónde cae cada columna, `recibo.ts` y `comanda.ts` qué dice cada línea, y
+`escpos.ts` cómo se le manda a la máquina. **Una comanda no es un recibo con otro
+título**: no lleva precios ni impuestos, y sí lleva grande el identificador, que es
+lo único que se busca de lejos entre seis papeles colgados en la plancha.
+
+`componerRecibo` lo usan los dos caminos —la pantalla de impresión y la cola—: si
+cada uno compusiera lo suyo, reimprimir daría un tiquete distinto del que salió por
+la caja.
+
+**El KDS es opcional**: `BusinessSettings.comandaDestino` (`KDS` | `IMPRESA` |
+`AMBAS`). Es un ajuste y no un `AppModule` porque aquel enum significa "qué
+superficie usa el negocio", no "cómo sale el papel".
+
+El agente se autentica como el webhook de MercadoPago: ruta pública en el
+`middleware` que **verifica por su cuenta**, con un token del que se guarda **solo
+el hash** (`PrintAgent`). SHA-256 y no argon2: son 32 bytes aleatorios, no una
+contraseña que alguien repite en otro lado, y el hash se verifica varias veces por
+minuto.
+
+**A ese token no lo teclea nadie.** Antes había que copiarlo a un `agente.json` escrito
+a mano al lado del binario, y eso no lo va a hacer un cajero: son 43 caracteres, una
+coma de más rompe el archivo y el error no dice cuál. El archivo volvió —abajo—, pero
+sale hecho del servidor y se pega entero; lo que no vuelve es escribirlo. El alta entrega
+un **código de emparejamiento** —12 caracteres, alfabeto sin `0/O` ni `1/I/L`— que viaja
+en el **nombre del archivo que se descarga** (`platlia-impresion__K7M2-9QXT-4B8N.exe`,
+lo pone el `Content-Disposition` de `/api/impresion/descargar`). El programa se lee a
+sí mismo con `os.Executable()`, canjea el código en `/api/impresion/emparejar` y
+guarda el token solo.
+
+El código puede ser corto porque **vale una hora y un solo uso**: `emparejar()` lo
+quema en el mismo `updateMany` condicionado con el que lo canjea, así que no aguanta
+fuerza bruta ni hace falta que aguante. Y las tres causas de rechazo —inexistente,
+vencido, ya usado— contestan **el mismo mensaje**, por lo mismo que `ingresar`
+contesta igual exista o no la cuenta: distinguirlas le diría a quien esté probando
+cuál de sus intentos estuvo cerca.
+
+**Ese camino supone que el programa se baja del servidor**, porque el código viaja en
+el nombre del archivo. Cuando los binarios no están publicados —que es lo normal en el
+VPS— hay un segundo camino: **Configurar a mano** emite el token y entrega el
+`agente.json` armado, y el programa lo lee **del lado del ejecutable**
+(`leerConfiguracionVecina`). Se dejan los dos archivos juntos, doble clic, y desde ahí
+hace exactamente lo mismo que el otro camino —se copia a la carpeta de datos, se anota
+para arrancar con la máquina, abre su página—: lo único que cambia es de dónde salió el
+token.
+
+Se lee del lado del ejecutable y no de la carpeta de datos porque esa carpeta es distinta
+en cada sistema y lleva el usuario adentro de la ruta: hacer que alguien la encuentre
+antes de poder copiar nada es volver al archivo de texto hecho a mano.
+
+**`emitirToken` mata el código de emparejamiento** (y `regenerarCodigo` ya mataba el
+token). Son dos llaves para la misma puerta: dejarlas convivir sería una segunda entrada
+viva una hora sin que nadie sepa que quedó abierta. El JSON lo arma el **servidor**
+(`archivoDeConfiguracion`, con `env.APP_URL`) y no la pantalla, porque una URL escrita a
+mano en un componente cliente —un `localhost`, una barra final de más— es un agente que
+no conecta y un error que solo se ve en la PC del local.
+
+**La URL del servidor se hornea al compilar** (`-X main.servidorHorneado=$APP_URL`,
+en `scripts/compilar-agente.sh`). Tiene que saber a quién hablarle antes de tener
+ninguna configuración; el `agente.json` puede pisarla, pero solo si alguien lo puso.
+
+El doble clic hace todo lo demás solo: se copia a la carpeta de datos del usuario
+—Descargas es una carpeta que se vacía, y ahí el local dejaría de imprimir un día sin
+que nadie hubiera tocado nada—, se anota para arrancar con la máquina **sin pedir
+permisos de administrador** (`HKCU\…\Run`, `systemd --user`, LaunchAgent: pedir
+elevación en la caja de un bar es la forma más rápida de que alguien cancele el cuadro
+y nunca más lo abra) y abre el navegador en su página de estado.
+
+**No puede haber dos agentes, y gana el último que se abrió.** Cada doble clic dejaba
+un proceso más: el puerto base quedaba tomado, el programa se corría al 9778 y andaba
+igual. En Windows no hay ventana que delate a los anteriores y en Linux quedan sueltos
+en el fondo, así que la persona termina mirando la página del PRIMERO —vieja, sin
+configurar y con la pantalla de la versión que tuviera— mientras el que acaba de abrir
+escucha en otro puerto. Pasó tal cual, y se diagnostica mal: parece que el programa
+"no toma" el `agente.json` cuando en realidad se está mirando otro proceso.
+`pedirRelevo()` le pide el puesto al que esté en el 9777, pero **solo si contesta la
+marca** en `/soy-el-agente`: si el puerto lo tiene cualquier otro programa, no es asunto
+nuestro. El relevo va por POST y con una cabecera propia, que es lo que obliga a un
+navegador a pedir permiso antes (preflight): sin eso, cualquier página abierta en esa
+computadora podría apagarle la impresión al local con un formulario escondido.
+
+**Donde hay gestor de servicios, el doble clic es un INSTALADOR que se retira.** En Linux
+y macOS el proceso que abre una persona deja todo configurado, arranca el servicio y
+**sale**; el que atiende de ahí en más es systemd o launchd. Si se quedara, en Linux
+moriría con la terminal —y quedarían dos procesos peleándose el puerto—. En Windows no
+hay a quién pasarle la posta (`HKCU\…\Run` solo dispara al iniciar sesión), así que ahí
+el proceso sí es el agente y se queda. Por eso `registrarArranque` **solo anota** y nunca
+arranca: el servicio se levanta desde `main`, y recién **después de soltar el puerto**,
+o se encuentra el 9777 tomado por el proceso que está por irse.
+
+**La página local acepta el archivo, no solo el código.** Pedía un código de 12
+caracteres mientras el panel entregaba un `agente.json`: quien llegaba a esa pantalla
+tenía lo que hacía falta en la mano y ninguna casilla donde ponerlo. Ahora el campo
+principal es el archivo pegado y el código quedó plegado abajo. Los cuatro caminos
+—archivo al lado del ejecutable, código en el nombre, código escrito, archivo pegado—
+pasan por `adoptarConfiguracion`, el único lugar donde se guarda, se instala y se
+registra el arranque.
+
+**En Linux el arranque automático tiene tres trampas que los otros dos sistemas no
+tienen.** (a) `systemctl --user enable` solo anota la unidad para el próximo reinicio, y
+como acá el programa se abre desde una terminal, al cerrarla el local dejaba de imprimir
+hasta que alguien reiniciara: hace falta `restart` además de `enable` —`restart` y no
+`start`, para que una reinstalación levante el binario nuevo en vez de quedarse con el
+viejo ya cargado—. (b) Para saber si hay que arrancarla se compara el **PID** contra el
+`MainPID` de la unidad; **`INVOCATION_ID` no sirve**, porque systemd la pone en el
+servicio pero los hijos la heredan y en un escritorio moderno la terminal misma cuelga de
+`app-gnome-…service`, así que todo lo abierto a mano la trae puesta y la guarda daba "sí"
+siempre. (c) Reinstalar sobre un servicio andando exige pararlo antes: el kernel rechaza
+escribir sobre un ejecutable en ejecución (`ETXTBSY`), que es el mismo problema que en
+Windows resuelve el `os.Rename` previo.
+
+**El navegador guarda el archivo sin permiso de ejecución** y eso no se puede mandar por
+HTTP: en Linux y macOS hay un `chmod +x` inevitable antes del primer arranque. En Windows
+no hace falta nada.
+
+**No hay ventana.** En Windows se compila con `-H windowsgui`: una consola negra
+abierta todo el día es una ventana que alguien cierra sin querer. Lo que se mira es
+`http://127.0.0.1:9777`, servida por el propio agente —`agente-impresion/estado.go`—,
+que además tiene el campo para pegar el código a mano por si el navegador le cambió el
+nombre al archivo. Dos detalles de ese archivo que ya costaron un `go vet`: `vistaEstado`
+está separada de `estado` porque copiar una estructura con el mutex adentro es un candado
+que ya no protege nada, y el CSS va **concatenado** y no dentro del `Sprintf`, porque su
+`width: 100%` se lee como un verbo de formato desconocido.
+
 ### El menú QR es la excepción
 
 `app/m/[slug]/` no se apoya en `--tinta`: **el fondo y el acento los elige cada negocio**
@@ -701,6 +1096,8 @@ app/imprimir/            HTML limpio para @page 55mm/80mm
 app/turnero/             el televisor del salón: fuera de (app), sin barra de navegación
 lib/db/                  pool.ts · root.ts (rootDb) · tenant.ts (tenantDb) · tenant-models.ts
 lib/{auth,actions,billing,printing,email}/      infraestructura
+lib/printing/            ticket · recibo · comanda (puros) · escpos · cola · emitir · agente
+agente-impresion/        el binario en Go que corre en la PC del local
 lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plataforma
 features/dian/           emitir factura y nota crédito
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests
@@ -729,7 +1126,7 @@ reescribe el mismo `.next` que usa el build de producción: al tocar cualquier a
 y el servidor empieza a responder 500 con `Cannot read properties of undefined (reading 'call')`
 y `Could not find files for /_error`. El síntoma no se parece en nada a la causa.
 
-Tres trampas más, que ya costaron tiempo dos veces cada una:
+Cinco trampas más, que ya costaron tiempo dos veces cada una:
 
 - **Next inyecta un `role="alert"` vacío** (`#__next-route-announcer__`) para anunciar los
   cambios de ruta. Un `getByRole("alert")` suelto lo agarra a él y falla con `""`. Hay que
@@ -740,5 +1137,18 @@ Tres trampas más, que ya costaron tiempo dos veces cada una:
 - **Los selectores por texto son ambiguos más seguido de lo que parece**: "Salón" es el `h1` y
   también un área del seed; "Contraseña" coincide con los campos "Contraseña nueva" de cada
   miembro del equipo. Conviene acotar con `level`, `exact` o al formulario que corresponde.
+- **`locator.getAttribute()` ESPERA a que el elemento aparezca**, y un `.catch(() => null)`
+  encima se come el error pero no el tiempo. `cerrarPedidosAbiertos` buscaba así el primer
+  `a[href^="/pedido/"]` y, sin pedidos abiertos —el caso normal al terminar un archivo—, se
+  quedaba el presupuesto ENTERO de la prueba en una sola de sus veinticinco vueltas: 298
+  segundos medidos. El síntoma era una suite lenta y un `afterEach` que vencía sin decir por
+  qué. Para preguntar "¿hay alguno?" va `count()`, que no espera.
+- **A una sección de un módulo se llega por la URL, no por una píldora.** Cuando el menú pasó a
+  ser el único navegador, los ayudantes que clickeaban "Movimientos y cierre de turno" dejaron
+  de encontrar nada: `dejarCajaCerrada` daba por cerrada una caja que seguía abierta y **toda**
+  la suite fallaba en su `beforeEach`. El cierre vive en `/caja?vista=movimientos`. Y probar el
+  estado con `isVisible()` no alcanza —no espera, así que sobre una pantalla a medio pintar
+  contesta "no está"—: hay que esperar a que aparezca uno de los dos estados posibles, como
+  hace `abrirMesa` con `boton.or(cuadro)`.
 
 El gestor de paquetes es **pnpm**. No hay `package-lock.json`.

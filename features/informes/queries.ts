@@ -1,6 +1,7 @@
 import "server-only";
 import { tenantDb } from "@/lib/db/tenant";
 import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
+import { margenPorcentual } from "@/lib/money";
 import { getSettings } from "@/features/negocio/queries";
 
 /**
@@ -157,6 +158,127 @@ export async function getAnulaciones(businessId: string, businessDate: Date) {
 // Alertas de Inventario & Abastecimiento
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Costo de ventas y margen de la jornada, por producto.
+ *
+ * Se apoya en `OrderItem.lineCostCop`, congelado al vender. Reconstruirlo acá
+ * cruzando cada renglón con la receta ACTUAL sería el mismo error que
+ * `taxRateBpSnapshot` existe para evitar: el informe de marzo cambiaría cada vez
+ * que un proveedor sube un precio en diciembre.
+ *
+ * Dos decisiones que no son obvias:
+ *
+ * - **Se agrupa por `productId` además del nombre.** `getProductosMasVendidos`
+ *   agrupa solo por `nameSnapshot` a propósito, para que un producto archivado y
+ *   recreado siga siendo la misma fila. Acá hace falta el id igual, porque es lo
+ *   único que permite enlazar a la ficha del producto desde el informe.
+ * - **La venta que se compara es `lineSubtotalCop`, la base gravable.** El
+ *   impuesto se cobra para entregarlo: contarlo como ingreso propio infla el
+ *   margen del negocio entero.
+ */
+export interface RenglonDeMargen {
+  productId: string;
+  nombre: string;
+  unidades: number;
+  ventaNetaCop: number;
+  costoCop: number;
+  utilidadCop: number;
+  /** null cuando no se vendió nada de ese producto en la jornada. */
+  margenPct: number | null;
+  /** Renglones de ese producto que se vendieron sin costo conocido. */
+  renglonesSinCosto: number;
+}
+
+export interface InformeDeMargen {
+  /** El inventario está apagado: no hay costos que informar, y no es lo mismo que cero. */
+  inventarioActivo: boolean;
+  ventaNetaCop: number;
+  costoCop: number;
+  utilidadCop: number;
+  margenPct: number | null;
+  /** Cuántos renglones de la jornada no traen costo, para poder decirlo. */
+  renglonesSinCosto: number;
+  renglonesTotales: number;
+  productos: RenglonDeMargen[];
+}
+
+export async function getCostoYMargen(
+  businessId: string,
+  businessDate: Date,
+): Promise<InformeDeMargen> {
+  const vacio: InformeDeMargen = {
+    inventarioActivo: false,
+    ventaNetaCop: 0,
+    costoCop: 0,
+    utilidadCop: 0,
+    margenPct: null,
+    renglonesSinCosto: 0,
+    renglonesTotales: 0,
+    productos: [],
+  };
+
+  const settings = await getSettings(businessId);
+  if (!settings.inventoryEnabled) return vacio;
+
+  const db = tenantDb(businessId);
+  const where = {
+    status: { not: "ANULADO" as const },
+    order: { businessDate, status: "PAGADA" as const },
+  };
+
+  const [filas, sinCosto] = await Promise.all([
+    db.orderItem.groupBy({
+      by: ["productId", "nameSnapshot"],
+      where,
+      _sum: { quantity: true, lineSubtotalCop: true, lineCostCop: true },
+      _count: { _all: true },
+    }),
+    // Los renglones sin costo no se pueden contar con el mismo groupBy: `_sum`
+    // ignora los nulos en silencio, así que sin esto un día entero sin costear
+    // se vería como margen del 100%.
+    db.orderItem.groupBy({
+      by: ["productId"],
+      where: { ...where, lineCostCop: null },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const sinCostoPorProducto = new Map(sinCosto.map((f) => [f.productId, f._count._all]));
+
+  const productos: RenglonDeMargen[] = filas.map((fila) => {
+    const ventaNetaCop = fila._sum.lineSubtotalCop ?? 0;
+    const costoCop = fila._sum.lineCostCop ?? 0;
+    const utilidadCop = ventaNetaCop - costoCop;
+    return {
+      productId: fila.productId,
+      nombre: fila.nameSnapshot,
+      unidades: fila._sum.quantity ?? 0,
+      ventaNetaCop,
+      costoCop,
+      utilidadCop,
+      margenPct: margenPorcentual(utilidadCop, ventaNetaCop),
+      renglonesSinCosto: sinCostoPorProducto.get(fila.productId) ?? 0,
+    };
+  });
+
+  productos.sort((a, b) => b.utilidadCop - a.utilidadCop);
+
+  const ventaNetaCop = productos.reduce((acc, p) => acc + p.ventaNetaCop, 0);
+  const costoCop = productos.reduce((acc, p) => acc + p.costoCop, 0);
+  const utilidadCop = ventaNetaCop - costoCop;
+
+  return {
+    inventarioActivo: true,
+    ventaNetaCop,
+    costoCop,
+    utilidadCop,
+    margenPct: margenPorcentual(utilidadCop, ventaNetaCop),
+    renglonesSinCosto: productos.reduce((acc, p) => acc + p.renglonesSinCosto, 0),
+    renglonesTotales: filas.reduce((acc, f) => acc + f._count._all, 0),
+    productos,
+  };
+}
+
 export interface AlertaInventarioItem {
   id: string;
   tipo: "INSUMO" | "PRODUCTO_TERMINADO" | "RECETA_PLATOS";
@@ -201,6 +323,8 @@ export async function getAlertasInventario(businessId: string): Promise<AlertaIn
         category: { select: { name: true } },
         trackStock: true,
         stockQty: true,
+        stockMin: true,
+        hasRecipe: true,
         recipeItems: {
           select: {
             quantityRequired: true,
@@ -236,19 +360,23 @@ export async function getAlertasInventario(businessId: string): Promise<AlertaIn
 
   for (const prod of productos) {
     if (prod.trackStock) {
-      if (prod.stockQty <= 5) {
+      // El umbral es el mínimo que cargó el negocio. El 5 fijo que había acá
+      // trataba igual a un bar que vende cinco cajas de cerveza por noche y a uno
+      // que vende cinco botellas de whisky al mes.
+      const minAlert = prod.stockMin > 0 ? prod.stockMin : 5;
+      if (prod.stockQty <= minAlert) {
         alertas.push({
           id: `prod-${prod.id}`,
           tipo: "PRODUCTO_TERMINADO",
           nombre: prod.name,
           categoria: prod.category.name,
           stockActual: prod.stockQty,
-          stockMinimo: 5,
+          stockMinimo: minAlert,
           nivel: prod.stockQty <= 0 ? "CRITICO" : "BAJO",
           mensaje:
             prod.stockQty <= 0
               ? `Producto terminado AGOTADO (0 und.)`
-              : `Stock bajo de producto terminado: ${prod.stockQty} und.`,
+              : `Stock bajo de producto terminado: ${prod.stockQty} und. (Mín: ${minAlert})`,
         });
       }
     }

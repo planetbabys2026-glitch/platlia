@@ -71,6 +71,7 @@ export default async function PedidoPage({
         usaMesas={usaMesas}
         settings={{
           inventoryEnabled: settings.inventoryEnabled,
+          permitirVentaSinStock: settings.permitirVentaSinStock,
           deliveryEnabled: settings.deliveryEnabled,
           deliveryFeeCop: settings.deliveryFeeCop,
           requireOpenCashSession: settings.requireOpenCashSession,
@@ -317,6 +318,7 @@ export default async function PedidoPage({
               categorias={carta}
               editable={editable}
               inventoryEnabled={settings.inventoryEnabled}
+              permitirVentaSinStock={settings.permitirVentaSinStock}
             />
           </section>
 

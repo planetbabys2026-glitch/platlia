@@ -1,0 +1,7 @@
+# Los binarios se compilan, no se versionan: uno por sistema operativo y ~9 MB
+# cada uno. Se generan con los comandos del README.
+platlia-impresion
+platlia-impresion.exe
+platlia-impresion-mac
+# La configuración del local lleva el token del agente.
+agente.json

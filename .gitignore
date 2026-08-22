@@ -48,3 +48,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Los ejecutables del agente de impresión se compilan con `pnpm agente:build`,
+# no se versionan: son ~9 MB por sistema operativo.
+# Los ejecutables del agente de impresión SÍ se versionan.
+#
+# Son ~7 MB por sistema y eso pesa en el repo, pero la alternativa pesa más: la
+# imagen de despliegue no trae Go, así que un binario que no viaja en el commit no
+# llega al VPS de ninguna forma automática. Estuvieron ignorados y el resultado fue
+# un panel sin botones de descarga y nadie entendiendo por qué. Cambian cuando
+# cambia `agente-impresion/`, o sea casi nunca.
+#
+# Se regeneran con `pnpm agente:build` y se commitean junto al cambio de Go.

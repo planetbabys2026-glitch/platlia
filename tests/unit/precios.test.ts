@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   cotizar,
   esPromocion,
-  listaParaNegocio,
+  mensualDeLaLista,
+  tramoAplicable,
   cotizarTodas,
   esPeriodicidad,
   LISTA_POR_DEFECTO,
@@ -173,51 +174,99 @@ describe("listaVigente · qué precio rige hoy", () => {
   });
 });
 
-describe("listaParaNegocio · el precio congelado y la promo", () => {
+describe("el precio sale solo de la lista", () => {
   const promoJunio = promo({
     precioSedePrincipalCop: 35_000,
     desde: new Date("2026-06-01T00:00:00Z"),
     hasta: new Date("2026-07-01T00:00:00Z"),
   });
 
-  it("sin promo se le respeta el precio que ya tenía", () => {
-    // Entró pagando 40.000 y la lista subió a 50.000: sigue pagando 40.000.
-    const suya = listaParaNegocio(BASE, 40_000);
-    expect(cotizar({ lista: suya, sedes: 1, periodicidad: "MENSUAL" }).totalCop).toBe(40_000);
+  /**
+   * No existe un precio por empresa.
+   *
+   * Antes cada `Subscription` guardaba su `priceCop` y le ganaba a la lista, para
+   * respetarle la tarifa a los primeros clientes. El efecto era que el número que
+   * cobraba el sistema no estaba en ninguna pantalla: nacía solo al registrarse y
+   * solo se podía cambiar por SQL. Hoy si la lista sube, sube para todos, y lo
+   * único que mueve el precio por un tiempo es una promoción, que alcanza por
+   * igual a los clientes viejos y a los nuevos.
+   */
+  it("una promo vigente le gana a la lista base", () => {
+    const vigente = listaVigente([BASE, promoJunio], new Date("2026-06-15T00:00:00Z"));
+    expect(cotizar({ lista: vigente, sedes: 1, periodicidad: "MENSUAL" }).totalCop).toBe(35_000);
   });
 
-  it("una promo le gana al precio propio, aunque el propio sea más caro", () => {
-    // El precio propio protege de las subas, no de los descuentos.
-    const suya = listaParaNegocio(promoJunio, 50_000);
-    expect(cotizar({ lista: suya, sedes: 1, periodicidad: "MENSUAL" }).totalCop).toBe(35_000);
-  });
-
-  it("una promo no le arruina el precio a quien ya tenía uno mejor", () => {
-    // Ojo: si el propio fuera MÁS barato que la promo, la promo igual manda.
-    // Es una decisión consciente y por eso está escrita en un test: la promo es
-    // una lista completa, no un descuento que se apile sobre otro precio.
-    const suya = listaParaNegocio(promoJunio, 20_000);
-    expect(cotizar({ lista: suya, sedes: 1, periodicidad: "MENSUAL" }).totalCop).toBe(35_000);
-  });
-
-  it("sin precio propio se usa la lista tal cual", () => {
-    expect(listaParaNegocio(BASE, null).precioSedePrincipalCop).toBe(50_000);
-    expect(listaParaNegocio(BASE, undefined).precioSedePrincipalCop).toBe(50_000);
-  });
-
-  it("un precio propio corrupto no rompe el cobro", () => {
-    expect(listaParaNegocio(BASE, -1).precioSedePrincipalCop).toBe(50_000);
-    expect(listaParaNegocio(BASE, 1.5).precioSedePrincipalCop).toBe(50_000);
-  });
-
-  it("la sede adicional sigue saliendo de la lista, no del precio propio", () => {
-    const suya = listaParaNegocio(BASE, 40_000);
-    expect(cotizar({ lista: suya, sedes: 2, periodicidad: "MENSUAL" }).totalCop).toBe(70_000);
+  it("terminada la promo se vuelve a la lista base, sin arrastrar el precio", () => {
+    const vigente = listaVigente([BASE, promoJunio], new Date("2026-07-02T00:00:00Z"));
+    expect(cotizar({ lista: vigente, sedes: 1, periodicidad: "MENSUAL" }).totalCop).toBe(50_000);
   });
 
   it("distingue una promo de la lista base", () => {
     expect(esPromocion(BASE)).toBe(false);
     expect(esPromocion(promoJunio)).toBe(true);
+  });
+});
+
+describe("tramos · el precio de tres sedes en adelante", () => {
+  /** 1 y 2 salen de la fórmula; de 3 manda el tramo, y de 6 otro. */
+  const conTramos = promo({
+    id: "tramos",
+    nombre: "Con tramos",
+    desde: null,
+    hasta: null,
+    tramos: [
+      { desdeSedes: 3, precioMensualCop: 150_000 },
+      { desdeSedes: 6, precioMensualCop: 250_000 },
+    ],
+  });
+
+  it("sin tramos rige la fórmula", () => {
+    expect(mensualDeLaLista(BASE, 1)).toBe(50_000);
+    expect(mensualDeLaLista(BASE, 3)).toBe(110_000);
+  });
+
+  it("por debajo del primer tramo sigue rigiendo la fórmula", () => {
+    expect(mensualDeLaLista(conTramos, 1)).toBe(50_000);
+    expect(mensualDeLaLista(conTramos, 2)).toBe(80_000);
+  });
+
+  it("el tramo dice el precio completo, no un recargo que se suma", () => {
+    expect(mensualDeLaLista(conTramos, 3)).toBe(150_000);
+    expect(cotizar({ lista: conTramos, sedes: 3, periodicidad: "MENSUAL" }).totalCop).toBe(150_000);
+  });
+
+  it("manda el tramo de piso más alto que no supere las sedes", () => {
+    // 4 y 5 caen en el de 3; 6 y 7 en el de 6.
+    expect(mensualDeLaLista(conTramos, 4)).toBe(150_000);
+    expect(mensualDeLaLista(conTramos, 5)).toBe(150_000);
+    expect(mensualDeLaLista(conTramos, 6)).toBe(250_000);
+    expect(mensualDeLaLista(conTramos, 7)).toBe(250_000);
+  });
+
+  it("los meses de regalo se aplican sobre el precio del tramo", () => {
+    const c = cotizar({ lista: conTramos, sedes: 3, periodicidad: "ANUAL" });
+    expect(c.mesesGratis).toBe(2);
+    expect(c.totalCop).toBe(150_000 * 10);
+  });
+
+  it("un tramo con datos corruptos se ignora en vez de tumbar el cobro", () => {
+    const roto = promo({
+      desde: null,
+      hasta: null,
+      tramos: [
+        { desdeSedes: 0, precioMensualCop: 1 },
+        { desdeSedes: 2.5, precioMensualCop: 1 },
+        { desdeSedes: 3, precioMensualCop: -5 },
+      ],
+    });
+    expect(mensualDeLaLista(roto, 3)).toBe(110_000);
+    expect(tramoAplicable(roto, 3)).toBeNull();
+  });
+
+  it("mesesSegunMonto reconoce un monto cotizado con tramo", () => {
+    const mensual = mensualDeLaLista(conTramos, 3);
+    expect(mesesSegunMonto(mensual * 10, mensual, conTramos)).toBe(12);
+    expect(mesesSegunMonto(mensual, mensual, conTramos)).toBe(1);
   });
 });
 

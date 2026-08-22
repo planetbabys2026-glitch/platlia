@@ -42,6 +42,13 @@ function esPublica(pathname: string): boolean {
   if (pathname.startsWith("/api/webhooks/")) return true;
   // Streams SSE para actualización en tiempo real de domicilios y turnero
   if (pathname.startsWith("/api/domicilios/stream") || pathname.startsWith("/api/turnero/stream")) return true;
+  // El rastreo del comensal: no tiene sesión ni la va a tener. Se autoriza con el
+  // id del pedido, que es un cuid, y el handler lo verifica por su cuenta —estar
+  // en esta lista no autentica nada—.
+  if (pathname.startsWith("/api/qr/")) return true;
+  // El agente de impresión corre en una PC del local y tampoco es un navegador:
+  // se autentica con su token en cada llamada, como el webhook de MercadoPago.
+  if (pathname.startsWith("/api/impresion/")) return true;
   return false;
 }
 
@@ -85,7 +92,12 @@ export const config = {
      * imagen. `sw.js` es el más delicado de la lista: si pasara por acá, un
      * dispositivo sin sesión recibiría un 307 en vez del script y el navegador
      * jamás llegaría a registrar el service worker.
+     *
+     * `descargas/` es el ejecutable del agente de impresión. Se baja desde la PC
+     * del local, que no tiene por qué tener sesión abierta, y el archivo es el
+     * mismo para todos: lo secreto es el token, que va aparte. Sin esta excepción
+     * el navegador recibía un 307 al login y bajaba un HTML llamado `.exe`.
      */
-    "/((?!_next/static|_next/image|marca/|icons/|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|sw.js|offline.html|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2)$).*)",
+    "/((?!_next/static|_next/image|marca/|icons/|descargas/|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|sw.js|offline.html|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2)$).*)",
   ],
 };

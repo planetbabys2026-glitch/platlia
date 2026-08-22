@@ -12,8 +12,13 @@ import {
   FormularioTurnero,
 } from "./formularios";
 import { FormularioPermisosRoles } from "./formulario-permisos-roles";
+import {
+  FormularioImpresoras,
+  type ConfiguracionImpresionProps,
+} from "./formulario-impresoras";
 
 import type { ReceiptWidth } from "@/generated/prisma/enums";
+import type { ListaDePrecios } from "@/lib/billing/precios";
 
 type PanelConfiguracionProps = {
   negocio: {
@@ -29,6 +34,7 @@ type PanelConfiguracionProps = {
     deliveryPaused: boolean;
     deliveryFeeCop: number;
     inventoryEnabled: boolean;
+    permitirVentaSinStock: boolean;
     recipesEnabled: boolean;
     turneroMediaMode: string;
     turneroImages: string;
@@ -43,10 +49,14 @@ type PanelConfiguracionProps = {
     cashRoundingCop: number;
     requireOpenCashSession: boolean;
     turnNumberMax: number;
+<<<<<<< HEAD
     scheduleEnabled: boolean;
     scheduleOpeningTime: string;
     scheduleClosingTime: string;
     scheduleStatus: string;
+=======
+    comandaDestino: string;
+>>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     receiptWidth: ReceiptWidth;
     receiptHeader: string | null;
     receiptFooter: string | null;
@@ -72,7 +82,6 @@ type PanelConfiguracionProps = {
     suscripcion: {
       id: string;
       status: string;
-      priceCop: number;
       trialEndsAt: Date | null;
       currentPeriodStart: Date | null;
       currentPeriodEnd: Date | null;
@@ -81,18 +90,39 @@ type PanelConfiguracionProps = {
     } | null;
     pagos: unknown[];
   } | null;
+  /** La lista de precios vigente y cuántas sedes cubre la cuenta. Con eso alcanza
+   *  para cotizar acá con la misma función que el checkout. */
+  licencia: {
+    sedes: number;
+    lista: ListaDePrecios;
+    base: ListaDePrecios;
+    promo: ListaDePrecios | null;
+  } | null;
+  /** Null para quien no administra: no configura impresoras. */
+  impresion: Omit<ConfiguracionImpresionProps, "comandaDestino" | "timeZone"> | null;
   mesasHabilitado: boolean;
   esPropietario: boolean;
   slug: string;
   mesas: { id: string; name: string }[];
 };
 
-type TabId = "datos" | "modulos" | "permisos" | "turnero" | "qr" | "operacion" | "factus" | "licencia";
+type TabId =
+  | "datos"
+  | "modulos"
+  | "permisos"
+  | "turnero"
+  | "qr"
+  | "operacion"
+  | "impresoras"
+  | "factus"
+  | "licencia";
 
 export function PanelConfiguracion({
   negocio,
   settings,
   facturacion,
+  licencia,
+  impresion,
   mesasHabilitado,
   esPropietario,
   slug,
@@ -103,7 +133,7 @@ export function PanelConfiguracion({
   // píldoras ya nadie la cambia desde acá, así que el setter no se usa.
   const [tabActiva] = useVistaEnUrl<TabId>(
     "vista",
-    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "factus", "licencia"],
+    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "impresoras", "factus", "licencia"],
     "datos",
   );
 
@@ -142,6 +172,7 @@ export function PanelConfiguracion({
               deliveryPaused={settings.deliveryPaused}
               deliveryFeeCop={settings.deliveryFeeCop}
               inventoryEnabled={settings.inventoryEnabled}
+              permitirVentaSinStock={settings.permitirVentaSinStock}
               recipesEnabled={settings.recipesEnabled}
             />
           </CardContent>
@@ -240,6 +271,25 @@ export function PanelConfiguracion({
         </Card>
       )}
 
+      {tabActiva === "impresoras" && impresion && (
+        <Card className="shadow-sm">
+          <CardContent className="space-y-4 pt-6">
+            <div>
+              <h2 className="font-semibold text-lg">Impresión térmica</h2>
+              <p className="text-muted-foreground text-xs">
+                Comandas y recibos directo a las impresoras del local, sin abrir una
+                pestaña ni tocar el diálogo del navegador.
+              </p>
+            </div>
+            <FormularioImpresoras
+              {...impresion}
+              comandaDestino={settings.comandaDestino}
+              timeZone={settings.timeZone}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {tabActiva === "factus" && (
         <Card className="shadow-sm">
           <CardContent className="space-y-4 pt-6">
@@ -276,6 +326,10 @@ export function PanelConfiguracion({
             <FormularioLicencia
               suscripcion={facturacion.suscripcion}
               timeZone={settings.timeZone}
+              sedes={licencia?.sedes ?? 1}
+              lista={licencia?.lista ?? null}
+              base={licencia?.base ?? null}
+              promo={licencia?.promo ?? null}
             />
           </CardContent>
         </Card>

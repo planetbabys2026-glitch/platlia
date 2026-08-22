@@ -41,6 +41,12 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "ModifierOptionSupply",
   "ProductModifierGroup",
   "OrderItemModifier",
+  // Impresión: la impresora, su ruta, la cola y el agente son de una sucursal.
+  // El agente se autentica con su token y desde ahí se acota como cualquier otro.
+  "Printer",
+  "PrintRoute",
+  "PrintJob",
+  "PrintAgent",
 ]);
 
 /**
@@ -59,6 +65,9 @@ export const GLOBAL_MODELS: ReadonlySet<string> = new Set([
   // La lista de precios es de Platlia, no de un negocio: la edita el
   // superadministrador y la leen todos por igual.
   "ListaDePrecios",
+  // Sus escalones por cantidad de sedes cuelgan de la lista, así que son de la
+  // plataforma por la misma razón.
+  "TramoDePrecios",
   // La bolsa de documentos electrónicos también: se le compra a Factus a nombre
   // de la plataforma y después se reparte entre los negocios.
   "CompraDocumentosDian",

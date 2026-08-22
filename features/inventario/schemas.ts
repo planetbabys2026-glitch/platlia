@@ -68,6 +68,12 @@ export const actualizarStockProductoTerminadoSchema = z.object({
   ),
 });
 
+/** El entero de stock que se escribe a mano en los formularios de inventario. */
+const cantidadEntera = z.preprocess(
+  (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),
+  z.number().int("El stock debe ser un número entero.").min(0),
+);
+
 export const crearProductoTerminadoSchema = z.object({
   name: z.string().trim().min(2, "Escribí el nombre de la bebida o producto.").max(120),
   categoryId: z.string().min(1, "Elegí una categoría."),
@@ -77,10 +83,9 @@ export const crearProductoTerminadoSchema = z.object({
     z.number().int("El costo debe ser un número entero positivo.").min(0),
   ),
   priceCop: montoCopPositivo,
-  stockQty: z.preprocess(
-    (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),
-    z.number().int("El stock debe ser un número entero.").min(0),
-  ),
+  stockQty: cantidadEntera,
+  /** A partir de acá el producto entra en las alertas de reposición. */
+  stockMin: cantidadEntera,
 });
 
 export const editarProductoTerminadoSchema = crearProductoTerminadoSchema.extend({

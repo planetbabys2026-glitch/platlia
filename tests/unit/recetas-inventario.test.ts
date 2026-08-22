@@ -39,22 +39,30 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
         update: vi.fn(),
       },
       inventoryItem: {
-        update: vi.fn().mockResolvedValue({}),
+        // El descuento lee el saldo del propio update, no de una resta sobre la
+        // lectura vieja: con dos ventas simultáneas esa resta escribía un número
+        // que nunca existió.
+        update: vi.fn().mockResolvedValue({ stockCurrent: 4 }),
       },
       inventoryMovement: {
         create: vi.fn().mockResolvedValue({}),
       },
     } as unknown as Parameters<typeof verificarYDescontarStockReceta>[0];
 
-    await verificarYDescontarStockReceta(mockTx, "biz-1", "prod-1", 3, {
+    const { unitCostCop } = await verificarYDescontarStockReceta(mockTx, "biz-1", "prod-1", 3, {
       referenceId: "order-1",
       inventoryEnabled: true,
     });
 
-    // Stock requerido: 2 * 3 = 6. Stock nuevo: 10 - 6 = 4.
+    // 2 panes por hamburguesa a $1.500: el costo que se congela en el renglón.
+    expect(unitCostCop).toBe(3000);
+
+    // Stock requerido: 2 * 3 = 6. La guarda va en el `where`, que es lo que hace
+    // el descuento atómico frente a dos meseros tocando a la vez.
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
-      where: { id: "insumo-1" },
+      where: { id: "insumo-1", stockCurrent: { gte: 6 } },
       data: { stockCurrent: { decrement: 6 } },
+      select: { stockCurrent: true },
     });
 
     expect(mockTx.inventoryMovement.create).toHaveBeenCalledWith({
@@ -136,7 +144,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
         }),
       },
       inventoryItem: {
-        update: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockResolvedValue({ stockCurrent: 8 }),
       },
       inventoryMovement: {
         create: vi.fn().mockResolvedValue({}),
@@ -153,6 +161,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
       where: { id: "insumo-1" },
       data: { stockCurrent: { increment: 4 } },
+      select: { stockCurrent: true },
     });
 
     expect(mockTx.inventoryMovement.create).toHaveBeenCalledWith({
@@ -192,7 +201,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
           ],
         }),
       },
-      inventoryItem: { update: vi.fn() },
+      inventoryItem: { update: vi.fn().mockResolvedValue({ stockCurrent: 7 }) },
       inventoryMovement: { create: vi.fn() },
     } as unknown as Parameters<typeof ajustarStockCantidadReceta>[0];
 
@@ -203,8 +212,9 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
     });
 
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
-      where: { id: "insumo-1" },
+      where: { id: "insumo-1", stockCurrent: { gte: 3 } },
       data: { stockCurrent: { decrement: 3 } },
+      select: { stockCurrent: true },
     });
 
     // Reducción de cantidad: de 5 a 3 (-2 porciones devueltas)
@@ -236,6 +246,7 @@ describe("Verificación y Control de Stock de Recetas (Escandallos)", () => {
     expect(mockTx.inventoryItem.update).toHaveBeenCalledWith({
       where: { id: "insumo-1" },
       data: { stockCurrent: { increment: 2 } },
+      select: { stockCurrent: true },
     });
   });
 

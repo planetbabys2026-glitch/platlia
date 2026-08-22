@@ -7,10 +7,10 @@ import {
   actualizarLimiteSucursalesSchema,
   agregarSuperAdminSchema,
   bootstrapSchema,
-  cambiarPrecioEmpresaSchema,
   editarSuperAdminSchema,
   guardarListaBaseSchema,
   guardarPromocionSchema,
+  sobrePromocionSchema,
   extenderSchema,
   gestionFacturacionElectronicaSchema,
   registrarCompraDocumentosSchema,
@@ -32,6 +32,11 @@ import { correoDeAltaSuperAdmin } from "@/lib/email/plantillas";
 import { rootDb } from "@/lib/db/root";
 import { env } from "@/lib/env";
 import { DIAS_DE_GRACIA, estadoSegunFechas } from "@/lib/billing/suscripcion";
+import {
+  principalDeLaCuenta,
+  sedesDeLaMismaCuenta,
+  sincronizarSedes,
+} from "@/lib/billing/cuenta";
 import { listarRangosDeNumeracion, obtenerTokenFactus } from "@/lib/billing/factus";
 import {
   configFactusDePlataforma,
@@ -39,6 +44,7 @@ import {
 } from "@/lib/billing/factus-plataforma";
 import { getBolsaDocumentosDian } from "@/features/superadmin/queries";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 
 /** Comparación en tiempo constante: el token no se adivina midiendo respuestas. */
 function tokenValido(recibido: string, esperado: string): boolean {
@@ -197,45 +203,61 @@ export async function salirSuperAdmin() {
   redirect("/superadmin/ingresar");
 }
 
-/** Acciones de soporte sobre una empresa. Todas quedan en la bitácora. */
+/**
+ * Acciones de soporte sobre una cuenta. Todas quedan en la bitácora.
+ *
+ * Suspender alcanza a TODAS las sedes del dueño, no solo a la que se tocó. La
+ * licencia es de la cuenta: bloquear un local y dejar el otro trabajando no es
+ * una suspensión, es un negocio a medio bloquear con una licencia que dice dos
+ * cosas distintas según por dónde entre.
+ */
 export const suspenderEmpresa = definePublicAction({
   schema: suspenderSchema,
   async handler({ input }) {
     const superAdmin = await getSuperAdmin();
     if (!superAdmin) redirect("/superadmin/ingresar");
 
-    await rootDb.business.update({
-      where: { id: input.businessId },
-      data: { status: input.suspender ? "SUSPENDIDO" : "ACTIVO" },
-    });
+    const ahora = new Date();
 
-    const sub = await rootDb.subscription.findUnique({
-      where: { businessId: input.businessId },
-    });
+    const sedes = await rootDb.$transaction(async (tx) => {
+      const businessIds = await sedesDeLaMismaCuenta(tx, input.businessId);
 
-    if (sub) {
-      const nuevoEstadoSub = input.suspender
-        ? "SUSPENDIDA"
-        : estadoSegunFechas(sub, new Date());
-
-      await rootDb.subscription.update({
-        where: { id: sub.id },
-        data: { status: nuevoEstadoSub },
+      await tx.business.updateMany({
+        where: { id: { in: businessIds } },
+        data: { status: input.suspender ? "SUSPENDIDO" : "ACTIVO" },
       });
-    }
 
-    await rootDb.auditLog.create({
-      data: {
-        businessId: input.businessId,
-        userId: superAdmin.id,
-        action: input.suspender ? "superadmin.empresa.suspender" : "superadmin.empresa.reactivar",
-        entity: "Business",
-        entityId: input.businessId,
-        metadata: { motivo: input.motivo },
-      },
+      const subs = await tx.subscription.findMany({
+        where: { businessId: { in: businessIds } },
+      });
+
+      // Una por una y no con `updateMany`: al reactivar, cada sede vuelve al
+      // estado que le corresponde por sus propias fechas.
+      for (const sub of subs) {
+        await tx.subscription.update({
+          where: { id: sub.id },
+          data: { status: input.suspender ? "SUSPENDIDA" : estadoSegunFechas(sub, ahora) },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          businessId: input.businessId,
+          userId: superAdmin.id,
+          action: input.suspender
+            ? "superadmin.empresa.suspender"
+            : "superadmin.empresa.reactivar",
+          entity: "Business",
+          entityId: input.businessId,
+          metadata: { motivo: input.motivo, sedes: businessIds.length },
+        },
+      });
+
+      return businessIds.length;
     });
 
     revalidatePath("/superadmin");
+    return { sedes };
   },
 });
 
@@ -249,76 +271,106 @@ export const extenderLicencia = definePublicAction({
     const superAdmin = await getSuperAdmin();
     if (!superAdmin) redirect("/superadmin/ingresar");
 
-    const sub = await rootDb.subscription.findUnique({
-      where: { businessId: input.businessId },
-      select: {
-        id: true,
-        status: true,
-        trialEndsAt: true,
-        currentPeriodStart: true,
-        currentPeriodEnd: true,
-        graceUntil: true,
-        business: { select: { status: true } },
-      },
-    });
-    if (!sub) throw new ErrorDeUsuario("Esa empresa no tiene suscripción.");
-
     const DIA = 86_400_000;
-    // Se extiende desde la fecha de fin vigente o desde hoy
     const ahora = new Date();
-    const finVigente = sub.currentPeriodEnd ?? sub.trialEndsAt;
-    const base = finVigente && finVigente > ahora ? finVigente : ahora;
-    const nuevoFin = new Date(base.getTime() + input.dias * DIA);
 
-    const actualizacionData = {
-      currentPeriodEnd: nuevoFin,
-      trialEndsAt: sub.status === "PRUEBA" ? nuevoFin : sub.trialEndsAt,
-      graceUntil: sub.status === "PRUEBA" ? nuevoFin : new Date(nuevoFin.getTime() + DIAS_DE_GRACIA * DIA),
-    };
+    const resultado = await rootDb.$transaction(async (tx) => {
+      // La cuenta manda: se extiende la suscripción de la sede principal y las
+      // demás se sincronizan. Extender una sola dejaba al resto vencido con los
+      // días ya regalados encima, y nadie se enteraba hasta que el cliente
+      // volvía a llamar.
+      const { principalBusinessId, businessIds } = await principalDeLaCuenta(
+        tx,
+        input.businessId,
+      );
 
-    /**
-     * Extender tiene que DESTRABAR, no solo mover una fecha.
-     *
-     * `estadoSegunFechas` deja `SUSPENDIDA` congelada sin mirar el reloj —a
-     * propósito: una suspensión de soporte es una decisión, no un accidente de
-     * cobro—. Pero el cron marca `SUSPENDIDA` a todo lo que pasó la gracia, así
-     * que al extender una licencia vencida el estado no se movía y el negocio
-     * seguía bloqueado con treinta días regalados encima. Nadie se enteraba hasta
-     * que el cliente volvía a llamar.
-     *
-     * La diferencia entre las dos suspensiones está en `Business.status`: la que
-     * decidió soporte lo pone en SUSPENDIDO. Esa no revive acá; se reactiva desde
-     * la pestaña Estado, que es donde se tomó la decisión.
-     */
-    const suspendidaPorSoporte = sub.business?.status !== "ACTIVO";
-    const estadoNuevo =
-      sub.status === "SUSPENDIDA" && !suspendidaPorSoporte && nuevoFin > ahora
-        ? "ACTIVA"
-        : estadoSegunFechas({ ...sub, ...actualizacionData }, ahora);
-
-    await rootDb.subscription.update({
-      where: { id: sub.id },
-      data: { ...actualizacionData, status: estadoNuevo },
-    });
-
-    await rootDb.auditLog.create({
-      data: {
-        businessId: input.businessId,
-        userId: superAdmin.id,
-        action: "superadmin.licencia.extender",
-        entity: "Subscription",
-        entityId: sub.id,
-        metadata: {
-          dias: input.dias,
-          motivo: input.motivo,
-          hasta: nuevoFin.toISOString(),
-          estadoAnterior: sub.status,
-          estadoNuevo,
+      const sub = await tx.subscription.findUnique({
+        where: { businessId: principalBusinessId },
+        select: {
+          id: true,
+          status: true,
+          trialEndsAt: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          graceUntil: true,
+          business: { select: { status: true } },
         },
-      },
+      });
+      if (!sub) throw new ErrorDeUsuario("Esa empresa no tiene suscripción.");
+
+      // Se extiende desde la fecha de fin vigente o desde hoy
+      const finVigente = sub.currentPeriodEnd ?? sub.trialEndsAt;
+      const base = finVigente && finVigente > ahora ? finVigente : ahora;
+      const nuevoFin = new Date(base.getTime() + input.dias * DIA);
+
+      const actualizacionData = {
+        currentPeriodEnd: nuevoFin,
+        trialEndsAt: sub.status === "PRUEBA" ? nuevoFin : sub.trialEndsAt,
+        graceUntil:
+          sub.status === "PRUEBA"
+            ? nuevoFin
+            : new Date(nuevoFin.getTime() + DIAS_DE_GRACIA * DIA),
+      };
+
+      /**
+       * Extender tiene que DESTRABAR, no solo mover una fecha.
+       *
+       * `estadoSegunFechas` deja `SUSPENDIDA` congelada sin mirar el reloj —a
+       * propósito: una suspensión de soporte es una decisión, no un accidente de
+       * cobro—. Pero el cron marca `SUSPENDIDA` a todo lo que pasó la gracia, así
+       * que al extender una licencia vencida el estado no se movía y el negocio
+       * seguía bloqueado con treinta días regalados encima. Nadie se enteraba
+       * hasta que el cliente volvía a llamar.
+       *
+       * La diferencia entre las dos suspensiones está en `Business.status`: la
+       * que decidió soporte lo pone en SUSPENDIDO. Esa no revive acá; se reactiva
+       * desde la pestaña Estado, que es donde se tomó la decisión.
+       */
+      const suspendidaPorSoporte = sub.business?.status !== "ACTIVO";
+      const estadoNuevo =
+        sub.status === "SUSPENDIDA" && !suspendidaPorSoporte && nuevoFin > ahora
+          ? "ACTIVA"
+          : estadoSegunFechas({ ...sub, ...actualizacionData }, ahora);
+
+      await tx.subscription.update({
+        where: { id: sub.id },
+        data: { ...actualizacionData, status: estadoNuevo },
+      });
+
+      // Lo que le regalamos a la cuenta lo reciben todas sus sedes.
+      await sincronizarSedes(tx, {
+        businessIds,
+        exceptoBusinessId: principalBusinessId,
+        status: estadoNuevo,
+        currentPeriodStart: sub.currentPeriodStart ?? ahora,
+        currentPeriodEnd: nuevoFin,
+        graceUntil: actualizacionData.graceUntil,
+        trialEndsAt: actualizacionData.trialEndsAt,
+      });
+
+      await tx.auditLog.create({
+        data: {
+          businessId: principalBusinessId,
+          userId: superAdmin.id,
+          action: "superadmin.licencia.extender",
+          entity: "Subscription",
+          entityId: sub.id,
+          metadata: {
+            dias: input.dias,
+            motivo: input.motivo,
+            hasta: nuevoFin.toISOString(),
+            estadoAnterior: sub.status,
+            estadoNuevo,
+            sedes: businessIds.length,
+          },
+        },
+      });
+
+      return { sedes: businessIds.length, hasta: nuevoFin };
     });
 
     revalidatePath("/superadmin");
+    return resultado;
   },
 });
 
@@ -716,11 +768,16 @@ export const guardarListaBase = definePublicAction({
       mesesGratisAnual: input.mesesGratisAnual,
     };
 
-    const guardada = base
-      ? await rootDb.listaDePrecios.update({ where: { id: base.id }, data: datos })
-      : await rootDb.listaDePrecios.create({
-          data: { ...datos, nombre: "Lista base", activa: true },
-        });
+    const guardada = await rootDb.$transaction(async (tx) => {
+      const lista = base
+        ? await tx.listaDePrecios.update({ where: { id: base.id }, data: datos })
+        : await tx.listaDePrecios.create({
+            data: { ...datos, nombre: "Lista base", activa: true },
+          });
+
+      await reemplazarTramos(tx, lista.id, input.tramos);
+      return lista;
+    });
 
     await rootDb.auditLog.create({
       data: {
@@ -738,7 +795,7 @@ export const guardarListaBase = definePublicAction({
                 gratis12: base.mesesGratisAnual,
               }
             : null,
-          ahora: datos,
+          ahora: { ...datos, tramos: input.tramos },
         },
       },
     });
@@ -749,6 +806,121 @@ export const guardarListaBase = definePublicAction({
     revalidatePath("/facturacion");
   },
 });
+
+/**
+ * Corta una promoción antes de su fecha de fin.
+ *
+ * Existe como acción propia y no como "guardar con la casilla apagada" porque son
+ * dos intenciones distintas: una promoción se detiene cuando hay que detenerla
+ * —salió mal, se agotó el cupo, alguien se equivocó de precio— y en ese momento
+ * nadie quiere revisar un formulario entero de precios y fechas. Además queda en
+ * la bitácora con su propio nombre, así que después se puede leer qué pasó.
+ *
+ * Se apaga, no se borra: la promoción ya cobró y ese historial tiene que existir.
+ */
+export const detenerPromocion = definePublicAction({
+  schema: sobrePromocionSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const promo = await rootDb.listaDePrecios.findUnique({ where: { id: input.id } });
+    if (!promo) throw new ErrorDeUsuario("Esa promoción ya no existe.");
+
+    // La lista base no es una promoción y apagarla dejaría a la plataforma sin
+    // ningún precio: se cotizaría con `LISTA_POR_DEFECTO` sin que nadie lo pida.
+    if (!promo.desde && !promo.hasta) {
+      throw new ErrorDeUsuario("Esa es la lista base, no una promoción: no se puede apagar.");
+    }
+
+    await rootDb.listaDePrecios.update({
+      where: { id: input.id },
+      data: { activa: false },
+    });
+
+    await rootDb.auditLog.create({
+      data: {
+        userId: superAdmin.id,
+        action: "superadmin.precios.promo.detener",
+        entity: "ListaDePrecios",
+        entityId: promo.id,
+        metadata: {
+          motivo: input.motivo,
+          nombre: promo.nombre,
+          terminabaEl: promo.hasta?.toISOString() ?? null,
+        },
+      },
+    });
+
+    revalidatePath("/superadmin/precios");
+    revalidatePath("/");
+    revalidatePath("/facturacion");
+    revalidatePath("/administracion/configuracion");
+  },
+});
+
+/**
+ * Borra una promoción de verdad.
+ *
+ * Solo para la que se creó mal y nunca cobró nada. Una que ya rigió se apaga con
+ * `detenerPromocion`: borrarla dejaría pagos cuyo precio no se puede explicar.
+ */
+export const eliminarPromocion = definePublicAction({
+  schema: sobrePromocionSchema,
+  async handler({ input }) {
+    const superAdmin = await getSuperAdmin();
+    if (!superAdmin) redirect("/superadmin/ingresar");
+
+    const promo = await rootDb.listaDePrecios.findUnique({ where: { id: input.id } });
+    if (!promo) throw new ErrorDeUsuario("Esa promoción ya no existe.");
+
+    if (!promo.desde && !promo.hasta) {
+      throw new ErrorDeUsuario("Esa es la lista base, no una promoción: no se puede borrar.");
+    }
+
+    if (promo.desde && promo.desde <= new Date()) {
+      throw new ErrorDeUsuario(
+        "Esta promoción ya empezó: apagala en vez de borrarla, así queda con qué explicar lo que cobró.",
+      );
+    }
+
+    await rootDb.listaDePrecios.delete({ where: { id: input.id } });
+
+    await rootDb.auditLog.create({
+      data: {
+        userId: superAdmin.id,
+        action: "superadmin.precios.promo.eliminar",
+        entity: "ListaDePrecios",
+        entityId: promo.id,
+        metadata: { motivo: input.motivo, nombre: promo.nombre },
+      },
+    });
+
+    revalidatePath("/superadmin/precios");
+    revalidatePath("/");
+    revalidatePath("/facturacion");
+  },
+});
+
+/**
+ * Deja los tramos de una lista exactamente como llegaron del formulario.
+ *
+ * Se borra y se reescribe en vez de conciliar fila por fila: son cuatro o cinco
+ * escalones que se editan a mano una vez por año, y el `deleteMany` + `createMany`
+ * dentro de la misma transacción no puede dejar una lista a medio actualizar
+ * —que es lo único que importa acá, porque de esos números sale el cobro—.
+ */
+async function reemplazarTramos(
+  tx: Prisma.TransactionClient,
+  listaId: string,
+  tramos: { desdeSedes: number; precioMensualCop: number }[],
+) {
+  await tx.tramoDePrecios.deleteMany({ where: { listaId } });
+  if (tramos.length === 0) return;
+  await tx.tramoDePrecios.createMany({
+    data: tramos.map((t) => ({ listaId, ...t })),
+  });
+}
 
 /** Crear o editar una promoción con fecha de inicio y fin. */
 export const guardarPromocion = definePublicAction({
@@ -780,9 +952,14 @@ export const guardarPromocion = definePublicAction({
       );
     }
 
-    const guardada = input.id
-      ? await rootDb.listaDePrecios.update({ where: { id: input.id }, data: datos })
-      : await rootDb.listaDePrecios.create({ data: datos });
+    const guardada = await rootDb.$transaction(async (tx) => {
+      const lista = input.id
+        ? await tx.listaDePrecios.update({ where: { id: input.id }, data: datos })
+        : await tx.listaDePrecios.create({ data: datos });
+
+      await reemplazarTramos(tx, lista.id, input.tramos);
+      return lista;
+    });
 
     await rootDb.auditLog.create({
       data: {
@@ -790,50 +967,18 @@ export const guardarPromocion = definePublicAction({
         action: input.id ? "superadmin.precios.promo.editar" : "superadmin.precios.promo.crear",
         entity: "ListaDePrecios",
         entityId: guardada.id,
-        metadata: { motivo: input.motivo, ...datos, desde: input.desde?.toISOString() ?? null, hasta: input.hasta?.toISOString() ?? null },
+        metadata: {
+          motivo: input.motivo,
+          ...datos,
+          tramos: input.tramos,
+          desde: input.desde?.toISOString() ?? null,
+          hasta: input.hasta?.toISOString() ?? null,
+        },
       },
     });
 
     revalidatePath("/superadmin/precios");
     revalidatePath("/");
     revalidatePath("/facturacion");
-  },
-});
-
-/**
- * El precio pactado con una empresa.
- *
- * Es la herramienta para respetarle la tarifa a un cliente viejo cuando la lista
- * sube, o para dejar pactado un precio especial. Hasta acá solo se podía por SQL.
- */
-export const cambiarPrecioEmpresa = definePublicAction({
-  schema: cambiarPrecioEmpresaSchema,
-  async handler({ input }) {
-    const superAdmin = await getSuperAdmin();
-    if (!superAdmin) redirect("/superadmin/ingresar");
-
-    const sub = await rootDb.subscription.findUnique({
-      where: { businessId: input.businessId },
-      select: { id: true, priceCop: true },
-    });
-    if (!sub) throw new ErrorDeUsuario("Esa empresa no tiene suscripción.");
-
-    await rootDb.subscription.update({
-      where: { id: sub.id },
-      data: { priceCop: input.priceCop },
-    });
-
-    await rootDb.auditLog.create({
-      data: {
-        businessId: input.businessId,
-        userId: superAdmin.id,
-        action: "superadmin.precios.empresa",
-        entity: "Subscription",
-        entityId: sub.id,
-        metadata: { motivo: input.motivo, antes: sub.priceCop, ahora: input.priceCop },
-      },
-    });
-
-    revalidatePath("/superadmin");
   },
 });
