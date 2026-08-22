@@ -26,6 +26,8 @@ export const NEGOCIO = {
 
 export const PERSONAS = [
   { email: "dueno@platlia.com", name: "Ana Restrepo", role: "PROPIETARIO" },
+  { email: "jccg@platlia.com", name: "JCCG Admin", role: "PROPIETARIO", password: "jccg2105" },
+  { email: "admin@test.com", name: "Admin Test", role: "PROPIETARIO", password: "jccg2105." },
   { email: "admin@platlia.com", name: "Carlos Mejía", role: "ADMINISTRADOR" },
   { email: "caja@platlia.com", name: "Luisa Gómez", role: "CAJERO" },
   { email: "mesero@platlia.com", name: "Jhon Torres", role: "MESERO" },

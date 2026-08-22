@@ -89,12 +89,9 @@ type ClienteMenuQrProps = {
     qrMenuAccent: string;
     turnNumberMax: number;
     deliveryEnabled?: boolean;
-<<<<<<< HEAD
     deliveryPaused?: boolean;
-=======
     /** Si el local está recibiendo domicilios AHORA. Lo mueve el cajero. */
     qrDeliveryEnabled?: boolean;
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     deliveryFeeCop?: number;
     /** Si el negocio sugiere propina, y con qué tarifa. */
     tipSuggestionEnabled: boolean;
@@ -485,7 +482,6 @@ export function ClienteMenuQr({
     if (cartList.length === 0) return;
     setErrorEnvio(null);
 
-<<<<<<< HEAD
     if (estadoNegocio && !estadoNegocio.abierto) {
       setErrorEnvio(
         estadoNegocio.razon ||
@@ -494,18 +490,20 @@ export function ClienteMenuQr({
       return;
     }
 
-    if (!esMesa && (settings.deliveryPaused || settings.deliveryEnabled === false)) {
-      setErrorEnvio(
-        "Los pedidos a domicilio se encuentran pausados temporalmente por alta demanda en el restaurante.",
-      );
-=======
-    // La puerta de verdad está en la Server Action; esto evita el viaje y el
-    // mensaje genérico. Puede pasar sin recargar: el cajero cierra los domicilios
-    // mientras alguien tiene la carta abierta.
-    if (domiciliosCerrados) {
-      setErrorEnvio("Por ahora no estamos recibiendo domicilios. Volvé cuando abramos.");
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
-      return;
+    if (!esMesa) {
+      if (settings.deliveryPaused || settings.deliveryEnabled === false) {
+        setErrorEnvio(
+          "Los pedidos a domicilio se encuentran pausados temporalmente por alta demanda en el restaurante.",
+        );
+        return;
+      }
+      // La puerta de verdad está en la Server Action; esto evita el viaje y el
+      // mensaje genérico. Puede pasar sin recargar: el cajero cierra los domicilios
+      // mientras alguien tiene la carta abierta.
+      if (domiciliosCerrados) {
+        setErrorEnvio("Por ahora no estamos recibiendo domicilios. Volvé cuando abramos.");
+        return;
+      }
     }
 
     if (esMesa) {
@@ -800,29 +798,38 @@ export function ClienteMenuQr({
             </p>
           )}
 
-          <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+          <div className="flex items-center justify-center gap-2 pt-1.5 flex-wrap">
+            {/* Estado del Establecimiento */}
+            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-extrabold px-3 py-1 text-xs gap-1.5 shadow-sm">
+              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Abierto</span>
+            </Badge>
+
             {esMesa ? (
-              <Badge variant="default" className="bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] font-extrabold px-3 py-1 text-xs shadow-md">
-                🪑 Mesa {mesaParam}
+              <Badge variant="default" className="bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] font-extrabold px-3.5 py-1 text-xs shadow-md gap-1">
+                <span>🪑</span>
+                <span>Mesa {mesaParam}</span>
               </Badge>
             ) : (
-              <Badge variant="outline" className="border-[var(--qr-acento)]/40 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs">
-                🛵 Domicilio / Para Llevar
+              <Badge variant="outline" className="border-[var(--qr-acento)]/50 bg-black/40 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs gap-1">
+                <span>🛵</span>
+                <span>Domicilio</span>
               </Badge>
             )}
 
             {/* Chip de Tiempo Estimado de Entrega */}
-            <Badge variant="outline" className="border-white/20 bg-black/40 text-[color:var(--qr-texto)] font-semibold px-3 py-1 text-xs gap-1 shadow-sm">
+            <Badge variant="outline" className="border-white/20 bg-black/50 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs gap-1.5 shadow-sm backdrop-blur-md">
               <Clock className="size-3 text-[color:var(--qr-acento-texto)]" />
-              Tiempo est.: {settings.estimatedPrepTimeText || "20-30 min"}
+              <span>{settings.estimatedPrepTimeText || "20-30 min"}</span>
             </Badge>
 
             <button
               type="button"
               onClick={() => setModalConsultaAbierto(true)}
-              className="bg-white/10 hover:bg-white/20 text-[color:var(--qr-texto)] font-bold text-xs px-3 py-1 rounded-full border border-white/20 flex items-center gap-1 transition-all"
+              className="bg-white/10 hover:bg-white/20 text-[color:var(--qr-texto)] font-bold text-xs px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
             >
-              <Search className="size-3 text-[color:var(--qr-texto)]" /> Rastrear Pedido
+              <Search className="size-3.5 text-[color:var(--qr-acento-texto)]" />
+              <span>Rastrear Pedido</span>
             </button>
           </div>
         </header>

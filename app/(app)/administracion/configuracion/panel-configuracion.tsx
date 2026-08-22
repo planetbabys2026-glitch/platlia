@@ -49,14 +49,11 @@ type PanelConfiguracionProps = {
     cashRoundingCop: number;
     requireOpenCashSession: boolean;
     turnNumberMax: number;
-<<<<<<< HEAD
     scheduleEnabled: boolean;
     scheduleOpeningTime: string;
     scheduleClosingTime: string;
     scheduleStatus: string;
-=======
     comandaDestino: string;
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     receiptWidth: ReceiptWidth;
     receiptHeader: string | null;
     receiptFooter: string | null;

@@ -2050,7 +2050,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 </div>
 
                 <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--panel-2)]/90 border border-[var(--linea-30)] text-rotulo font-mono font-bold text-[var(--brasa)]">
-                  {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : "🛵 Domicilio · 25-40 min"}
+                  {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : `🛵 Domicilio · ${estimatedPrepTimeText || "20-30 min"}`}
                 </div>
               </div>
 

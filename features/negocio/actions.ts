@@ -13,11 +13,8 @@ import {
   turneroSchema,
 } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
-<<<<<<< HEAD
 import { mergeExtraSettings } from "@/features/negocio/extra-settings";
-=======
 import { cuentaDelPropietario } from "@/lib/billing/cuenta";
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
 // eslint-disable-next-line no-restricted-imports -- Crear sucursal adicional requiere crear la fila de Business inicial
@@ -154,39 +151,14 @@ export const guardarModulos = defineAction({
       },
     });
 
-<<<<<<< HEAD
     const prevSettings = await db.businessSettings.findFirst({
       where: { businessId: ctx.business.id },
-      select: { inventoryEnabled: true, rolePermissions: true },
+      select: { rolePermissions: true },
     });
-
-    if (input.inventoryEnabled && !prevSettings?.inventoryEnabled) {
-      // Al activar el inventario, reiniciar stocks a 0 para que arranque limpio
-      // y las ventas anteriores sin inventario no dejen saldos negativos.
-      await db.inventoryItem.updateMany({
-        where: { businessId: ctx.business.id },
-        data: { stockCurrent: 0 },
-      });
-
-      await db.product.updateMany({
-        where: { businessId: ctx.business.id },
-        data: { stockQty: 0 },
-      });
-    }
 
     const newRolePermissions = mergeExtraSettings(prevSettings?.rolePermissions, {
       deliveryPaused: input.deliveryPaused,
     });
-
-=======
-    // Activar el inventario NO borra el stock. Antes esta acción corría dos
-    // `updateMany` que ponían en cero todos los insumos y todos los productos del
-    // negocio la primera vez que se prendía la casilla: quien cargaba su bodega y
-    // después activaba el módulo la perdía entera, y apagar y volver a prender la
-    // borraba de nuevo sin avisar. Poner el stock en cero es una decisión del
-    // dueño —tiene su pantalla de ajuste y su conteo inicial—, no el efecto
-    // secundario de una casilla de configuración.
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     await db.businessSettings.updateMany({
       where: { businessId: ctx.business.id },
       data: {
@@ -194,11 +166,8 @@ export const guardarModulos = defineAction({
         deliveryFeeCop: input.deliveryFeeCop,
         inventoryEnabled: input.inventoryEnabled,
         recipesEnabled: input.recipesEnabled,
-<<<<<<< HEAD
         rolePermissions: newRolePermissions,
-=======
         permitirVentaSinStock: input.permitirVentaSinStock,
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
       },
     });
 

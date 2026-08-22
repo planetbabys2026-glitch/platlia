@@ -120,11 +120,13 @@ async function main() {
 
   // ── Personas ──────────────────────────────────────────────────────────────
   for (const persona of PERSONAS) {
+    const userClave = "password" in persona && typeof persona.password === "string" ? persona.password : CLAVE;
+    const personaHash = userClave === CLAVE ? claveHash : await hashPassword(userClave);
     const user = await rootDb.user.create({
       data: {
         email: persona.email,
         name: persona.name,
-        passwordHash: claveHash,
+        passwordHash: personaHash,
         emailVerifiedAt: new Date(),
       },
     });

@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
-<<<<<<< HEAD
-import { getSettings } from "@/features/negocio/queries";
-import { parseExtraSettings } from "@/features/negocio/extra-settings";
-=======
 import {
   getConfiguracionDeImpresion,
   getDescargasDelAgente,
   getSettings,
 } from "@/features/negocio/queries";
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
+import { parseExtraSettings } from "@/features/negocio/extra-settings";
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
 import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";

@@ -87,7 +87,6 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
       return { ok: false, error: "El menú digital QR no está activado para este negocio." };
     }
 
-<<<<<<< HEAD
     const extra = parseExtraSettings(settings.rolePermissions);
     const estadoNegocio = evaluarEstadoNegocio({
       timeZone: settings.timeZone,
@@ -110,29 +109,25 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
           error: "Los pedidos a domicilio no están disponibles en este momento por alta demanda o decisión del establecimiento.",
         };
       }
+      /**
+       * Los domicilios por QR se abren y se cierran con el turno.
+       *
+       * Sin esto, un comensal mandaba un domicilio a cualquier hora —con la caja
+       * cerrada, el local vacío y nadie en la cocina— y el pedido quedaba esperando
+       * a que alguien lo descubriera a la mañana siguiente. La pantalla ya lo avisa
+       * al abrir, pero esto es una Server Action pública: es alcanzable con `curl`
+       * sin pasar por ninguna pantalla, así que la puerta se cierra acá.
+       *
+       * Se mira solo para el domicilio: un pedido de mesa lo hace alguien que está
+       * sentado adentro, así que el local está abierto por definición.
+       */
+      if (!settings.qrDeliveryEnabled) {
+        return {
+          ok: false,
+          error: "Por ahora no estamos recibiendo domicilios. Escribinos para saber a qué hora abrimos.",
+        };
+      }
     }
-
-=======
-    /**
-     * Los domicilios por QR se abren y se cierran con el turno.
-     *
-     * Sin esto, un comensal mandaba un domicilio a cualquier hora —con la caja
-     * cerrada, el local vacío y nadie en la cocina— y el pedido quedaba esperando
-     * a que alguien lo descubriera a la mañana siguiente. La pantalla ya lo avisa
-     * al abrir, pero esto es una Server Action pública: es alcanzable con `curl`
-     * sin pasar por ninguna pantalla, así que la puerta se cierra acá.
-     *
-     * Se mira solo para el domicilio: un pedido de mesa lo hace alguien que está
-     * sentado adentro, así que el local está abierto por definición.
-     */
-    if (input.type === "DOMICILIO" && !settings.qrDeliveryEnabled) {
-      return {
-        ok: false,
-        error: "Por ahora no estamos recibiendo domicilios. Escribinos para saber a qué hora abrimos.",
-      };
-    }
-
->>>>>>> 424db5e1eef19ef9edbb4193f9eb8f5af8ad5591
     const businessDate = currentBusinessDate(settings);
     const puedeFacturar = puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada());
     const db = tenantDb(business.id);

@@ -24,6 +24,7 @@ import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
+import { CalculadoraDividirCuenta } from "./calculadora-dividir-cuenta";
 
 /** Etiquetas de los métodos de pago en Colombia. */
 const METODOS: Record<string, string> = {
@@ -271,6 +272,12 @@ export function Cobrar({
   faltanteCop: number;
 }) {
   const [estado, accion, isPending] = useActionState(registrarPago, ESTADO_INICIAL);
+  const [montoACobrar, setMontoACobrar] = useState<number>(faltanteCop);
+
+  // Sincronizar monto si cambia el faltante externo
+  useEffect(() => {
+    setMontoACobrar(faltanteCop);
+  }, [faltanteCop]);
 
   return (
     <form action={accion} className="space-y-3">
@@ -298,6 +305,11 @@ export function Cobrar({
         </Alert>
       ) : null}
 
+      <CalculadoraDividirCuenta
+        faltanteCop={faltanteCop}
+        onSeleccionarMonto={(monto) => setMontoACobrar(monto)}
+      />
+
       <div className="space-y-1">
         <Label htmlFor="metodo" className="text-xs text-muted-foreground">Método de pago</Label>
         <select
@@ -318,13 +330,13 @@ export function Cobrar({
         <div className="space-y-1">
           <Label htmlFor="monto" className="text-xs text-muted-foreground">Monto a cobrar</Label>
           <Input
-            key={faltanteCop}
             id="monto"
             name="amountCop"
             inputMode="numeric"
-            defaultValue={faltanteCop}
+            value={montoACobrar}
+            onChange={(e) => setMontoACobrar(parseInt(e.target.value, 10) || 0)}
             required
-            className="h-9 text-xs rounded-lg font-mono font-bold"
+            className="h-9 text-xs rounded-lg font-mono font-bold text-brand"
           />
         </div>
         <div className="space-y-1">
