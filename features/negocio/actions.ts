@@ -13,6 +13,7 @@ import {
   turneroSchema,
 } from "@/features/negocio/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { mergeExtraSettings } from "@/features/negocio/extra-settings";
 import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
@@ -78,7 +79,20 @@ export const guardarOperacion = defineAction({
       );
     }
 
+    const currentSettings = await db.businessSettings.findFirst({
+      where: { businessId: ctx.business.id },
+      select: { rolePermissions: true },
+    });
+
+    const newRolePermissions = mergeExtraSettings(currentSettings?.rolePermissions, {
+      scheduleEnabled: input.scheduleEnabled,
+      scheduleOpeningTime: input.scheduleOpeningTime,
+      scheduleClosingTime: input.scheduleClosingTime,
+      scheduleStatus: input.scheduleStatus,
+    });
+
     await db.businessSettings.updateMany({
+      where: { businessId: ctx.business.id },
       data: {
         timeZone: input.timeZone,
         businessDayStartMinutes: input.businessDayStart,
@@ -91,6 +105,7 @@ export const guardarOperacion = defineAction({
         receiptWidth: input.receiptWidth,
         receiptHeader: input.receiptHeader ?? null,
         receiptFooter: input.receiptFooter ?? null,
+        rolePermissions: newRolePermissions,
       },
     });
 
@@ -136,13 +151,14 @@ export const guardarModulos = defineAction({
       },
     });
 
-    // Activar el inventario NO borra el stock. Antes esta acción corría dos
-    // `updateMany` que ponían en cero todos los insumos y todos los productos del
-    // negocio la primera vez que se prendía la casilla: quien cargaba su bodega y
-    // después activaba el módulo la perdía entera, y apagar y volver a prender la
-    // borraba de nuevo sin avisar. Poner el stock en cero es una decisión del
-    // dueño —tiene su pantalla de ajuste y su conteo inicial—, no el efecto
-    // secundario de una casilla de configuración.
+    const prevSettings = await db.businessSettings.findFirst({
+      where: { businessId: ctx.business.id },
+      select: { rolePermissions: true },
+    });
+
+    const newRolePermissions = mergeExtraSettings(prevSettings?.rolePermissions, {
+      deliveryPaused: input.deliveryPaused,
+    });
     await db.businessSettings.updateMany({
       where: { businessId: ctx.business.id },
       data: {
@@ -150,6 +166,7 @@ export const guardarModulos = defineAction({
         deliveryFeeCop: input.deliveryFeeCop,
         inventoryEnabled: input.inventoryEnabled,
         recipesEnabled: input.recipesEnabled,
+        rolePermissions: newRolePermissions,
         permitirVentaSinStock: input.permitirVentaSinStock,
       },
     });
@@ -158,6 +175,33 @@ export const guardarModulos = defineAction({
     revalidatePath("/salon");
     revalidatePath("/pos");
     revalidatePath("/inventario");
+    revalidatePath("/panel");
+  },
+});
+
+export const togglePausarDomicilios = defineAction({
+  schema: z.object({
+    paused: z.boolean(),
+  }),
+  roles: ADMINISTRAN,
+  async handler({ input, ctx, db }) {
+    const prevSettings = await db.businessSettings.findFirst({
+      where: { businessId: ctx.business.id },
+      select: { rolePermissions: true },
+    });
+
+    const newRolePermissions = mergeExtraSettings(prevSettings?.rolePermissions, {
+      deliveryPaused: input.paused,
+    });
+
+    await db.businessSettings.updateMany({
+      where: { businessId: ctx.business.id },
+      data: { rolePermissions: newRolePermissions },
+    });
+
+    revalidatePath("/administracion/configuracion");
+    revalidatePath("/domicilios");
+    revalidatePath("/pos");
     revalidatePath("/panel");
   },
 });
@@ -186,6 +230,15 @@ export const guardarQrMenuSettings = defineAction({
   schema: qrMenuSchema,
   roles: ADMINISTRAN,
   async handler({ input, ctx, db }) {
+    const prevSettings = await db.businessSettings.findFirst({
+      where: { businessId: ctx.business.id },
+      select: { rolePermissions: true },
+    });
+
+    const newRolePermissions = mergeExtraSettings(prevSettings?.rolePermissions, {
+      estimatedPrepTimeText: input.estimatedPrepTimeText || "20-30 min",
+    });
+
     await db.businessSettings.updateMany({
       where: { businessId: ctx.business.id },
       data: {
@@ -198,6 +251,7 @@ export const guardarQrMenuSettings = defineAction({
         qrMenuHeaderTitle: input.qrMenuHeaderTitle ?? null,
         qrMenuHeaderSubtitle: input.qrMenuHeaderSubtitle ?? null,
         qrMenuAccent: input.qrMenuAccent,
+        rolePermissions: newRolePermissions,
       },
     });
 

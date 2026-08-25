@@ -154,6 +154,10 @@ export type Operacion = {
   cashRoundingCop: number;
   requireOpenCashSession: boolean;
   turnNumberMax: number;
+  scheduleEnabled?: boolean;
+  scheduleOpeningTime?: string;
+  scheduleClosingTime?: string;
+  scheduleStatus?: string;
   receiptWidth: string;
   receiptHeader: string | null;
   receiptFooter: string | null;
@@ -197,6 +201,56 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
           required
           ayuda="Lo vendido antes de esta hora cuenta para el día anterior."
         />
+      </div>
+
+      {/* ─── Bloque de Horarios de Atención ─── */}
+      <div className="space-y-4 rounded-xl border border-[var(--linea-20)] bg-[var(--tarjeta-fondo)] p-4">
+        <div>
+          <h3 className="text-sm font-bold text-foreground">Horario de Atención y Estado del Negocio</h3>
+          <p className="text-xs text-muted-foreground">
+            Definí el horario en el que tu restaurante recibe pedidos digitales desde los códigos QR.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="scheduleStatus">Estado del restaurante</Label>
+            <select
+              id="scheduleStatus"
+              name="scheduleStatus"
+              defaultValue={operacion.scheduleStatus || "AUTOMATICO"}
+              className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+            >
+              <option value="AUTOMATICO">Automático (Seguir horario configurado)</option>
+              <option value="ABIERTO">Abierto (Forzar recepción de pedidos)</option>
+              <option value="CERRADO">Cerrado (Bloquear pedidos temporalmente)</option>
+            </select>
+          </div>
+
+          <Casilla
+            name="scheduleEnabled"
+            label="Habilitar control por horario"
+            defaultChecked={operacion.scheduleEnabled ?? false}
+            ayuda="Si está encendido, fuera del rango configurado se muestra aviso de cerrado."
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo
+            label="Hora de apertura"
+            name="scheduleOpeningTime"
+            defaultValue={operacion.scheduleOpeningTime || "08:00"}
+            placeholder="08:00"
+            ayuda="Formato 24 horas (HH:MM)"
+          />
+          <Campo
+            label="Hora de cierre"
+            name="scheduleClosingTime"
+            defaultValue={operacion.scheduleClosingTime || "23:00"}
+            placeholder="23:00"
+            ayuda="Formato 24 horas (HH:MM)"
+          />
+        </div>
       </div>
 
       <Casilla
@@ -260,13 +314,13 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
       </div>
 
       <Campo
-        label="Encabezado del tiquete"
+        label="Encabezado del recibo"
         name="receiptHeader"
         defaultValue={operacion.receiptHeader ?? ""}
-        ayuda="Texto adicional. El nombre, el NIT y la dirección ya salen impresos desde los datos del negocio: no hace falta repetirlos."
+        ayuda="Texto libre al inicio del tiquete (ej: redes sociales, lema)."
       />
       <Campo
-        label="Pie del tiquete"
+        label="Pie de página del recibo"
         name="receiptFooter"
         defaultValue={operacion.receiptFooter ?? ""}
         ayuda="Va al final, después del total."
@@ -280,6 +334,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
 export function FormularioModulos({
   mesasHabilitado,
   deliveryEnabled,
+  deliveryPaused = false,
   deliveryFeeCop = 0,
   inventoryEnabled,
   recipesEnabled,
@@ -287,6 +342,7 @@ export function FormularioModulos({
 }: {
   mesasHabilitado: boolean;
   deliveryEnabled: boolean;
+  deliveryPaused?: boolean;
   deliveryFeeCop?: number;
   inventoryEnabled: boolean;
   recipesEnabled: boolean;
@@ -329,7 +385,13 @@ export function FormularioModulos({
         </label>
 
         {delivChecked && (
-          <div className="pt-2 pl-6 border-t border-[var(--linea-15)]">
+          <div className="pt-3 pl-6 border-t border-[var(--linea-15)] space-y-3">
+            <Casilla
+              name="deliveryPaused"
+              label="Pausar Domicilios (Modo Alta Demanda)"
+              defaultChecked={deliveryPaused}
+              ayuda="Si activás la pausa, no se podrán realizar pedidos a domicilio desde el menú QR mientras la cocina esté congestionada."
+            />
             <Campo
               name="deliveryFeeCop"
               label="Valor o tarifa fija del domicilio"
@@ -836,6 +898,7 @@ export type QrMenuSettingsProps = {
   qrMenuHeaderTitle: string | null;
   qrMenuHeaderSubtitle: string | null;
   qrMenuAccent: string;
+  estimatedPrepTimeText?: string | null;
   slug: string;
   mesas: { id: string; name: string }[];
   deliveryEnabled?: boolean;
@@ -1012,6 +1075,9 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
     settings.qrMenuHeaderSubtitle || "Pide directo y recibe tus platos calientes",
   );
   const [accent, setAccent] = useState(settings.qrMenuAccent || "#FF4E1F");
+  const [estimatedPrepTimeText, setEstimatedPrepTimeText] = useState(
+    settings.estimatedPrepTimeText || "20-30 min",
+  );
 
   // Estado interactivo de UI
   const [subiendoLogo, setSubiendoLogo] = useState(false);
@@ -1310,6 +1376,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
           <input type="hidden" name="qrMenuHeaderTitle" value={headerTitle} />
           <input type="hidden" name="qrMenuHeaderSubtitle" value={headerSubtitle} />
           <input type="hidden" name="qrMenuAccent" value={accent} />
+          <input type="hidden" name="estimatedPrepTimeText" value={estimatedPrepTimeText} />
 
           {/* ══════════════════════════════════════════════════════════════════
               PESTAÑA 1: IDENTIDAD VISUAL & TEMA
@@ -1708,20 +1775,37 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 </div>
               </div>
 
-              {/* Configuración de Domicilios Operativa */}
+              {/* Configuración de Domicilios Operativa & Tiempo Estimado */}
               <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🛵</span>
                   <div>
-                    <h3 className="text-sm font-bold text-[var(--papel)]">Módulo de Pedidos a Domicilio</h3>
-                    <p className="text-xs text-[var(--linea)]">Los pedidos web se reciben directamente en la pantalla de Domicilios y Cocina.</p>
+                    <h3 className="text-sm font-bold text-[var(--papel)]">Módulo de Pedidos a Domicilio y Tiempos de Espera</h3>
+                    <p className="text-xs text-[var(--linea)]">Definí la estimación de tiempo que el cliente verá en su pantalla móvil.</p>
                   </div>
+                </div>
+
+                <div className="space-y-1.5 pt-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--linea)]">
+                    Tiempo Estimado de Entrega / Preparación (Personalizado)
+                  </Label>
+                  <Input
+                    value={estimatedPrepTimeText}
+                    onChange={(e) => setEstimatedPrepTimeText(e.target.value)}
+                    placeholder="Ej. 20 - 30 min"
+                    className="bg-[var(--panel-2)] border-[var(--linea-30)] text-[var(--papel)] text-sm font-bold max-w-sm"
+                  />
+                  <p className="text-xs text-[var(--linea)]">
+                    Este texto aparece en la cabecera e insignias del menú QR para que el comensal conozca el tiempo de espera estimado.
+                  </p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3 pt-2">
                   <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl text-center space-y-1">
-                    <span className="text-xs text-[var(--linea)] block">Tiempo promedio:</span>
-                    <span className="font-mono font-bold text-sm text-[var(--brasa)]">25 - 40 MIN</span>
+                    <span className="text-xs text-[var(--linea)] block">Tiempo en QR:</span>
+                    <span className="font-mono font-bold text-sm text-[var(--brasa)] uppercase">
+                      {estimatedPrepTimeText || "20-30 MIN"}
+                    </span>
                   </div>
                   <div className="bg-[var(--panel-2)] border border-[var(--linea-30)] p-3.5 rounded-xl text-center space-y-1">
                     <span className="text-xs text-[var(--linea)] block">Canal de entrega:</span>
@@ -1966,7 +2050,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 </div>
 
                 <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--panel-2)]/90 border border-[var(--linea-30)] text-rotulo font-mono font-bold text-[var(--brasa)]">
-                  {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : "🛵 Domicilio · 25-40 min"}
+                  {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : `🛵 Domicilio · ${estimatedPrepTimeText || "20-30 min"}`}
                 </div>
               </div>
 

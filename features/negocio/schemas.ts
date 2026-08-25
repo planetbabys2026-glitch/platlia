@@ -70,6 +70,18 @@ export const operacionSchema = z.object({
     (v) => (v === "" || v === undefined ? 99 : Number(v)),
     z.number().int().min(9).max(999),
   ),
+  scheduleEnabled: casilla,
+  scheduleOpeningTime: z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Formato de hora de apertura inválido (HH:MM)")
+    .default("08:00"),
+  scheduleClosingTime: z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Formato de hora de cierre inválido (HH:MM)")
+    .default("23:00"),
+  scheduleStatus: z.enum(["AUTOMATICO", "ABIERTO", "CERRADO"]).default("AUTOMATICO"),
   receiptWidth: z.enum(ReceiptWidth),
   receiptHeader: textoOpcional(300),
   receiptFooter: textoOpcional(300),
@@ -80,6 +92,7 @@ const casillaModulo = z.preprocess((v) => v === "on" || v === "true" || v === tr
 export const modulosSchema = z.object({
   mesasHabilitado: casillaModulo,
   deliveryEnabled: casillaModulo,
+  deliveryPaused: casillaModulo,
   deliveryFeeCop: z.preprocess(
     (v) => (v === "" || v === undefined || v === null ? 0 : v),
     montoCopPositivo,
@@ -119,6 +132,7 @@ export const qrMenuSchema = z.object({
     .trim()
     .regex(/^#[0-9A-Fa-f]{6}$/, "El acento tiene que ser un color en formato #RRGGBB")
     .default("#FF4E1F"),
+  estimatedPrepTimeText: textoOpcional(60),
 });
 
 export const crearSucursalSchema = z.object({

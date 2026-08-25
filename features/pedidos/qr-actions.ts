@@ -32,6 +32,8 @@ import { tenantDb } from "@/lib/db/tenant";
 import { computeTaxLine } from "@/lib/tax";
 import { currentBusinessDate } from "@/lib/time";
 import { siguienteTurnoLibre } from "@/features/pedidos/turnos";
+import { evaluarEstadoNegocio } from "@/features/negocio/horarios";
+import { parseExtraSettings } from "@/features/negocio/extra-settings";
 import { resolverModificadores } from "@/features/pedidos/modificadores";
 import { verificarYDescontarStockReceta } from "@/lib/inventory/stock";
 
@@ -85,25 +87,47 @@ export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) 
       return { ok: false, error: "El menú digital QR no está activado para este negocio." };
     }
 
-    /**
-     * Los domicilios por QR se abren y se cierran con el turno.
-     *
-     * Sin esto, un comensal mandaba un domicilio a cualquier hora —con la caja
-     * cerrada, el local vacío y nadie en la cocina— y el pedido quedaba esperando
-     * a que alguien lo descubriera a la mañana siguiente. La pantalla ya lo avisa
-     * al abrir, pero esto es una Server Action pública: es alcanzable con `curl`
-     * sin pasar por ninguna pantalla, así que la puerta se cierra acá.
-     *
-     * Se mira solo para el domicilio: un pedido de mesa lo hace alguien que está
-     * sentado adentro, así que el local está abierto por definición.
-     */
-    if (input.type === "DOMICILIO" && !settings.qrDeliveryEnabled) {
+    const extra = parseExtraSettings(settings.rolePermissions);
+    const estadoNegocio = evaluarEstadoNegocio({
+      timeZone: settings.timeZone,
+      scheduleEnabled: extra.scheduleEnabled,
+      scheduleOpeningTime: extra.scheduleOpeningTime,
+      scheduleClosingTime: extra.scheduleClosingTime,
+      scheduleStatus: extra.scheduleStatus,
+    });
+    if (!estadoNegocio.abierto) {
       return {
         ok: false,
-        error: "Por ahora no estamos recibiendo domicilios. Escribinos para saber a qué hora abrimos.",
+        error: estadoNegocio.razon || "El establecimiento se encuentra cerrado en este momento.",
       };
     }
 
+    if (input.type === "DOMICILIO") {
+      if (!settings.deliveryEnabled || extra.deliveryPaused) {
+        return {
+          ok: false,
+          error: "Los pedidos a domicilio no están disponibles en este momento por alta demanda o decisión del establecimiento.",
+        };
+      }
+      /**
+       * Los domicilios por QR se abren y se cierran con el turno.
+       *
+       * Sin esto, un comensal mandaba un domicilio a cualquier hora —con la caja
+       * cerrada, el local vacío y nadie en la cocina— y el pedido quedaba esperando
+       * a que alguien lo descubriera a la mañana siguiente. La pantalla ya lo avisa
+       * al abrir, pero esto es una Server Action pública: es alcanzable con `curl`
+       * sin pasar por ninguna pantalla, así que la puerta se cierra acá.
+       *
+       * Se mira solo para el domicilio: un pedido de mesa lo hace alguien que está
+       * sentado adentro, así que el local está abierto por definición.
+       */
+      if (!settings.qrDeliveryEnabled) {
+        return {
+          ok: false,
+          error: "Por ahora no estamos recibiendo domicilios. Escribinos para saber a qué hora abrimos.",
+        };
+      }
+    }
     const businessDate = currentBusinessDate(settings);
     const puedeFacturar = puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada());
     const db = tenantDb(business.id);

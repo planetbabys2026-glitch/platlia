@@ -89,12 +89,21 @@ type ClienteMenuQrProps = {
     qrMenuAccent: string;
     turnNumberMax: number;
     deliveryEnabled?: boolean;
+    deliveryPaused?: boolean;
     /** Si el local está recibiendo domicilios AHORA. Lo mueve el cajero. */
     qrDeliveryEnabled?: boolean;
     deliveryFeeCop?: number;
     /** Si el negocio sugiere propina, y con qué tarifa. */
     tipSuggestionEnabled: boolean;
     tipSuggestionRateBp: number;
+    estimatedPrepTimeText?: string | null;
+  };
+  estadoNegocio?: {
+    abierto: boolean;
+    razon?: string;
+    scheduleStatus: string;
+    horaApertura: string;
+    horaCierre: string;
   };
   categorias: Categoria[];
   productos: Producto[];
@@ -134,6 +143,7 @@ type TrackedOrder = {
 export function ClienteMenuQr({
   business,
   settings,
+  estadoNegocio,
   categorias,
   productos,
   placeholderUrl,
@@ -472,12 +482,28 @@ export function ClienteMenuQr({
     if (cartList.length === 0) return;
     setErrorEnvio(null);
 
-    // La puerta de verdad está en la Server Action; esto evita el viaje y el
-    // mensaje genérico. Puede pasar sin recargar: el cajero cierra los domicilios
-    // mientras alguien tiene la carta abierta.
-    if (domiciliosCerrados) {
-      setErrorEnvio("Por ahora no estamos recibiendo domicilios. Volvé cuando abramos.");
+    if (estadoNegocio && !estadoNegocio.abierto) {
+      setErrorEnvio(
+        estadoNegocio.razon ||
+          `El restaurante está cerrado en este momento (${estadoNegocio.horaApertura} - ${estadoNegocio.horaCierre}).`,
+      );
       return;
+    }
+
+    if (!esMesa) {
+      if (settings.deliveryPaused || settings.deliveryEnabled === false) {
+        setErrorEnvio(
+          "Los pedidos a domicilio se encuentran pausados temporalmente por alta demanda en el restaurante.",
+        );
+        return;
+      }
+      // La puerta de verdad está en la Server Action; esto evita el viaje y el
+      // mensaje genérico. Puede pasar sin recargar: el cajero cierra los domicilios
+      // mientras alguien tiene la carta abierta.
+      if (domiciliosCerrados) {
+        setErrorEnvio("Por ahora no estamos recibiendo domicilios. Volvé cuando abramos.");
+        return;
+      }
     }
 
     if (esMesa) {
@@ -710,6 +736,40 @@ export function ClienteMenuQr({
             <p className="text-xs font-medium text-[color:var(--qr-texto-2)] mt-0.5">{subtitulo}</p>
           </div>
 
+          {/* Avisos profesionales de Restaurante Cerrado o Domicilios Pausados */}
+          {estadoNegocio && !estadoNegocio.abierto && (
+            <div
+              role="alert"
+              className="mx-auto max-w-sm rounded-xl border border-destructive/50 bg-destructive/20 p-3.5 text-center space-y-1 text-white shadow-lg animate-in fade-in"
+            >
+              <div className="flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-rose-300">
+                <span>🛑</span>
+                <span>Establecimiento Cerrado</span>
+              </div>
+              <p className="text-xs text-white/90 font-semibold leading-snug">
+                {estadoNegocio.razon || "En este momento no estamos recibiendo pedidos."}
+              </p>
+              <p className="text-[11px] text-white/70 font-mono">
+                Horario de atención: {estadoNegocio.horaApertura} - {estadoNegocio.horaCierre}
+              </p>
+            </div>
+          )}
+
+          {!esMesa && (settings.deliveryPaused || settings.deliveryEnabled === false) && (
+            <div
+              role="alert"
+              className="mx-auto max-w-sm rounded-xl border border-amber-500/50 bg-amber-500/15 p-3.5 text-center space-y-1 text-amber-100 shadow-lg animate-in fade-in"
+            >
+              <div className="flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-amber-400">
+                <Bike className="size-4" />
+                <span>Domicilios Pausados</span>
+              </div>
+              <p className="text-xs text-amber-200/90 font-medium leading-snug">
+                Los pedidos a domicilio se encuentran pausados temporalmente por alta demanda en el establecimiento.
+              </p>
+            </div>
+          )}
+
           {/* El QR trae una mesa que ya no existe. Se dice acá y no al confirmar:
               armar un pedido entero para que falle al final es la peor forma de
               enterarse, y el comensal ya no tiene a quién reclamarle. */}
@@ -738,23 +798,38 @@ export function ClienteMenuQr({
             </p>
           )}
 
-          <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+          <div className="flex items-center justify-center gap-2 pt-1.5 flex-wrap">
+            {/* Estado del Establecimiento */}
+            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-extrabold px-3 py-1 text-xs gap-1.5 shadow-sm">
+              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Abierto</span>
+            </Badge>
+
             {esMesa ? (
-              <Badge variant="default" className="bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] font-extrabold px-3 py-1 text-xs shadow-md">
-                🪑 Mesa {mesaParam}
+              <Badge variant="default" className="bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] font-extrabold px-3.5 py-1 text-xs shadow-md gap-1">
+                <span>🪑</span>
+                <span>Mesa {mesaParam}</span>
               </Badge>
             ) : (
-              <Badge variant="outline" className="border-[var(--qr-acento)]/40 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs">
-                🛵 Domicilio / Para Llevar
+              <Badge variant="outline" className="border-[var(--qr-acento)]/50 bg-black/40 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs gap-1">
+                <span>🛵</span>
+                <span>Domicilio</span>
               </Badge>
             )}
+
+            {/* Chip de Tiempo Estimado de Entrega */}
+            <Badge variant="outline" className="border-white/20 bg-black/50 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs gap-1.5 shadow-sm backdrop-blur-md">
+              <Clock className="size-3 text-[color:var(--qr-acento-texto)]" />
+              <span>{settings.estimatedPrepTimeText || "20-30 min"}</span>
+            </Badge>
 
             <button
               type="button"
               onClick={() => setModalConsultaAbierto(true)}
-              className="bg-white/10 hover:bg-white/20 text-[color:var(--qr-texto)] font-bold text-xs px-3 py-1 rounded-full border border-white/20 flex items-center gap-1 transition-all"
+              className="bg-white/10 hover:bg-white/20 text-[color:var(--qr-texto)] font-bold text-xs px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
             >
-              <Search className="size-3 text-[color:var(--qr-texto)]" /> Rastrear Pedido
+              <Search className="size-3.5 text-[color:var(--qr-acento-texto)]" />
+              <span>Rastrear Pedido</span>
             </button>
           </div>
         </header>
