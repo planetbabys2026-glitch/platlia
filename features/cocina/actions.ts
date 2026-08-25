@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AppModule, DeliveryStatus, OrderItemStatus, Role } from "@/generated/prisma/enums";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { getPreparacionesActivas } from "./queries";
+import { currentBusinessDate } from "@/lib/time";
 import {
   publishCocinaUpdate,
   publishDomiciliosUpdate,
@@ -108,7 +110,17 @@ export const avanzarComanda = defineAction({
       revalidatePath("/caja");
       void publishDomiciliosUpdate(ctx.business.id);
     }
-
     return { status: siguiente, despachable };
+  },
+});
+
+export const obtenerEstadoPreparaciones = defineAction({
+  schema: z.object({}),
+  roles: [Role.CAJERO, Role.MESERO, Role.ADMINISTRADOR, Role.PROPIETARIO, Role.COCINA],
+  modulo: AppModule.COCINA,
+  async handler({ ctx }) {
+    const businessDate = currentBusinessDate(ctx.business);
+    const items = await getPreparacionesActivas(ctx.business.id, businessDate);
+    return items;
   },
 });

@@ -157,7 +157,12 @@ export async function getMovimientos(businessId: string, cashSessionId: string) 
 const HAY_QUE_COBRAR = {
   status: { in: ["ABIERTA", "CUENTA_PEDIDA"] },
   items: { some: { status: { not: "ANULADO" } } },
-  OR: [{ deliveryStatus: null }, { deliveryStatus: { in: [...DOMICILIOS_COBRABLES] } }],
+  OR: [
+    { deliveryStatus: { in: [...DOMICILIOS_COBRABLES] } },
+    { status: "CUENTA_PEDIDA" },
+    { tableId: null, status: "ABIERTA" },
+    { items: { every: { status: { in: ["LISTO", "ENTREGADO", "ANULADO"] } } } },
+  ],
 } satisfies Prisma.OrderWhereInput;
 
 export async function contarCuentasPorCobrar(businessId: string, businessDate: Date) {
