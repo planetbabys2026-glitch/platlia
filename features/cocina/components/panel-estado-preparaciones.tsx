@@ -107,6 +107,8 @@ export function BotonEstadoPreparaciones({
   }
   const grupos = Array.from(gruposMap.values());
 
+  const esIcono = size === "icon" || size === "icon-sm";
+
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
@@ -114,19 +116,27 @@ export function BotonEstadoPreparaciones({
           variant={variant}
           size={size}
           className={cn(
-            "relative gap-2 border-brand/30 hover:border-brand transition-all",
-            size === "icon" || size === "icon-sm" ? "p-0" : "px-3",
+            "relative transition-colors text-muted-foreground hover:text-brand",
+            variant === "outline" && "border-brand/30 hover:border-brand",
+            esIcono ? "size-9" : "gap-2 px-3",
             className,
           )}
           title="Ver estado de preparaciones en cocina"
         >
-          <ChefHat className="size-4 shrink-0 text-brand" />
-          {size !== "icon" && size !== "icon-sm" && (
+          <ChefHat className="size-4 shrink-0 transition-colors" />
+          {!esIcono && (
             <span className="font-semibold text-xs truncate">Preparaciones</span>
           )}
           {items.length > 0 && (
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand text-[10px] font-mono font-black text-brand-foreground">
-              {items.length}
+            <span
+              className={cn(
+                "flex items-center justify-center rounded-full bg-brand font-mono font-black text-brand-foreground shadow-sm",
+                esIcono
+                  ? "absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[9px] leading-none"
+                  : "size-5 text-[10px] shrink-0",
+              )}
+            >
+              {items.length > 99 ? "99+" : items.length}
             </span>
           )}
         </Button>
