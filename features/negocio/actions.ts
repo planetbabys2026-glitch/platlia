@@ -53,7 +53,7 @@ export const guardarDatosNegocio = defineAction({
 export const guardarOperacion = defineAction({
   schema: operacionSchema,
   roles: ADMINISTRAN,
-  async handler({ input, db }) {
+  async handler({ input, ctx, db }) {
     try {
       assertTimeZone(input.timeZone);
     } catch {
