@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { agregarItem } from "@/features/pedidos/actions";
-import { SeccionPlegable } from "@/components/marca/seccion-plegable";
+import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { ImagenProducto } from "@/features/pedidos/components/imagen-producto";
 import {
   SelectorModificadores,
@@ -280,7 +280,6 @@ export function Carta({
   permitirVentaSinStock?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
-  const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
 
   const buscando = busqueda.trim().length > 0;
 
@@ -298,9 +297,6 @@ export function Carta({
     );
   }
 
-  const categoriasAMostrar = categoriaActiva
-    ? categorias.filter((c) => c.id === categoriaActiva)
-    : categorias;
 
   return (
     <div className="space-y-4">
@@ -313,37 +309,6 @@ export function Carta({
           aria-label="Buscar producto"
         />
 
-        {!buscando && categorias.length > 1 && (
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setCategoriaActiva(null)}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                categoriaActiva === null
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary hover:bg-accent",
-              )}
-            >
-              Todo
-            </button>
-            {categorias.map((categoria) => (
-              <button
-                key={categoria.id}
-                type="button"
-                onClick={() => setCategoriaActiva(categoria.id)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                  categoriaActiva === categoria.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary hover:bg-accent",
-                )}
-              >
-                {categoria.name}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {buscando ? (
@@ -365,8 +330,9 @@ export function Carta({
           </p>
         )
       ) : (
-        <div className="space-y-6">
-          {categoriasAMostrar.map((categoria) => {
+        <Acordeon>
+          <div className="space-y-6">
+          {categorias.map((categoria) => {
             const productos = (
               // Auto-fill, igual que el salón y cocina: la tarjeta mide lo que
               // tiene que medir en vez de partirse en dos columnas fijas.
@@ -383,18 +349,10 @@ export function Carta({
               </ul>
             );
 
-            // Con una categoría filtrada no hay nada que plegar: ya es la única.
-            if (categoriaActiva !== null) {
-              return (
-                <section key={categoria.id} className="space-y-2">
-                  {productos}
-                </section>
-              );
-            }
-
             return (
               <SeccionPlegable
                 key={categoria.id}
+                id={categoria.id}
                 titulo={categoria.name}
                 cuenta={categoria.products.length}
               >
@@ -402,7 +360,8 @@ export function Carta({
               </SeccionPlegable>
             );
           })}
-        </div>
+          </div>
+        </Acordeon>
       )}
     </div>
   );

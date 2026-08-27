@@ -950,13 +950,33 @@ funcionar con el turno cerrado.
 
 ### Las categorías se pliegan
 
-`components/marca/seccion-plegable.tsx` agrupa productos por categoría en el POS y en el menú QR.
-En un teléfono, una carta de 18 productos en lista corrida muestra tres platos por pantalla y el
-resto es fe. La animación va por `grid-template-rows: 0fr → 1fr`, que es lo único que llega a la
-altura real sin medirla con JS: nada de `max-height` con un número inventado que recorta la última
-tarjeta cuando la categoría crece. Plegado se usa `inert`, no `hidden` —`display:none` cortaría la
-animación en seco—, y en el menú QR la primera categoría abre abierta, para que al escanear se vea
-comida y no una lista de títulos cerrados.
+`components/marca/seccion-plegable.tsx` agrupa productos por categoría en las tres puertas de venta:
+el POS, la carta de la mesa y el menú QR. En un teléfono, una carta de 18 productos en lista corrida
+muestra tres platos por pantalla y el resto es fe. La animación va por `grid-template-rows: 0fr → 1fr`,
+que es lo único que llega a la altura real sin medirla con JS: nada de `max-height` con un número
+inventado que recorta la última tarjeta cuando la categoría crece. Plegado se usa `inert`, no
+`hidden` —`display:none` cortaría la animación en seco—.
+
+**Todas arrancan cerradas y solo una se abre a la vez.** Las tres pantallas envuelven sus categorías
+en `<Acordeon>`, que lleva el estado del grupo por contexto: abrir una cierra la que estaba, y las dos
+animan a la vez. Va por contexto y no por props porque las tres recorren sus categorías con un `map`
+y pasarles el estado a mano obligaba a repetir el mismo `useState` tres veces y a que las tres se
+acordaran de coordinarlo igual.
+
+Antes arrancaban todas abiertas y la carta entera caía de golpe; en el menú QR, además, la primera
+abría sola con el argumento de que al escanear había que ver comida y no una lista de títulos. El
+argumento se dio vuelta con la carta real: con cinco categorías desplegadas hay que deslizar por
+delante de todo lo que no se está buscando, y el encabezado plegado ya dice el nombre y cuántos
+productos hay. Cerradas, la primera pantalla es el índice completo y elegir es leer seis títulos en
+vez de cuarenta platos.
+
+**El recorte dura lo que dura la animación.** El `overflow-hidden` es obligatorio para que `0fr` de
+verdad esconda algo, pero mientras está puesto recorta todo lo que un hijo saque de la caja: el
+`hover:scale` de las tarjetas quedaba rebanado en la primera y la última columna, y la insignia de
+cantidad —que va en `-top-2 -right-2`— cortada por la mitad. Con la sección abierta y la animación
+terminada, el desborde vuelve a ser visible. Va por estado y con temporizador, no con `transitionend`:
+con `prefers-reduced-motion` no hay transición y ese evento no llega nunca, así que quedaría recortado
+para siempre justo en el equipo de quien pidió menos movimiento.
 
 Las piezas de marca se usan por `components/marca/logo.tsx`: `Logo`, `Logotipo` e `Isotipo` (silueta
 de tirilla térmica dentada de 22 picos con monograma "P" y acento Brasa). La composición de una

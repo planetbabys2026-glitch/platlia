@@ -1,8 +1,41 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Un grupo de categorías donde solo una está abierta a la vez.
+ *
+ * Es lo que evita el muro: una carta de cinco categorías desplegadas obliga a
+ * deslizar por delante de todo lo que no se está buscando. Abriendo de a una, la
+ * pantalla siempre muestra el índice completo más el bloque que a alguien le
+ * interesa, y elegir es leer seis títulos en vez de cuarenta platos.
+ *
+ * Va por contexto y no por props porque las tres pantallas que lo usan —el POS,
+ * la carta de la mesa y el menú QR— recorren sus categorías con un `map`:
+ * pasarles el estado a mano obligaba a repetir el mismo `useState` tres veces y
+ * a que las tres se acordaran de coordinarlo igual.
+ */
+const ContextoAcordeon = createContext<{
+  abierta: string | null;
+  alternar: (id: string) => void;
+} | null>(null);
+
+export function Acordeon({ children }: { children: React.ReactNode }) {
+  const [abierta, setAbierta] = useState<string | null>(null);
+  const valor = useMemo(
+    () => ({
+      abierta,
+      // Volver a tocar la abierta la cierra: si no, no habría forma de dejar la
+      // pantalla en el índice limpio una vez que se encontró lo que se buscaba.
+      alternar: (id: string) => setAbierta((actual) => (actual === id ? null : id)),
+    }),
+    [abierta],
+  );
+
+  return <ContextoAcordeon.Provider value={valor}>{children}</ContextoAcordeon.Provider>;
+}
 
 /**
  * Una categoría que se pliega.
@@ -27,20 +60,41 @@ import { cn } from "@/lib/utils";
  * animación terminada, el desborde vuelve a ser visible.
  */
 export function SeccionPlegable({
+  id,
   titulo,
   cuenta,
-  abiertaPorDefecto = true,
+  abiertaPorDefecto = false,
   children,
   className,
 }: {
+  /**
+   * Con qué se la identifica dentro de un `<Acordeon>`. Sin esto —o fuera del
+   * acordeón— la sección se pliega sola, sin coordinarse con sus hermanas.
+   */
+  id?: string;
   titulo: string;
   /** Cuántos productos hay adentro. Es lo que hace útil el encabezado plegado. */
   cuenta?: number;
+  /**
+   * Arranca cerrada.
+   *
+   * Antes arrancaban todas abiertas y la carta entera caía de golpe: dieciocho
+   * platos de corrido donde alguien busca uno. Cerradas, el encabezado hace de
+   * índice y la primera pantalla cabe entera.
+   */
   abiertaPorDefecto?: boolean;
   children: React.ReactNode;
   className?: string;
 }) {
-  const [abierta, setAbierta] = useState(abiertaPorDefecto);
+  const grupo = useContext(ContextoAcordeon);
+  const enGrupo = grupo !== null && id !== undefined;
+  const [abiertaLocal, setAbiertaLocal] = useState(abiertaPorDefecto);
+
+  const abierta = enGrupo ? grupo.abierta === id : abiertaLocal;
+  const alternar = () => {
+    if (enGrupo) grupo.alternar(id);
+    else setAbiertaLocal((v) => !v);
+  };
   /**
    * Si el contenido puede salirse de la caja ahora mismo.
    *
@@ -71,7 +125,7 @@ export function SeccionPlegable({
       <h2>
         <button
           type="button"
-          onClick={() => setAbierta((v) => !v)}
+          onClick={alternar}
           aria-expanded={abierta}
           aria-controls={idContenido}
           className="group flex w-full items-center gap-3 rounded-lg py-1 text-left font-mono text-rotulo uppercase text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"

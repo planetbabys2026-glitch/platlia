@@ -53,7 +53,7 @@ import { claveDeLinea } from "@/lib/modificadores";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
 import { computeSuggestedTip } from "@/lib/tax";
-import { SeccionPlegable } from "@/components/marca/seccion-plegable";
+import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { cn } from "@/lib/utils";
 
 export type PosProducto = ProductoConModificadores & {
@@ -278,7 +278,6 @@ export function ModuloPosInteractive({
 
   // ── Estado de catálogo y búsqueda ──────────────────────────────────────────
   const [busqueda, setBusqueda] = useState("");
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string | null>(null);
   /**
    * El lector de código de barras.
    *
@@ -857,8 +856,6 @@ export function ModuloPosInteractive({
 
   const categoriasFiltradas = carta
     .map((cat) => {
-      if (categoriaSeleccionada && cat.id !== categoriaSeleccionada) return null;
-
       const productosFiltrados = cat.products.filter((p) => {
         if (!q) return true;
         // También por SKU: quien tiene el producto en la mano lee el código, no
@@ -1130,41 +1127,6 @@ export function ModuloPosInteractive({
                 )}
               </div>
 
-              {/* Pills de Categorías con Scroll Horizontal */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                <button
-                  type="button"
-                  onClick={() => setCategoriaSeleccionada(null)}
-                  className={cn(
-                    "inline-flex min-h-11 tableta:min-h-9 items-center px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border",
-                    categoriaSeleccionada === null
-                      ? "bg-brand text-brand-foreground border-brand font-semibold shadow-sm"
-                      : "bg-card text-muted-foreground hover:text-foreground border-border"
-                  )}
-                >
-                  Todas ({todosLosProductosCount})
-                </button>
-                {carta.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() =>
-                      setCategoriaSeleccionada(
-                        categoriaSeleccionada === cat.id ? null : cat.id
-                      )
-                    }
-                    className={cn(
-                      "inline-flex min-h-11 tableta:min-h-9 items-center px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all border",
-                      categoriaSeleccionada === cat.id
-                        ? "bg-brand text-brand-foreground border-brand font-semibold shadow-sm"
-                        : "bg-card text-muted-foreground hover:text-foreground border-border"
-                    )}
-                  >
-                    {cat.name} ({cat.products.length})
-                  </button>
-                ))}
-              </div>
-
               {/* Grid de Tarjetas de Productos */}
               <div className="space-y-6">
                 {/* Un negocio recién creado llega acá con la carta vacía y veía
@@ -1189,9 +1151,11 @@ export function ModuloPosInteractive({
                     </p>
                   </div>
                 ) : (
-                  categoriasFiltradas.map((cat) => (
+                  <Acordeon>
+                    {categoriasFiltradas.map((cat) => (
                     <SeccionPlegable
                       key={cat.id}
+                      id={cat.id}
                       titulo={cat.name}
                       cuenta={cat.products.length}
                     >
@@ -1317,7 +1281,8 @@ export function ModuloPosInteractive({
                         })}
                       </div>
                     </SeccionPlegable>
-                  ))
+                    ))}
+                  </Acordeon>
                 )}
               </div>
             </div>

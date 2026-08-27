@@ -25,7 +25,7 @@ import {
 } from "@/features/carta/components/selector-modificadores";
 import { claveDeLinea } from "@/lib/modificadores";
 import { olvidarPedido, pedidoRecordado, recordarPedido } from "./pedido-recordado";
-import { SeccionPlegable } from "@/components/marca/seccion-plegable";
+import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { acentoSirveComoTexto, mezclarHacia, textoSobre } from "@/lib/contraste";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
@@ -151,7 +151,6 @@ export function ClienteMenuQr({
   tableIdParam,
   mesaInvalida,
 }: ClienteMenuQrProps) {
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>("todas");
   const [busqueda, setBusqueda] = useState("");
   const [carrito, setCarrito] = useState<Record<string, CartItem>>({});
   /** El producto cuyo modal de opciones está abierto. */
@@ -327,18 +326,24 @@ export function ClienteMenuQr({
     } as React.CSSProperties;
   }, [settings]);
 
-  // Productos filtrados
+  /**
+   * Lo que queda después de buscar.
+   *
+   * Ya no hay filtro por categoría: las píldoras se fueron. Con la búsqueda y las
+   * categorías plegadas, esa fila era una tercera forma de hacer lo mismo —y la
+   * más ruidosa, porque ocupaba una franja entera del teléfono con siete botones
+   * que compiten con la comida.
+   */
   const productosFiltrados = useMemo(() => {
-    return productos.filter((p) => {
-      const coincideCat = categoriaSeleccionada === "todas" || p.categoryId === categoriaSeleccionada;
-      const coincideBusqueda =
-        !busqueda ||
-        p.name.toLowerCase().includes(busqueda.toLowerCase()) ||
-        (p.shortDescription && p.shortDescription.toLowerCase().includes(busqueda.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(busqueda.toLowerCase()));
-      return coincideCat && coincideBusqueda;
-    });
-  }, [productos, categoriaSeleccionada, busqueda]);
+    if (!busqueda) return productos;
+    const q = busqueda.toLowerCase();
+    return productos.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        Boolean(p.shortDescription?.toLowerCase().includes(q)) ||
+        Boolean(p.description?.toLowerCase().includes(q)),
+    );
+  }, [productos, busqueda]);
 
   /**
    * Los productos ya filtrados, agrupados por categoría.
@@ -1066,40 +1071,6 @@ export function ClienteMenuQr({
                 )}
               </div>
 
-              {/* Píldoras de Categorías */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                <button
-                  type="button"
-                  onClick={() => setCategoriaSeleccionada("todas")}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 border",
-                    categoriaSeleccionada === "todas"
-                      ? "bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] border-[var(--qr-acento)] shadow-md scale-[1.02]"
-                      : "bg-white/5 text-[color:var(--qr-texto-2)] border-white/10 hover:bg-white/10",
-                  )}
-                >
-                  Todas ({productos.length})
-                </button>
-                {categorias.map((cat) => {
-                  const count = productos.filter((p) => p.categoryId === cat.id).length;
-                  if (count === 0) return null;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setCategoriaSeleccionada(cat.id)}
-                      className={cn(
-                        "rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shrink-0 border",
-                        categoriaSeleccionada === cat.id
-                          ? "bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] border-[var(--qr-acento)] shadow-md scale-[1.02]"
-                          : "bg-white/5 text-[color:var(--qr-texto-2)] border-white/10 hover:bg-white/10",
-                      )}
-                    >
-                      {cat.name} ({count})
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
             {/* ─────────────────────────────────────────────────────────────
@@ -1113,18 +1084,18 @@ export function ClienteMenuQr({
                   <p className="text-xs text-[color:var(--qr-texto-3)]">Prueba con otra palabra de búsqueda o categoría.</p>
                 </div>
               ) : (
-                grupos.map((grupo, indice) => (
-                  <SeccionPlegable
-                    key={grupo.id}
-                    titulo={grupo.name}
-                    cuenta={grupo.productos.length}
-                    // La primera abierta: al abrir la carta se ve comida, no una
-                    // lista de títulos cerrados que no dice a qué sabe nada.
-                    abiertaPorDefecto={indice === 0}
-                  >
-                    <div className="space-y-3.5">{grupo.productos.map(renderProducto)}</div>
-                  </SeccionPlegable>
-                ))
+                <Acordeon>
+                  {grupos.map((grupo) => (
+                    <SeccionPlegable
+                      key={grupo.id}
+                      id={grupo.id}
+                      titulo={grupo.name}
+                      cuenta={grupo.productos.length}
+                    >
+                      <div className="space-y-3.5">{grupo.productos.map(renderProducto)}</div>
+                    </SeccionPlegable>
+                  ))}
+                </Acordeon>
               )}
             </main>
 
