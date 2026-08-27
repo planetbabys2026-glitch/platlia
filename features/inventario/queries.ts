@@ -171,6 +171,7 @@ export async function getInventorySummary(businessId: string) {
   const [items, productos] = await Promise.all([
     db.inventoryItem.findMany({
       where: { deletedAt: null },
+      orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
@@ -205,6 +206,8 @@ export async function getInventorySummary(businessId: string) {
   }
 
   return {
+    totalInsumos: items.length,
+    totalReventa: productos.length,
     totalItems: items.length + productos.length,
     valorTotalCOP,
     bajoStockCount,

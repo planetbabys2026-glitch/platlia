@@ -1406,6 +1406,7 @@ export function ClienteMenuQr({
         abierto={productoAElegir !== null}
         onCerrar={() => setProductoAElegir(null)}
         inventoryEnabled={settings.inventoryEnabled}
+        permitirVentaSinStock={settings.permitirVentaSinStock}
         onConfirmar={({ opcionIds, quantity, notes }) => {
           if (!productoAElegir) return;
 

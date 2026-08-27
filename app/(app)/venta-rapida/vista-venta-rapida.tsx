@@ -937,6 +937,7 @@ export function VistaVentaRapida({
           abierto={!!productoAElegir}
           onCerrar={() => setProductoAElegir(null)}
           inventoryEnabled={settings.inventoryEnabled}
+          permitirVentaSinStock={settings.permitirVentaSinStock}
           onConfirmar={({ opcionIds, quantity, notes }) => {
             const opciones = (productoAElegir.modifierGroups ?? [])
               .flatMap((a) => a.group.options)
