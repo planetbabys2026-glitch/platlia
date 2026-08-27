@@ -186,3 +186,79 @@ export async function contarComandasVivas(
     },
   });
 }
+
+export type ItemPreparacion = {
+  id: string;
+  nameSnapshot: string;
+  quantity: number;
+  notes: string | null;
+  status: string;
+  sentToKitchenAt: Date | null;
+  createdAt: Date;
+  estacion: string;
+  orderId: string;
+  code: number;
+  mesa: string | null;
+  cuenta: string | null;
+  turno: number | null;
+  type: string;
+  modificadores: string[];
+};
+
+export async function getPreparacionesActivas(
+  businessId: string,
+  businessDate: Date,
+): Promise<ItemPreparacion[]> {
+  const items = await tenantDb(businessId).orderItem.findMany({
+    where: {
+      ...RENGLON_EN_COCINA,
+      order: {
+        businessDate,
+        OR: PEDIDO_QUE_LE_IMPORTA_A_COCINA,
+      },
+    },
+    orderBy: { sentToKitchenAt: "asc" },
+    select: {
+      id: true,
+      nameSnapshot: true,
+      quantity: true,
+      notes: true,
+      status: true,
+      createdAt: true,
+      sentToKitchenAt: true,
+      modifiers: {
+        orderBy: { sortOrder: "asc" },
+        select: { optionNameSnapshot: true },
+      },
+      product: { select: { kitchenStation: true } },
+      order: {
+        select: {
+          id: true,
+          code: true,
+          type: true,
+          turnNumber: true,
+          customerName: true,
+          table: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  return items.map((i) => ({
+    id: i.id,
+    nameSnapshot: i.nameSnapshot,
+    quantity: i.quantity,
+    notes: i.notes,
+    status: i.status,
+    sentToKitchenAt: i.sentToKitchenAt,
+    createdAt: i.createdAt,
+    estacion: i.product.kitchenStation?.trim() || "Sin estación",
+    orderId: i.order.id,
+    code: i.order.code,
+    mesa: i.order.table?.name ?? null,
+    cuenta: i.order.customerName,
+    turno: i.order.turnNumber,
+    type: i.order.type,
+    modificadores: i.modifiers.map((m) => m.optionNameSnapshot),
+  }));
+}

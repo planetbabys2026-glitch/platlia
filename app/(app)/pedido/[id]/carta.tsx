@@ -176,6 +176,7 @@ function TarjetaProducto({
           abierto={modalAbierto}
           onCerrar={() => setModalAbierto(false)}
           inventoryEnabled={inventoryEnabled}
+          permitirVentaSinStock={permitirVentaSinStock}
           onConfirmar={({ opcionIds, quantity, notes }) => {
             setElegidas(opcionIds);
             setCantidad(quantity);

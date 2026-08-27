@@ -19,6 +19,11 @@ export default async function PanelPage() {
   const ctx = await requireActiveLicense();
   const usaMesas = ctx.modules.has(AppModule.MESAS);
 
+  // El usuario con rol cocina entra a su monitor de preparación, no a ver ventas ni caja.
+  if (ctx.role === Role.COCINA) {
+    redirect("/cocina");
+  }
+
   // Cajero y administrador entran a trabajar, no a mirar indicadores: sin mesas
   // no hay salón que atender, y el panel —pensado para quien mira la salud del
   // negocio— no es la pantalla que necesitan al entrar. El propietario sí sigue

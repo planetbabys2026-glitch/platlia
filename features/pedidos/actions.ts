@@ -271,6 +271,22 @@ export const agregarItem = defineAction({
         throw new ErrorDeUsuario(`${producto.name} está marcado como agotado.`);
       }
 
+      let taxRate = producto.taxRate;
+      if (!taxRate) {
+        const defaultTax = await tx.taxRate.findFirst({
+          where: { businessId: ctx.business.id, isDefault: true, active: true },
+          select: { rateBp: true, name: true, kind: true },
+        });
+        const anyTax = defaultTax ?? (await tx.taxRate.findFirst({
+          where: { businessId: ctx.business.id, active: true },
+          select: { rateBp: true, name: true, kind: true },
+        }));
+        if (!anyTax) {
+          throw new ErrorDeUsuario(`El producto "${producto.name}" no tiene tarifa de impuesto asignada.`);
+        }
+        taxRate = anyTax;
+      }
+
       const nombre = producto.name;
 
       const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
@@ -291,7 +307,7 @@ export const agregarItem = defineAction({
       const linea = computeTaxLine({
         unitPriceCop: precio,
         quantity: input.quantity,
-        taxRateBp: producto.taxRate.rateBp,
+        taxRateBp: taxRate.rateBp,
         taxIncluded: settings.pricesIncludeTax,
       });
 
@@ -319,9 +335,9 @@ export const agregarItem = defineAction({
           nameSnapshot: nombre,
           unitPriceCop: precio,
           basePriceCopSnapshot: producto.priceCop,
-          taxRateBpSnapshot: producto.taxRate.rateBp,
-          taxRateNameSnapshot: producto.taxRate.name,
-          taxKindSnapshot: producto.taxRate.kind,
+          taxRateBpSnapshot: taxRate.rateBp,
+          taxRateNameSnapshot: taxRate.name,
+          taxKindSnapshot: taxRate.kind,
           taxIncludedSnapshot: settings.pricesIncludeTax,
           quantity: input.quantity,
           lineSubtotalCop: linea.lineSubtotalCop,
@@ -1601,6 +1617,22 @@ export const procesarVentaPosCompleta = defineAction({
             throw new ErrorDeUsuario(`"${producto.name}" está marcado como agotado.`);
           }
 
+          let taxRate = producto.taxRate;
+          if (!taxRate) {
+            const defaultTax = await tx.taxRate.findFirst({
+              where: { businessId: ctx.business.id, isDefault: true, active: true },
+              select: { rateBp: true, name: true, kind: true },
+            });
+            const anyTax = defaultTax ?? (await tx.taxRate.findFirst({
+              where: { businessId: ctx.business.id, active: true },
+              select: { rateBp: true, name: true, kind: true },
+            }));
+            if (!anyTax) {
+              throw new ErrorDeUsuario(`El producto "${producto.name}" no tiene tarifa de impuesto asignada.`);
+            }
+            taxRate = anyTax;
+          }
+
           const { recargoCop, snapshots, opcionIds } = await resolverModificadores(
             tx,
             producto.id,
@@ -1613,7 +1645,7 @@ export const procesarVentaPosCompleta = defineAction({
           const linea = computeTaxLine({
             unitPriceCop: precio,
             quantity: itemInput.quantity,
-            taxRateBp: producto.taxRate.rateBp,
+            taxRateBp: taxRate.rateBp,
             taxIncluded: settings.pricesIncludeTax,
           });
 
@@ -1641,9 +1673,9 @@ export const procesarVentaPosCompleta = defineAction({
               nameSnapshot: producto.name,
               unitPriceCop: precio,
               basePriceCopSnapshot: producto.priceCop,
-              taxRateBpSnapshot: producto.taxRate.rateBp,
-              taxRateNameSnapshot: producto.taxRate.name,
-              taxKindSnapshot: producto.taxRate.kind,
+              taxRateBpSnapshot: taxRate.rateBp,
+              taxRateNameSnapshot: taxRate.name,
+              taxKindSnapshot: taxRate.kind,
               taxIncludedSnapshot: settings.pricesIncludeTax,
               quantity: itemInput.quantity,
               lineSubtotalCop: linea.lineSubtotalCop,

@@ -103,6 +103,7 @@ export function SelectorModificadores({
   permitirCantidad = true,
   permitirNota = true,
   inventoryEnabled = true,
+  permitirVentaSinStock = false,
 }: {
   producto: ProductoConModificadores | null;
   abierto: boolean;
@@ -117,6 +118,7 @@ export function SelectorModificadores({
   permitirCantidad?: boolean;
   permitirNota?: boolean;
   inventoryEnabled?: boolean;
+  permitirVentaSinStock?: boolean;
 }) {
   const grupos = useMemo(() => (producto ? gruposDeProducto(producto) : []), [producto]);
 
@@ -134,6 +136,7 @@ export function SelectorModificadores({
             permitirCantidad={permitirCantidad}
             permitirNota={permitirNota}
             inventoryEnabled={inventoryEnabled}
+            permitirVentaSinStock={permitirVentaSinStock}
             onConfirmar={onConfirmar}
           />
         )}
@@ -149,6 +152,7 @@ function CuerpoSelector({
   permitirCantidad,
   permitirNota,
   inventoryEnabled = true,
+  permitirVentaSinStock = false,
   onConfirmar,
 }: {
   producto: ProductoConModificadores;
@@ -157,6 +161,7 @@ function CuerpoSelector({
   permitirCantidad: boolean;
   permitirNota: boolean;
   inventoryEnabled?: boolean;
+  permitirVentaSinStock?: boolean;
   onConfirmar: (seleccion: {
     opcionIds: string[];
     quantity: number;
@@ -180,6 +185,7 @@ function CuerpoSelector({
   );
   const techo = disponibles === null ? Infinity : Math.max(0, disponibles - yaEnCarrito);
   const sinStock = cantidad > techo;
+  const bloqueadoPorStock = sinStock && !permitirVentaSinStock;
 
   return (
     <>
@@ -314,7 +320,7 @@ function CuerpoSelector({
                 variant="outline"
                 size="sm"
                 className="size-9 shrink-0 p-0"
-                disabled={cantidad + 1 > techo}
+                disabled={!permitirVentaSinStock && cantidad + 1 > techo}
                 onClick={() => setCantidad((c) => c + 1)}
                 aria-label="Agregar uno"
               >
@@ -327,17 +333,25 @@ function CuerpoSelector({
 
       <DialogFooter className="flex-col gap-2 sm:flex-col">
         {(problema || sinStock) && (
-          <p className="text-destructive w-full text-center text-xs font-medium" role="alert">
+          <p
+            className={cn(
+              "w-full text-center text-xs font-medium",
+              bloqueadoPorStock ? "text-destructive" : "text-amber-500 font-semibold"
+            )}
+            role="alert"
+          >
             {problema ??
-              (techo <= 0
-                ? `No hay insumos suficientes para preparar "${producto.name}".`
-                : `Solo quedan ${techo} para preparar con esa combinación.`)}
+              (bloqueadoPorStock
+                ? (techo <= 0
+                    ? `No hay insumos suficientes para preparar "${producto.name}".`
+                    : `Solo quedan ${techo} para preparar con esa combinación.`)
+                : `Sin stock suficiente en inventario (${disponibles ?? 0} disp.). Se venderá con stock en negativo.`)}
           </p>
         )}
 
         <Button
           type="button"
-          disabled={problema !== null || sinStock}
+          disabled={problema !== null || bloqueadoPorStock}
           onClick={() =>
             onConfirmar({ opcionIds: elegidas, quantity: cantidad, notes: nota, recargoCop })
           }

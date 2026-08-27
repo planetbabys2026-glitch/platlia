@@ -174,7 +174,7 @@ export function VistaInventario({
    * palabra por palabra con el enlace que se apretó.
    */
   const seccionActual = {
-    stock: { titulo: "Insumos", icono: Boxes, cuenta: summary.totalItems },
+    stock: { titulo: "Insumos", icono: Boxes, cuenta: summary.items.length },
     bebidas: { titulo: "Bebidas y reventa", icono: ShoppingBag, cuenta: finishedProducts.length },
     facturas: { titulo: "Facturas de compra", icono: FileText, cuenta: invoices.length },
     recetas: { titulo: "Recetas", icono: BookOpen, cuenta: undefined },
@@ -216,8 +216,13 @@ export function VistaInventario({
           <CardContent className="p-4 space-y-1">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Insumos Registrados</p>
             <p className="numeral text-2xl font-bold text-foreground">
-              {summary.totalItems} insumos
+              {summary.items.length} insumos
             </p>
+            {finishedProducts.length > 0 && (
+              <p className="text-xs text-muted-foreground font-medium">
+                + {finishedProducts.length} ítems de reventa
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -337,16 +342,19 @@ export function VistaInventario({
               />
             </div>
             <p className="text-xs text-muted-foreground hidden sm:block">
-              Mostrando {insumosFiltrados.length} de {summary.totalItems} insumos
+              Mostrando {insumosFiltrados.length} de {summary.items.length} insumos de materia prima
             </p>
           </div>
 
           {insumosFiltrados.length === 0 ? (
             <Card className="py-12 text-center border-dashed">
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 max-w-md mx-auto">
                 <Boxes className="size-8 mx-auto text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground text-sm font-medium">No se encontraron insumos de inventario.</p>
-                <Button size="sm" onClick={() => setOpenInsumoModal(true)}>
+                <p className="text-foreground text-sm font-semibold">No se encontraron insumos de materia prima.</p>
+                <p className="text-muted-foreground text-xs">
+                  Los insumos son los ingredientes que se descuentan automáticamente al vender platos con receta (escandallos).
+                </p>
+                <Button size="sm" onClick={() => setOpenInsumoModal(true)} className="bg-brand text-brand-foreground hover:bg-brand/90 font-bold">
                   <Plus className="size-4 mr-1.5" />
                   Cargar Primer Insumo
                 </Button>

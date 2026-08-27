@@ -1855,6 +1855,7 @@ export function ModuloPosInteractive({
         producto={productoAElegir}
         abierto={productoAElegir !== null}
         onCerrar={() => setProductoAElegir(null)}
+        permitirVentaSinStock={settings.permitirVentaSinStock}
         onConfirmar={({ opcionIds, quantity, notes }) => {
           if (!productoAElegir) return;
 

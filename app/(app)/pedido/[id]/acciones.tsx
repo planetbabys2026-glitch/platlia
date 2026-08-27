@@ -110,9 +110,14 @@ export function NotaRenglon({ itemId, notes }: { itemId: string; notes: string |
         aria-label="Nota del renglón"
         maxLength={200}
         className="h-7 flex-1 text-xs rounded-lg bg-muted/30"
+        onBlur={(e) => {
+          if (e.target.value !== (notes ?? "")) {
+            e.target.form?.requestSubmit();
+          }
+        }}
       />
       <Enviar variant="ghost" size="sm" className="h-7 shrink-0 text-xs px-2" isPending={isPending}>
-        {notes ? "Guardar" : "Nota"}
+        {isPending ? "Guardando…" : notes ? "Guardado" : "Nota"}
       </Enviar>
       {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
     </form>

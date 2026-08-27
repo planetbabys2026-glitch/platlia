@@ -144,9 +144,10 @@ export function construirNavegacion({
   const operacion: ItemNav[] = [
     ...(puedeVer("salon_pos")
       ? [
-          usaMesas
-            ? { titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }
-            : { titulo: "POS", href: "/pos", icono: Calculator, enBarraInferior: true },
+          ...(usaMesas
+            ? [{ titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }]
+            : []),
+          { titulo: "Venta Rápida", href: "/venta-rapida", icono: Calculator, enBarraInferior: !usaMesas },
         ]
       : []),
     ...(usaCocina && puedeVer("cocina")

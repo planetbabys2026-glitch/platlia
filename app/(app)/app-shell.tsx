@@ -19,6 +19,7 @@ import { salir } from "@/features/auth/actions";
 import { Campana } from "@/features/avisos/campana";
 import { Insignia } from "@/features/avisos/insignia";
 import { ProveedorAvisos, useAvisos } from "@/features/avisos/proveedor";
+import { BotonEstadoPreparaciones } from "@/features/cocina/components/panel-estado-preparaciones";
 import { cn } from "@/lib/utils";
 import {
   construirNavegacion,
@@ -27,6 +28,37 @@ import {
   itemsDeBarraInferior,
   type ItemNav,
 } from "./navegacion";
+
+function InsigniaRol({ role }: { role?: string | null }) {
+  if (!role) return null;
+
+  const r = role.toUpperCase();
+  let label = role;
+  let estilo = "bg-muted text-muted-foreground border-muted-foreground/30";
+
+  if (r === "PROPIETARIO") {
+    label = "Propietario";
+    estilo = "bg-purple-500/15 text-purple-400 border-purple-500/30";
+  } else if (r === "ADMINISTRADOR") {
+    label = "Administrador";
+    estilo = "bg-blue-500/15 text-blue-400 border-blue-500/30";
+  } else if (r === "CAJERO") {
+    label = "Cajero";
+    estilo = "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+  } else if (r === "MESERO") {
+    label = "Mesero";
+    estilo = "bg-amber-500/15 text-amber-400 border-amber-500/30";
+  } else if (r === "COCINA" || r === "COCINERO") {
+    label = "Cocina";
+    estilo = "bg-rose-500/15 text-rose-400 border-rose-500/30";
+  }
+
+  return (
+    <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider border leading-none", estilo)}>
+      {label}
+    </span>
+  );
+}
 
 type AppShellProps = {
   user: { name: string; email?: string } | null;
@@ -425,6 +457,9 @@ function Shell({
     </div>
   );
 
+  const logoHref = role?.toUpperCase() === "COCINA" ? "/cocina" : "/panel";
+  const esCocina = role?.toUpperCase() === "COCINA";
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {/* ─────────────────────────────────────────────────────────────
@@ -455,9 +490,9 @@ function Shell({
           )}
         >
           <Link
-            href="/panel"
+            href={logoHref}
             className="flex items-center gap-2 overflow-hidden rounded-lg p-1 focus:outline-none focus:ring-2 focus:ring-brand"
-            title={collapsed ? "Ir al panel" : undefined}
+            title={collapsed ? "Ir al inicio" : undefined}
           >
             {collapsed ? <Isotipo className="h-7 w-auto shrink-0" /> : <Logotipo size="sm" />}
           </Link>
@@ -553,14 +588,23 @@ function Shell({
           >
             {user && !collapsed && (
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[var(--linea-30)] bg-[var(--panel-3)] font-mono text-xs font-bold uppercase text-foreground">
+                <div
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[var(--linea-30)] bg-[var(--panel-3)] font-mono text-xs font-bold uppercase text-foreground"
+                  title={`${user.name} (${role || ""})`}
+                >
                   {user.name.slice(0, 2)}
                 </div>
-                <p className="truncate text-xs font-semibold text-foreground">{user.name}</p>
+                <div className="flex flex-col min-w-0 leading-tight space-y-0.5">
+                  <p className="truncate text-xs font-semibold text-foreground">{user.name}</p>
+                  <div>
+                    <InsigniaRol role={role} />
+                  </div>
+                </div>
               </div>
             )}
 
             <div className={cn("flex gap-1", collapsed ? "flex-col items-center" : "items-center")}>
+              {!esCocina && <BotonEstadoPreparaciones size="icon-sm" variant="ghost" />}
               <Campana />
               {collapsed && (
                 <Button
@@ -613,12 +657,13 @@ function Shell({
 
             {/* `min-h-11` en el enlace del logo: es un destino más del menú y en el
                 teléfono se toca con el pulgar como cualquier otro. */}
-            <Link href="/panel" className="flex min-h-11 items-center">
+            <Link href={logoHref} className="flex min-h-11 items-center">
               <Logotipo size="sm" />
             </Link>
           </div>
 
           <div className="flex items-center gap-1.5">
+            {!esCocina && <BotonEstadoPreparaciones size="icon-sm" variant="ghost" />}
             <Campana />
             <Button
               asChild
@@ -718,8 +763,11 @@ function Shell({
                     <div className="flex size-10 items-center justify-center rounded-full border border-[var(--linea-30)] bg-[var(--panel-3)] text-sm font-bold uppercase text-foreground">
                       {user.name.slice(0, 2)}
                     </div>
-                    <div className="truncate text-xs">
-                      <p className="truncate font-semibold text-foreground">{user.name}</p>
+                    <div className="truncate text-xs space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-semibold text-foreground">{user.name}</p>
+                        <InsigniaRol role={role} />
+                      </div>
                       {businessName && (
                         <p className="truncate text-muted-foreground">{businessName}</p>
                       )}
