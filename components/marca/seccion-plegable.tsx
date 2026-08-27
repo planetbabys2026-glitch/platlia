@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,14 @@ import { cn } from "@/lib/utils";
  * `prefers-reduced-motion` la apaga —está en `globals.css`—, y el contenido
  * plegado se saca del árbol de accesibilidad con `hidden`, para que un lector de
  * pantalla no lea seis categorías cerradas de corrido.
+ *
+ * **El recorte dura lo que dura la animación, y ni un instante más.** El
+ * `overflow-hidden` es obligatorio para que `0fr` de verdad esconda algo, pero
+ * mientras está puesto recorta todo lo que un hijo saque de la caja: el
+ * `hover:scale` de las tarjetas de producto se ve rebanado en la primera y la
+ * última columna, y la insignia de cantidad —que va en `-top-2 -right-2`— queda
+ * cortada por la mitad en la fila de arriba. Por eso, con la sección abierta y la
+ * animación terminada, el desborde vuelve a ser visible.
  */
 export function SeccionPlegable({
   titulo,
@@ -33,7 +41,30 @@ export function SeccionPlegable({
   className?: string;
 }) {
   const [abierta, setAbierta] = useState(abiertaPorDefecto);
+  /**
+   * Si el contenido puede salirse de la caja ahora mismo.
+   *
+   * Va por estado y no por CSS porque las dos transiciones son asimétricas: al
+   * abrir hay que esperar a que la animación termine —si no, el contenido se
+   * derrama fuera de una fila que todavía mide cero—, y al cerrar hay que recortar
+   * ANTES de que arranque, o el primer cuadro muestra la categoría entera
+   * desbordada sobre la de abajo.
+   */
+  const [desbordeVisible, setDesbordeVisible] = useState(abiertaPorDefecto);
   const idContenido = useId();
+
+  useEffect(() => {
+    if (!abierta) {
+      setDesbordeVisible(false);
+      return;
+    }
+    // Un temporizador y no `transitionend`: con `prefers-reduced-motion` la
+    // transición no existe y ese evento no llega nunca, así que el desborde se
+    // quedaría recortado para siempre justo en el equipo de quien pidió menos
+    // movimiento. El margen sobre los 300ms es para el cuadro de cierre.
+    const t = setTimeout(() => setDesbordeVisible(true), 350);
+    return () => clearTimeout(t);
+  }, [abierta]);
 
   return (
     <section className={cn("space-y-3", className)}>
@@ -81,7 +112,7 @@ export function SeccionPlegable({
       >
         {/* `min-h-0` es lo que deja que la fila del grid llegue a 0fr: sin eso el
             hijo impone su altura mínima y no se pliega nada. */}
-        <div className="min-h-0 overflow-hidden">
+        <div className={cn("min-h-0", desbordeVisible ? "overflow-visible" : "overflow-hidden")}>
           <div className="pb-1">{children}</div>
         </div>
       </div>
