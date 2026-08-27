@@ -248,7 +248,7 @@ function Boton({
       {typeof disponibles === "number" && (
         <span
           className={cn(
-            "text-rotulo mt-0.5 w-fit rounded-md border px-1.5 py-0.5 font-bold",
+            "text-rotulo mt-0.5 w-fit rounded-xl border px-1.5 py-0.5 font-bold",
             agotadoPorStock
               ? "bg-destructive/10 text-destructive-soft border-destructive/30"
               : pocas

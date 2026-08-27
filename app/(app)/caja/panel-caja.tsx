@@ -143,7 +143,7 @@ export function PanelCaja({
             /* Sin turno abierto */
             <div className="mx-auto max-w-md space-y-6">
               <div className="space-y-1">
-                <h2 className="text-2xl font-bold tracking-tight">Cierre y Apertura de Caja</h2>
+                <h2 className="rotulo-seccion">Apertura del turno</h2>
                 <p className="text-muted-foreground text-xs">
                   No hay ningún turno de caja abierto. Abrí la caja para poder operar.
                 </p>
@@ -152,7 +152,7 @@ export function PanelCaja({
               {ultimoCierre && (
                 <Card className="shadow-sm">
                   <CardContent className="space-y-2 pt-5">
-                    <h3 className="font-semibold text-sm">Último Cierre de Caja</h3>
+                    <h3 className="rotulo-seccion">Último cierre</h3>
                     <p className="text-muted-foreground text-xs">
                       Turno {ultimoCierre.code} · cerró {ultimoCierre.closedBy?.name ?? "—"}
                       {ultimoCierre.closedAt &&
@@ -182,7 +182,7 @@ export function PanelCaja({
 
               <Card className="shadow-sm border-brand/40">
                 <CardContent className="pt-5">
-                  <h3 className="font-bold text-base mb-4">Abrir Nuevo Turno de Caja</h3>
+                  <h3 className="rotulo-seccion mb-4">Abrir turno</h3>
                   <AbrirCaja />
                 </CardContent>
               </Card>
@@ -195,7 +195,7 @@ export function PanelCaja({
                   <>
                     <Card className="shadow-sm">
                       <CardContent className="space-y-3 pt-5">
-                        <h3 className="font-bold text-base">Arqueo Esperado de Efectivo</h3>
+                        <h3 className="rotulo-seccion">Arqueo esperado</h3>
                         <dl className="space-y-1 text-xs">
                           <Fila termino="Base inicial del turno" valor={resumen.openingFloatCop} />
                           <Fila termino="Ventas cobradas en efectivo" valor={resumen.efectivoVentasCop} />
@@ -214,7 +214,7 @@ export function PanelCaja({
                     {resumen.porMetodo.length > 0 && (
                       <Card className="shadow-sm">
                         <CardContent className="space-y-3 pt-5">
-                          <h3 className="font-semibold text-sm">Total de Cobros por Método</h3>
+                          <h3 className="rotulo-seccion">Cobros por método</h3>
                           <ul className="divide-border divide-y text-xs">
                             {resumen.porMetodo.map((metodo) => (
                               <li
@@ -241,7 +241,7 @@ export function PanelCaja({
                 <Card className="shadow-sm">
                   <CardContent className="space-y-4 pt-5">
                     <div className="space-y-1">
-                      <h3 className="font-bold text-base">Registrar Entrada / Salida de Dinero</h3>
+                      <h3 className="rotulo-seccion">Entradas y salidas de dinero</h3>
                       <p className="text-xs text-muted-foreground">
                         Ingresos extras, pagos a proveedores, gastos menores o retiros parciales de caja.
                       </p>
@@ -279,7 +279,7 @@ export function PanelCaja({
                 <aside className="lg:sticky lg:top-20 lg:self-start">
                   <Card className="shadow-md border-destructive/20">
                     <CardContent className="space-y-3 pt-5">
-                      <h3 className="font-bold text-base text-destructive">Cierre de Turno de Caja</h3>
+                      <h3 className="rotulo-seccion text-destructive-soft">Cerrar turno</h3>
                       <p className="text-xs text-muted-foreground">
                         Ingresá el dinero físico contado en el cajón para calcular arqueo y cerrar el turno.
                       </p>

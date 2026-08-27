@@ -16,7 +16,6 @@ import {
   Plus,
   Printer,
   ReceiptText,
-  ScanLine,
   Search,
   ShoppingBag,
   ShoppingCart,
@@ -52,7 +51,9 @@ import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consu
 import { claveDeLinea } from "@/lib/modificadores";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
+import { formatTurno } from "@/lib/turns";
 import { computeSuggestedTip } from "@/lib/tax";
+import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { cn } from "@/lib/utils";
 
@@ -62,8 +63,6 @@ export type PosProducto = ProductoConModificadores & {
   priceCop: number;
   isAvailable: boolean;
   imageUrl: string | null;
-  /** El código de barras del producto, para el lector del mostrador. */
-  sku?: string | null;
   trackStock?: boolean;
   stockQty?: number;
   /**
@@ -262,6 +261,61 @@ function precioUnitario(item: CartItem): number {
   return item.priceCop + item.recargoCop;
 }
 
+/**
+ * Un campo del panel de venta.
+ *
+ * Existe para que los tres —nombre, celular, dirección— no puedan verse
+ * distintos. Antes cada uno traía su propia altura, su propio tamaño de etiqueta
+ * y su propia manera de decir "obligatorio", y con Domicilio elegido el formulario
+ * se partía en dos mitades que no se parecían.
+ *
+ * El campo NO pisa el fondo del `Input` del sistema: `--input-bg` es el pozo que
+ * el manual pide para que un campo se vea más hundido que el panel que lo
+ * contiene. Poniéndole `bg-background` quedaba al ras y dejaba de leerse como
+ * algo donde se escribe.
+ */
+function CampoPedido({
+  id,
+  etiqueta,
+  obligatorio,
+  value,
+  onChange,
+  placeholder,
+  invalido,
+  inputMode,
+}: {
+  id: string;
+  etiqueta: string;
+  obligatorio?: boolean;
+  value: string;
+  onChange: (valor: string) => void;
+  placeholder?: string;
+  invalido?: boolean;
+  inputMode?: React.ComponentProps<typeof Input>["inputMode"];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="flex items-center justify-between text-xs font-medium">
+        <span>{etiqueta}</span>
+        {obligatorio && (
+          <span className="font-mono text-rotulo font-bold uppercase tracking-wider text-muted-foreground">
+            Obligatorio
+          </span>
+        )}
+      </Label>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        aria-invalid={invalido || undefined}
+        className="h-10 rounded-xl text-sm"
+      />
+    </div>
+  );
+}
+
 export function ModuloPosInteractive({
   carta,
   caja,
@@ -278,16 +332,6 @@ export function ModuloPosInteractive({
 
   // ── Estado de catálogo y búsqueda ──────────────────────────────────────────
   const [busqueda, setBusqueda] = useState("");
-  /**
-   * El lector de código de barras.
-   *
-   * Un lector de mostrador se comporta como un teclado que escribe rápido y
-   * termina con Enter, así que no hace falta ninguna API de cámara: alcanza con un
-   * campo enfocado y un `submit`. Venía del módulo de Venta Rápida, que era lo
-   * único que esa pantalla tenía y esta no.
-   */
-  const [codigoLeido, setCodigoLeido] = useState("");
-  const [modalEscanerAbierto, setModalEscanerAbierto] = useState(false);
 
   // ── Estado del Pedido Activo / Parqueado ───────────────────────────────────
   const [activeOrderId, setActiveOrderId] = useState<string | null>(pedidoInicial?.id ?? null);
@@ -592,46 +636,6 @@ export function ModuloPosInteractive({
     agregarCombinacion(producto, [], 1, "");
   };
 
-  /** Lo mismo que un toque, pero pasando por el modal si hay algo que elegir. */
-  const tocarProducto = (producto: PosProducto) => {
-    if (tieneModificadores(producto)) setProductoAElegir(producto);
-    else agregarAlCarrito(producto);
-  };
-
-  /**
-   * Un código leído (o tecleado) se resuelve contra SKU, id o nombre exacto.
-   *
-   * Exacto primero y por subcadena después: un SKU es único, un nombre no, y
-   * agregar "Cerveza" cuando hay cuatro sería agregar la que salga. La subcadena
-   * queda como última chance para quien escribe a mano.
-   */
-  const procesarCodigoDeBarras = (codigo: string) => {
-    const query = codigo.trim().toLowerCase();
-    if (!query) return;
-
-    const todos = carta.flatMap((c) => c.products);
-    const exacto = todos.find(
-      (prod) =>
-        (prod.sku && prod.sku.toLowerCase() === query) ||
-        prod.id.toLowerCase() === query ||
-        prod.name.toLowerCase() === query,
-    );
-    const encontrado = exacto ?? todos.find((prod) => prod.name.toLowerCase().includes(query));
-
-    if (!encontrado) {
-      setErrorGlobal(`No se encontró ningún producto con el código o nombre "${codigo}".`);
-      return;
-    }
-    if (!encontrado.isAvailable) {
-      setErrorGlobal(`${encontrado.name} está marcado como no disponible en la carta.`);
-      return;
-    }
-
-    tocarProducto(encontrado);
-    setCodigoLeido("");
-    setErrorGlobal(null);
-  };
-
   const cambiarCantidadCart = (lineKey: string, delta: number) => {
     const item = cart.find((i) => i.lineKey === lineKey);
 
@@ -856,12 +860,9 @@ export function ModuloPosInteractive({
 
   const categoriasFiltradas = carta
     .map((cat) => {
-      const productosFiltrados = cat.products.filter((p) => {
-        if (!q) return true;
-        // También por SKU: quien tiene el producto en la mano lee el código, no
-        // el nombre.
-        return p.name.toLowerCase().includes(q) || Boolean(p.sku?.toLowerCase().includes(q));
-      });
+      const productosFiltrados = cat.products.filter(
+        (p) => !q || p.name.toLowerCase().includes(q),
+      );
 
       if (productosFiltrados.length === 0) return null;
 
@@ -923,30 +924,23 @@ export function ModuloPosInteractive({
       ) : (
         /* ── INTERFAZ POS COMPLETA DUAL PANE ────────────────────────────────── */
         <div className="space-y-4">
-          {/* Header Superior del POS */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5 rounded-2xl border border-border shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="size-9 rounded-xl bg-brand/10 text-brand flex items-center justify-center font-bold">
-                <ShoppingBag className="size-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-base font-bold tracking-tight text-foreground">
-                    {usaMesas ? "Pedido sin mesa" : "Punto de Venta Mostrador"}
-                  </h1>
-                  {activeOrderId && (
-                    <Badge variant="outline" className="font-mono text-rotulo font-bold">
-                      Pedido #{orderCode}{turnNumber !== null ? ` · Turno 0${turnNumber}` : ""}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-rotulo text-muted-foreground">
-                  Venta rápida para llevar, en sitio o a domicilio.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
+          {/* El encabezado del sistema, el mismo del salón y de todas las demás.
+              Acá era una tarjeta aparte: un recuadro con su borde, un mosaico de
+              icono y un `h1` de 17px en la tipografía de cuerpo. Se leía como un
+              widget metido arriba de la pantalla en vez de como el título de la
+              pantalla, y no se parecía a ninguna otra. El `h1` no se escribe a
+              mano, justamente para que esto no vuelva a pasar. */}
+          <EncabezadoPantalla
+            titulo={usaMesas ? "Pedido sin mesa" : "Punto de venta"}
+            descripcion="Venta rápida para llevar, en sitio o a domicilio."
+            acciones={
+              <>
+                {activeOrderId && (
+                  <Badge variant="outline" className="font-mono text-rotulo font-bold">
+                    Pedido #{orderCode}
+                    {turnNumber !== null ? ` · Turno ${formatTurno(turnNumber)}` : ""}
+                  </Badge>
+                )}
               {activeOrderId ? (
                 <Button
                   type="button"
@@ -991,13 +985,14 @@ export function ModuloPosInteractive({
                 <PauseCircle className="size-3.5 text-muted-foreground" />
                 <span>En espera</span>
                 {enEspera.length > 0 && (
-                  <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
+                  <Badge className="h-4 min-w-4 rounded-full bg-warning px-1.5 py-0 text-rotulo text-warning-foreground">
                     {enEspera.length}
                   </Badge>
                 )}
               </Button>
-            </div>
-          </div>
+              </>
+            }
+          />
 
           {/* Banner de Éxito Temporal */}
           {mensajeExito && (
@@ -1055,7 +1050,7 @@ export function ModuloPosInteractive({
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
                     placeholder="Buscar producto por nombre o ingrediente..."
-                    className="h-10 pl-10 pr-10 text-xs rounded-xl bg-card border-border"
+                    className="h-10 rounded-xl pl-10 pr-10 text-sm"
                   />
                   {busqueda && (
                     <button
@@ -1068,61 +1063,26 @@ export function ModuloPosInteractive({
                   )}
                 </div>
 
-                {/* El lector de barras es su propio formulario: termina en Enter y
-                    no puede arrastrar al resto de la pantalla al enviarse. */}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    procesarCodigoDeBarras(codigoLeido);
-                  }}
-                  className="hidden sm:block w-44"
-                >
-                  <label htmlFor="codigoBarras" className="sr-only">
-                    Código de barras
-                  </label>
-                  <Input
-                    id="codigoBarras"
-                    value={codigoLeido}
-                    onChange={(e) => setCodigoLeido(e.target.value)}
-                    placeholder="Código + Enter"
-                    className="h-10 text-xs rounded-xl bg-card border-border font-mono"
-                  />
-                </form>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setModalEscanerAbierto(true)}
-                  className="h-10 rounded-xl border-border bg-card text-xs font-bold gap-1.5 px-3"
-                >
-                  <ScanLine className="size-4 text-brand" />
-                  <span className="hidden sm:inline">Escanear</span>
-                </Button>
-
-                {/* Pill Modesto de Alertas de Stock (solo visible si el inventario está activado) */}
-                {settings.inventoryEnabled && (
+                {/* Solo aparece cuando hay algo que mirar.
+                    Antes estaba siempre, y con el inventario sano decía "Stock OK"
+                    en un botón que no lleva a ninguna decisión: un control
+                    permanente para informar que no pasa nada. Y cuando sí pasaba,
+                    la cantidad salía dos veces —en el texto y en una insignia al
+                    lado—, con esa insignia rellena de `warning` y el texto en
+                    `text-white`, que no es un color de la marca. */}
+                {settings.inventoryEnabled && alertasStockPos.length > 0 && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => setModalAlertasStockAbierto(true)}
-                    className={cn(
-                      "h-10 text-xs font-bold rounded-xl gap-1.5 shrink-0 transition-all",
-                      alertasStockPos.length > 0
-                        ? "border-warning/40 bg-warning/10 text-warning-soft hover:bg-warning/20"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    )}
+                    className="h-10 shrink-0 gap-1.5 rounded-xl border-warning/40 bg-warning/10 text-xs font-bold text-warning-soft hover:bg-warning/20"
                   >
-                    <AlertTriangle className="size-4 text-warning-soft" />
+                    <AlertTriangle className="size-4" />
+                    <span className="numeral">{alertasStockPos.length}</span>
                     <span className="hidden sm:inline">
-                      {alertasStockPos.length > 0 ? `${alertasStockPos.length} Stock Crítico` : "Stock OK"}
+                      {alertasStockPos.length === 1 ? "insumo por acabarse" : "insumos por acabarse"}
                     </span>
-                    {alertasStockPos.length > 0 && (
-                      <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
-                        {alertasStockPos.length}
-                      </Badge>
-                    )}
                   </Button>
                 )}
               </div>
@@ -1232,27 +1192,32 @@ export function ModuloPosInteractive({
                                   const esBajoStock = disp > 0 && disp <= 5;
                                   const tieneReceta = Boolean(prod.recipeItems && prod.recipeItems.length > 0);
 
+                                  // El mismo texto que la carta del salón: es el
+                                  // mismo dato y la misma persona lo mira en las
+                                  // dos pantallas. Y corto a propósito —"Sin
+                                  // insumos (0 disp.)" no entraba en una tarjeta
+                                  // de 150px y se salía por el costado, porque el
+                                  // `truncate` no puede recortar dentro de un
+                                  // contenedor `w-fit`, que crece con el texto.
                                   return (
                                     <div
                                       className={cn(
-                                        "inline-flex items-center gap-1 text-rotulo font-bold px-1.5 py-0.5 rounded-md border w-fit mt-1",
+                                        "inline-flex max-w-full items-center gap-1 rounded-xl border px-1.5 py-0.5 text-rotulo font-bold",
                                         esSinStock
-                                          ? "bg-destructive/10 text-destructive-soft border-destructive/30"
+                                          ? "border-destructive/30 bg-destructive/10 text-destructive-soft"
                                           : esBajoStock
-                                          ? "bg-warning/10 text-warning-soft border-warning/30"
-                                          : "bg-success/10 text-success-soft border-success/30"
+                                            ? "border-warning/30 bg-warning/10 text-warning-soft"
+                                            : "border-success/30 bg-success/10 text-success-soft",
                                       )}
                                       title={
                                         tieneReceta
-                                          ? `Calculado según los insumos de la receta: ${disp} porciones preparables`
+                                          ? `Según los insumos de la receta: ${disp} porciones preparables`
                                           : `Stock directo: ${disp} unidades disponibles`
                                       }
                                     >
                                       <Box className="size-3 shrink-0" />
                                       <span className="truncate">
-                                        {esSinStock
-                                          ? "Sin insumos (0 disp.)"
-                                          : `${disp} porción${disp === 1 ? "" : "es"} disp.`}
+                                        {esSinStock ? "Sin stock" : `${disp} disp.`}
                                       </span>
                                     </div>
                                   );
@@ -1307,7 +1272,7 @@ export function ModuloPosInteractive({
                       variant="ghost"
                       size="sm"
                       onClick={vaciarCarrito}
-                      className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2 rounded-lg"
+                      className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2 rounded-xl"
                     >
                       <Trash2 className="size-3.5 mr-1" /> Vaciar
                     </Button>
@@ -1325,7 +1290,7 @@ export function ModuloPosInteractive({
                         type="button"
                         onClick={() => setTipoConsumo("LLEVAR")}
                         className={cn(
-                          "min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                          "min-h-9 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                           tipoConsumo === "LLEVAR"
                             ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
                             : "text-muted-foreground hover:text-foreground"
@@ -1337,7 +1302,7 @@ export function ModuloPosInteractive({
                         type="button"
                         onClick={() => setTipoConsumo("EN_SITIO")}
                         className={cn(
-                          "min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                          "min-h-9 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                           tipoConsumo === "EN_SITIO"
                             ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
                             : "text-muted-foreground hover:text-foreground"
@@ -1350,7 +1315,7 @@ export function ModuloPosInteractive({
                           type="button"
                           onClick={() => setTipoConsumo("DOMICILIO")}
                           className={cn(
-                            "min-h-9 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                            "min-h-9 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                             tipoConsumo === "DOMICILIO"
                               ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
                               : "text-muted-foreground hover:text-foreground"
@@ -1362,63 +1327,48 @@ export function ModuloPosInteractive({
                     </div>
                   </div>
 
-                  {/* Datos del Cliente */}
-                  <div className="space-y-2.5 pt-1">
-                    <div className="space-y-1">
-                      <Label htmlFor="customerName" className="text-xs font-medium flex items-center justify-between">
-                        <span>Nombre del cliente</span>
-                        <span className="text-rotulo font-semibold text-muted-foreground">Obligatorio</span>
-                      </Label>
-                      <Input
-                        id="customerName"
-                        value={customerName}
-                        onChange={(e) => {
-                          setCustomerName(e.target.value);
-                          if (errorGlobal && e.target.value.trim()) setErrorGlobal(null);
-                        }}
-                        placeholder="Ej. Carlos o Mostrador"
-                        className={cn(
-                          "h-9 text-xs rounded-xl transition-all",
-                          cart.length > 0 && !customerName.trim() && errorGlobal
-                            ? "border-destructive ring-1 ring-destructive/30 bg-destructive/5 font-semibold text-foreground"
-                            : "bg-background border-input"
-                        )}
-                      />
-                    </div>
+                  {/* Datos del cliente.
+                      Los tres campos son hermanos y se ven iguales. Los de
+                      domicilio vivían adentro de una caja teñida con su propio
+                      título, etiquetas más chicas, campos más bajos y un asterisco
+                      donde el de arriba usa una píldora: cinco diferencias para
+                      dos campos que son del mismo formulario. Que aparezcan solo
+                      al elegir Domicilio ya dice que son de la entrega; no hace
+                      falta además encerrarlos. */}
+                  <div className="space-y-3 pt-1">
+                    <CampoPedido
+                      id="customerName"
+                      etiqueta="Nombre del cliente"
+                      obligatorio
+                      value={customerName}
+                      onChange={(v) => {
+                        setCustomerName(v);
+                        if (errorGlobal && v.trim()) setErrorGlobal(null);
+                      }}
+                      placeholder="Ej. Carlos o Mostrador"
+                      invalido={cart.length > 0 && !customerName.trim() && Boolean(errorGlobal)}
+                    />
 
-                    {/* Campos obligatorios si es Domicilio */}
                     {tipoConsumo === "DOMICILIO" && (
-                      <div className="space-y-2 p-3 rounded-xl bg-brand/5 border border-brand/20">
-                        <span className="text-xs font-bold text-brand flex items-center gap-1.5">
-                          <Bike className="size-3.5" /> Datos de entrega
-                        </span>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="customerPhone" className="text-rotulo font-semibold">
-                            Celular / Teléfono *
-                          </Label>
-                          <Input
-                            id="customerPhone"
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(e.target.value)}
-                            placeholder="Ej. 3001234567"
-                            className="h-8 text-xs rounded-xl bg-background"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="deliveryAddress" className="text-rotulo font-semibold">
-                            Dirección de Entrega *
-                          </Label>
-                          <Input
-                            id="deliveryAddress"
-                            value={deliveryAddress}
-                            onChange={(e) => setDeliveryAddress(e.target.value)}
-                            placeholder="Ej. Calle 45 # 12-34 Apto 201"
-                            className="h-8 text-xs rounded-xl bg-background"
-                            required
-                          />
-                        </div>
-                      </div>
+                      <>
+                        <CampoPedido
+                          id="customerPhone"
+                          etiqueta="Celular"
+                          obligatorio
+                          value={customerPhone}
+                          onChange={setCustomerPhone}
+                          placeholder="Ej. 3001234567"
+                          inputMode="tel"
+                        />
+                        <CampoPedido
+                          id="deliveryAddress"
+                          etiqueta="Dirección de entrega"
+                          obligatorio
+                          value={deliveryAddress}
+                          onChange={setDeliveryAddress}
+                          placeholder="Ej. Calle 45 # 12-34, apto 201"
+                        />
+                      </>
                     )}
 
                     {/* Notas generales del pedido */}
@@ -1525,7 +1475,7 @@ export function ModuloPosInteractive({
                                 <button
                                   type="button"
                                   onClick={() => cambiarCantidadCart(item.lineKey, -1)}
-                                  className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground transition-colors"
+                                  className="flex size-7 items-center justify-center rounded-xl border border-border bg-[var(--panel-2)] text-foreground transition-colors hover:bg-[var(--panel-3)]"
                                 >
                                   <Minus className="size-3" />
                                 </button>
@@ -1535,7 +1485,7 @@ export function ModuloPosInteractive({
                                 <button
                                   type="button"
                                   onClick={() => cambiarCantidadCart(item.lineKey, 1)}
-                                  className="size-6 rounded-lg bg-background border border-border flex items-center justify-center hover:bg-muted text-foreground transition-colors"
+                                  className="flex size-7 items-center justify-center rounded-xl border border-border bg-[var(--panel-2)] text-foreground transition-colors hover:bg-[var(--panel-3)]"
                                 >
                                   <Plus className="size-3" />
                                 </button>
@@ -1546,7 +1496,7 @@ export function ModuloPosInteractive({
                                   value={item.notes}
                                   onChange={(e) => actualizarNotaItem(item.lineKey, e.target.value)}
                                   placeholder="Nota..."
-                                  className="h-6 text-rotulo w-28 rounded-lg px-1.5"
+                                  className="h-7 w-28 rounded-xl px-2 text-xs"
                                 />
                                 <button
                                   type="button"
@@ -1723,69 +1673,6 @@ export function ModuloPosInteractive({
             </div>
           </div>
 
-          {/* ── LECTOR DE CÓDIGO DE BARRAS ───────────────────────────────────── */}
-          {modalEscanerAbierto && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-              <Card className="w-full max-w-md rounded-2xl border-border p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between border-b border-border pb-3">
-                  <div className="flex items-center gap-2">
-                    <ScanLine className="size-5 text-brand" />
-                    <h3 className="font-bold text-base text-foreground">Código de barras</h3>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="tap-libre size-8 p-0"
-                    aria-label="Cerrar"
-                    onClick={() => setModalEscanerAbierto(false)}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-
-                <div className="space-y-3 py-2 text-center">
-                  <div className="size-20 mx-auto rounded-2xl bg-brand/10 text-brand flex items-center justify-center">
-                    <ScanLine className="size-10" />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Pasá el producto por el lector, o escribí su código o SKU.
-                  </p>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const campo = e.currentTarget.elements.namedItem(
-                        "codigoModal",
-                      ) as HTMLInputElement | null;
-                      if (campo?.value) {
-                        procesarCodigoDeBarras(campo.value);
-                        setModalEscanerAbierto(false);
-                      }
-                    }}
-                    className="space-y-3 pt-1 text-left"
-                  >
-                    <label htmlFor="codigoModal" className="sr-only">
-                      Código o SKU del producto
-                    </label>
-                    <Input
-                      id="codigoModal"
-                      name="codigoModal"
-                      autoFocus
-                      placeholder="Escaneá o escribí el código + Enter"
-                      className="h-11 rounded-xl text-sm font-mono"
-                    />
-                    <Button
-                      type="submit"
-                      className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold rounded-xl h-11 text-xs"
-                    >
-                      Agregar al pedido
-                    </Button>
-                  </form>
-                </div>
-              </Card>
-            </div>
-          )}
-
           {/* ── ENVIAR A CAJA: la propina se elige acá, no en la caja ─────────── */}
           {modalCajaAbierto && (
             <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1907,7 +1794,7 @@ export function ModuloPosInteractive({
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       placeholder="Ej. Carlos / Cliente Mostrador"
-                      className="h-8 text-xs rounded-lg bg-background"
+                      className="h-9 rounded-xl text-sm"
                       required
                     />
                   </div>
@@ -1970,7 +1857,7 @@ export function ModuloPosInteractive({
                             key={b.label}
                             type="button"
                             onClick={() => setMontoRecibido(b.val.toString())}
-                            className="px-2.5 py-1 rounded-lg bg-background border border-border text-rotulo font-bold hover:bg-brand hover:text-brand-foreground transition-colors"
+                            className="rounded-xl border border-border bg-[var(--panel-2)] px-2.5 py-1 text-rotulo font-bold transition-colors hover:bg-brand hover:text-brand-foreground"
                           >
                             {b.label}
                           </button>
@@ -2168,8 +2055,8 @@ export function ModuloPosInteractive({
                               className={cn(
                                 "text-rotulo font-bold shrink-0",
                                 a.nivel === "CRITICO"
-                                  ? "bg-destructive text-white"
-                                  : "bg-warning text-white"
+                                  ? "bg-destructive text-destructive-foreground"
+                                  : "bg-warning text-warning-foreground"
                               )}
                             >
                               {a.nivel}

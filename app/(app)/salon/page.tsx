@@ -9,6 +9,7 @@ import { ListaSinMesa } from "@/features/pedidos/components/lista-sin-mesa";
 import { getPedidosAbiertos } from "@/features/pedidos/queries";
 import { getSalon } from "@/features/salon/queries";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { requireModule } from "@/lib/auth/dal";
 import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { Mesa } from "./tarjeta-mesa";
@@ -47,18 +48,15 @@ export default async function SalonPage() {
 
   return (
     <div className="space-y-8">
-      {/* ─── Header Salón Dark Kitchen-Fire ─── */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-dashed border-border/80 pb-5">
-        <div>
-          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
-            Salón en Vivo
-          </h1>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1.5 font-sans">
-            Plano de mesas en tiempo real · Control de tiempos de consumo y pre-cuentas.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
+      {/* El encabezado del sistema. Estaba copiado a mano —el mismo `h1`, el
+          mismo clamp, el mismo borde punteado—, que es exactamente lo que
+          `EncabezadoPantalla` existe para evitar: cuando el título vive en seis
+          archivos, el séptimo nace distinto. */}
+      <EncabezadoPantalla
+        titulo="Salón en vivo"
+        descripcion="Plano de mesas en tiempo real · Control de tiempos de consumo y pre-cuentas."
+        acciones={
+          <>
           <span className="chip is-hot">
             {mesasOcupadas} {mesasOcupadas === 1 ? "OCUPADA" : "OCUPADAS"}
           </span>
@@ -78,9 +76,10 @@ export default async function SalonPage() {
               ruido en la barra que más se toca del sistema. */}
           {/* Un pedido sin mesa es una venta de mostrador: la abre quien tiene
               el POS. Al mesero le queda el salón, que es lo suyo. */}
-          {puedeVenderSinMesa && <AbrirPedidoSinMesa />}
-        </div>
-      </div>
+            {puedeVenderSinMesa && <AbrirPedidoSinMesa />}
+          </>
+        }
+      />
 
       {!caja && (
         <Alert className="border-brand/40 bg-brand/10 text-brand">

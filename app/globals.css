@@ -453,7 +453,10 @@
     align-items: center;
     gap: 12px;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    /* El paso de la escala, no un 10.5 suelto: era el único tamaño del sistema
+       que no salía de `@theme`, y a la vista no se distingue del rótulo de 11 —
+       solo desalinea. */
+    font-size: var(--text-rotulo);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--muted-foreground);

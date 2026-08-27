@@ -11,6 +11,7 @@ import {
   TOPE_CUENTAS_COBRADAS,
 } from "@/features/caja/queries";
 import { getSettings } from "@/features/negocio/queries";
+import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { requireModule } from "@/lib/auth/dal";
 import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
@@ -82,18 +83,17 @@ export default async function CajaPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">
-            {caja ? `Caja ${caja.code}` : "Caja"}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {caja
-              ? `Abierta por ${caja.openedBy.name} · ${formatDateTimeInTimeZone(caja.openedAt, ctx.business.timeZone)}`
-              : "Control de arqueo, movimientos de efectivo y cobro de cuentas."}
-          </p>
-        </div>
-      </div>
+      {/* El encabezado del sistema, como el salón y el POS: era el `h1` copiado
+          a mano con su propio clamp, y sin la guía punteada que cierra el bloque
+          en todas las demás pantallas. */}
+      <EncabezadoPantalla
+        titulo={caja ? `Caja ${caja.code}` : "Caja"}
+        descripcion={
+          caja
+            ? `Abierta por ${caja.openedBy.name} · ${formatDateTimeInTimeZone(caja.openedAt, ctx.business.timeZone)}`
+            : "Control de arqueo, movimientos de efectivo y cobro de cuentas."
+        }
+      />
 
       <PanelCaja
         caja={caja}

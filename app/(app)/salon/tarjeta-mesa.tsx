@@ -98,7 +98,7 @@ export function Mesa({ mesa }: { mesa: MesaDelSalon }) {
           <span className="numeral text-muted-foreground text-xs">
             {formatCop(mesa.totalCop)}
           </span>
-          <span className="text-muted-foreground text-[0.65rem]">
+          <span className="text-muted-foreground text-rotulo">
             {cuentas > 1 ? `${cuentas} cuentas` : ETIQUETA[mesa.status]}
           </span>
         </Cuadro>
@@ -140,7 +140,7 @@ function BotonAbrir({ mesa, error, isPending }: { mesa: MesaDelSalon; error?: st
         title={error}
         aria-label={`Abrir pedido en la mesa ${mesa.name}`}
       >
-        <span className="text-muted-foreground text-[0.65rem]">
+        <span className="text-muted-foreground text-rotulo">
           {cargando ? "Abriendo…" : (error ?? ETIQUETA[mesa.status])}
         </span>
       </Cuadro>

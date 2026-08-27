@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   Banknote,
   Bike,
@@ -85,6 +85,15 @@ function FormularioCobro({
   // Arranca con lo que ya tuviera el pedido, que normalmente es 0.
   const [propinaCop, setPropinaCop] = useState(cuenta.tipCop);
   const [montoEntregado, setMontoEntregado] = useState("");
+  /**
+   * El paso de verificación antes de cobrar.
+   *
+   * Un cobro mal hecho no se deshace: hay que anular el pedido, devolver plata y
+   * dejarlo escrito en la bitácora. Los tres errores que cuestan son cobrar otro
+   * monto, marcar efectivo como tarjeta y calcular mal la devuelta, así que el
+   * resumen dice exactamente esas tres cosas y nada más.
+   */
+  const [verificando, setVerificando] = useState(false);
   const [estado, accion, isPending] = useActionState(registrarPago, ESTADO_INICIAL);
 
   // La sugerencia va sobre el consumo COMPLETO con impuesto —el número que el
@@ -100,7 +109,21 @@ function FormularioCobro({
     cuenta.totalCop - cuenta.paidCop + (propinaCop - cuenta.tipCop),
   );
 
+  const [montoACobrar, setMontoACobrar] = useState<string>("");
   const numEntregado = parseInt(montoEntregado.replace(/\D/g, "") || "0", 10);
+  const numACobrar = parseInt((montoACobrar || String(faltanteCop)).replace(/\D/g, "") || "0", 10);
+
+  /**
+   * Cualquier cambio cierra la verificación.
+   *
+   * Es lo único que hace que el resumen signifique algo: sin esto se podía
+   * revisar, cambiar el monto o el método con el panel abierto, y confirmar una
+   * cifra que ya no era la del formulario. El paso habría dado seguridad falsa,
+   * que es peor que no tenerlo.
+   */
+  useEffect(() => {
+    setVerificando(false);
+  }, [metodo, montoACobrar, montoEntregado, propinaCop]);
   const cambioDevuelta = metodo === "EFECTIVO" && numEntregado > faltanteCop ? numEntregado - faltanteCop : 0;
 
   const tieneDomicilio = cuenta.type === "DOMICILIO" || (cuenta.deliveryFeeCop != null && cuenta.deliveryFeeCop > 0);
@@ -192,14 +215,19 @@ function FormularioCobro({
           <Label htmlFor={`monto-${cuenta.id}`} className="text-xs font-medium text-foreground">
             Valor a registrar ($ COP)
           </Label>
+          {/* Controlado, y no `defaultValue` con `key`: el resumen de la
+              verificación tiene que mostrar lo que el cajero escribió. Leyendo el
+              faltante calculado, un monto editado a mano se confirmaba con una
+              cifra distinta de la que se iba a cobrar, que es justo lo que este
+              paso existe para impedir. */}
           <Input
-            key={faltanteCop}
             id={`monto-${cuenta.id}`}
             name="amountCop"
             inputMode="numeric"
-            defaultValue={faltanteCop}
+            value={montoACobrar || String(faltanteCop)}
+            onChange={(e) => setMontoACobrar(e.target.value)}
             required
-            className="h-9 text-sm font-semibold numeral font-mono"
+            className="numeral h-9 font-mono text-sm font-semibold"
           />
         </div>
 
@@ -235,7 +263,7 @@ function FormularioCobro({
                 key={b.label}
                 type="button"
                 onClick={() => setMontoEntregado(b.val.toString())}
-                className="px-2.5 py-1 rounded-lg bg-background border border-border text-rotulo font-bold hover:bg-brand hover:text-brand-foreground transition-colors"
+                className="px-2.5 py-1 rounded-xl bg-background border border-border text-rotulo font-bold hover:bg-brand hover:text-brand-foreground transition-colors"
               >
                 {b.label}
               </button>
@@ -267,14 +295,67 @@ function FormularioCobro({
         onChange={setFiscal}
       />
 
-      <Button
-        type="submit"
-        size="lg"
-        disabled={isPending}
-        className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-sm rounded-xl shadow-sm gap-2"
-      >
-        {isPending ? "Procesando cobro…" : `Confirmar pago de ${formatCop(faltanteCop)}`}
-      </Button>
+      {verificando ? (
+        <div className="space-y-3 rounded-xl border border-brand/40 bg-brand/5 p-3.5">
+          <p className="font-mono text-rotulo font-bold uppercase tracking-wider text-brand">
+            Revisá antes de cobrar
+          </p>
+
+          <dl className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-xs text-muted-foreground">Se cobra</dt>
+              <dd className="numeral text-lg font-bold text-foreground">{formatCop(numACobrar)}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-xs text-muted-foreground">Método</dt>
+              <dd className="text-sm font-semibold text-foreground">{METODOS_PAGO.find((m) => m.clave === metodo)?.etiqueta ?? metodo}</dd>
+            </div>
+            {metodo === "EFECTIVO" && (
+              <div className="flex items-baseline justify-between gap-3 border-t border-brand/20 pt-2">
+                <dt className="text-xs text-muted-foreground">Devuelta</dt>
+                {/* Sin efectivo recibido no hay vuelto que calcular, y decir "$0"
+                    se lee como "pagó justo" cuando en realidad nadie lo escribió.
+                    Son dos cosas distintas y el cajero tiene la plata en la mano. */}
+                <dd
+                  className={cn(
+                    "numeral text-lg font-bold",
+                    cambioDevuelta > 0 ? "text-success-soft" : "text-muted-foreground",
+                  )}
+                >
+                  {numEntregado > 0 ? formatCop(cambioDevuelta) : "Paga justo"}
+                </dd>
+              </div>
+            )}
+          </dl>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setVerificando(false)}
+              className="h-11 flex-1 rounded-xl text-sm font-semibold"
+            >
+              Corregir
+            </Button>
+            <Button
+              type="submit"
+              disabled={isPending}
+              className="h-11 flex-[2] gap-2 rounded-xl bg-brand text-sm font-bold text-brand-foreground shadow-sm hover:bg-brand/90"
+            >
+              {isPending ? "Cobrando…" : "Cobrar"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          size="lg"
+          onClick={() => setVerificando(true)}
+          className="h-11 w-full gap-2 rounded-xl bg-brand text-sm font-bold text-brand-foreground shadow-sm hover:bg-brand/90"
+        >
+          Cobrar {formatCop(numACobrar)}
+        </Button>
+      )}
 
       {!estado.ok && estado.error && (
         <Alert variant="destructive" role="alert" className="py-2 text-xs">

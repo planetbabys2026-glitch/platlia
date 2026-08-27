@@ -193,9 +193,6 @@ export async function getCarta(businessId: string) {
         select: {
           id: true,
           name: true,
-          // El código de barras: es por donde el POS encuentra el producto cuando
-          // quien atiende lo pasa por el lector en vez de buscarlo por nombre.
-          sku: true,
           priceCop: true,
           isAvailable: true,
           imageUrl: true,

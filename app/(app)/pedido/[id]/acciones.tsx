@@ -77,7 +77,7 @@ export function ControlCantidad({
         <Enviar
           variant="outline"
           size="sm"
-          className="size-6 p-0 rounded-md"
+          className="size-6 p-0 rounded-xl"
           isPending={isPending}
           etiqueta="Quitar una unidad"
         >
@@ -91,7 +91,7 @@ export function ControlCantidad({
         <Enviar
           variant="outline"
           size="sm"
-          className="size-6 p-0 rounded-md"
+          className="size-6 p-0 rounded-xl"
           isPending={isPending}
           etiqueta="Agregar una unidad"
         >
@@ -123,7 +123,7 @@ export function NotaRenglon({ itemId, notes }: { itemId: string; notes: string |
         placeholder="Nota de cocina (ej. sin cebolla, término medio…)"
         aria-label="Nota del renglón"
         maxLength={200}
-        className="h-7 w-full text-xs rounded-lg bg-muted/30"
+        className="h-7 w-full text-xs rounded-xl bg-muted/30"
         onBlur={(e) => {
           if (e.target.value !== (notes ?? "")) {
             e.target.form?.requestSubmit();
@@ -145,7 +145,7 @@ export function QuitarRenglon({ itemId }: { itemId: string }) {
       <Enviar
         variant="ghost"
         size="sm"
-        className="h-6 text-rotulo text-destructive hover:bg-destructive/10 px-1.5 gap-1 rounded-md"
+        className="h-6 text-rotulo text-destructive hover:bg-destructive/10 px-1.5 gap-1 rounded-xl"
         isPending={isPending}
       >
         <Trash2 className="size-3" /> Quitar
@@ -167,7 +167,7 @@ export function AnularRenglon({ itemId }: { itemId: string }) {
         minLength={3}
         placeholder="Motivo de anulación"
         aria-label="Motivo de la anulación"
-        className="h-7 w-36 text-xs rounded-lg"
+        className="h-7 w-36 text-xs rounded-xl"
       />
       <Enviar variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:bg-destructive/10" isPending={isPending}>
         Anular
@@ -205,12 +205,12 @@ export function AnularPedido({
           minLength={3}
           placeholder={placeholder}
           aria-label="Motivo de la anulación del pedido"
-          className="h-8 text-xs rounded-lg"
+          className="h-8 text-xs rounded-xl"
         />
         <Enviar
           variant="outline"
           size="sm"
-          className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0 rounded-lg"
+          className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0 rounded-xl"
           isPending={isPending}
         >
           Anular pedido

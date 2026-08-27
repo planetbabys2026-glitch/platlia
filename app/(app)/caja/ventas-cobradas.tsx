@@ -49,7 +49,7 @@ const TIPOS: Record<string, string> = {
   DOMICILIO: "Domicilio",
 };
 
-const POR_PAGINA = 20;
+const POR_PAGINA = 10;
 const DIA_MS = 86_400_000;
 
 export type CuentaCobrada = {
@@ -233,7 +233,7 @@ function BotonNotaCredito({ pedido }: { pedido: CuentaCobrada }) {
           <Button
             type="submit"
             disabled={pendiente}
-            className="h-11 w-full bg-destructive text-xs font-bold text-white hover:bg-destructive/90"
+            className="h-11 w-full bg-destructive text-xs font-bold text-destructive-foreground hover:bg-destructive/90"
           >
             {pendiente ? "Emitiendo…" : "Emitir nota crédito"}
           </Button>
@@ -302,7 +302,7 @@ function EnlaceTirilla({ id, compacto }: { id: string; compacto?: boolean }) {
       rel="noopener"
       title="Reimprimir la tirilla"
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--linea-30)] bg-[var(--panel-2)] px-3 text-xs font-bold text-foreground transition-colors hover:border-brand hover:text-brand",
+        "inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--linea-30)] bg-[var(--panel-2)] px-3 text-xs font-bold text-foreground transition-colors hover:border-brand hover:text-brand",
         compacto ? "h-11 tableta:h-9" : "min-h-11 py-2",
       )}
     >
@@ -396,14 +396,14 @@ export function VentasCobradas({
         <nav className="flex items-center gap-2" aria-label="Cambiar de jornada">
           <Link
             href={`/caja?vista=cobradas&jornada=${anterior}`}
-            className="inline-flex min-h-11 tableta:min-h-9 items-center gap-1.5 rounded-lg border border-[var(--linea-30)] bg-[var(--panel-2)] px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex min-h-11 tableta:min-h-9 items-center gap-1.5 rounded-xl border border-[var(--linea-30)] bg-[var(--panel-2)] px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-3.5" /> Día anterior
           </Link>
           {!esHoy && (
             <Link
               href="/caja?vista=cobradas"
-              className="inline-flex min-h-11 tableta:min-h-9 items-center gap-1.5 rounded-lg border border-brand/50 bg-brand/10 px-3 text-xs font-bold text-brand transition-colors hover:bg-brand/20"
+              className="inline-flex min-h-11 tableta:min-h-9 items-center gap-1.5 rounded-xl border border-brand/50 bg-brand/10 px-3 text-xs font-bold text-brand transition-colors hover:bg-brand/20"
             >
               Ver hoy <ArrowRight className="size-3.5" />
             </Link>
@@ -478,7 +478,7 @@ export function VentasCobradas({
       ) : (
         <>
           {/* ── Tablet y escritorio: tabla ── */}
-          <div className="hidden rounded-lg border border-[var(--linea-16)] bg-[var(--panel)] tableta:block">
+          <div className="hidden rounded-xl border border-[var(--linea-16)] bg-[var(--panel)] tableta:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -548,7 +548,7 @@ export function VentasCobradas({
             {visibles.map((p) => (
               <li
                 key={p.id}
-                className="space-y-2.5 rounded-lg border border-[var(--linea-16)] bg-[var(--panel)] p-3.5"
+                className="space-y-2.5 rounded-xl border border-[var(--linea-16)] bg-[var(--panel)] p-3.5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -637,7 +637,7 @@ function Filtro({
       onChange={(e) => onCambiar(e.target.value)}
       aria-label={`Filtrar por ${etiqueta.toLowerCase()}`}
       className={cn(
-        "h-11 shrink-0 rounded-lg border border-[var(--linea-30)] bg-[var(--input-bg)] px-3 text-xs font-semibold text-foreground tableta:h-10",
+        "h-11 shrink-0 rounded-xl border border-[var(--linea-30)] bg-[var(--input-bg)] px-3 text-xs font-semibold text-foreground tableta:h-10",
         valor && "border-brand/50 text-brand",
       )}
     >
