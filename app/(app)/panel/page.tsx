@@ -2,116 +2,86 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppModule, Role } from "@/generated/prisma/enums";
-import { Button } from "@/components/ui/button";
+import { getSettings } from "@/features/negocio/queries";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { requireActiveLicense } from "@/lib/auth/dal";
-import { tenantDb } from "@/lib/db/tenant";
-import { formatBusinessDate, currentBusinessDate } from "@/lib/time";
-import { AvisoCorreoSinVerificar } from "./verificar-correo";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 
-export const metadata: Metadata = { title: "Panel" };
-
-// El panel refleja el estado de ahora: nunca se prerenderiza.
+export const metadata: Metadata = { title: "Entrando…" };
 export const dynamic = "force-dynamic";
 
+/**
+ * A dónde entra cada quien.
+ *
+ * Antes acá había un panel con tres contadores —mesas, productos, si la caja
+ * estaba abierta— y dos botones para ir a trabajar. Nadie los miraba: quien entra
+ * a las siete de la tarde va a atender, no a leer indicadores, y el panel era una
+ * pantalla de paso que había que cerrar antes de empezar. Los avisos que sí
+ * importaban —licencia en gracia, correo sin confirmar— viven ahora en el shell,
+ * donde se ven desde cualquier pantalla y no solo desde una que nadie abre.
+ *
+ * La ruta se queda porque medio producto redirige acá después de entrar; lo que
+ * cambió es que ya no pinta nada: reparte.
+ */
 export default async function PanelPage() {
-  // La página verifica por su cuenta, como todas: sesión + empresa + licencia.
+  // Verifica por su cuenta, como todas: sesión + empresa + licencia.
   const ctx = await requireActiveLicense();
+  const settings = await getSettings(ctx.business.id);
   const usaMesas = ctx.modules.has(AppModule.MESAS);
 
-  // El usuario con rol cocina entra a su monitor de preparación, no a ver ventas ni caja.
-  if (ctx.role === Role.COCINA) {
-    redirect("/cocina");
+  // La cocina entra a su monitor: no vende ni cobra.
+  if (ctx.role === Role.COCINA) redirect("/cocina");
+
+  if (usaMesas && tienePermisoSeccion(ctx.role, "salon_pos", settings.rolePermissions)) {
+    redirect("/salon");
   }
 
-  // Cajero y administrador entran a trabajar, no a mirar indicadores: sin mesas
-  // no hay salón que atender, y el panel —pensado para quien mira la salud del
-  // negocio— no es la pantalla que necesitan al entrar. El propietario sí sigue
-  // viendo el panel: es quien de verdad usa esos números.
-  if (!usaMesas && (ctx.role === Role.CAJERO || ctx.role === Role.ADMINISTRADOR)) {
+  // Sin mesas —o sin permiso de salón— entra por el mostrador quien pueda vender.
+  if (tienePermisoSeccion(ctx.role, "pos", settings.rolePermissions)) {
     redirect("/pos");
   }
 
-  const db = tenantDb(ctx.business.id);
-
-  const [mesas, productos, cajaAbierta] = await Promise.all([
-    // Sin mesas no hace falta contarlas: nadie va a ver ese número.
-    usaMesas ? db.table.count({ where: { deletedAt: null } }) : Promise.resolve(0),
-    db.product.count({ where: { deletedAt: null, active: true } }),
-    db.cashSession.findFirst({
-      where: { status: "ABIERTA" },
-      select: { id: true, openedAt: true },
-    }),
-  ]);
-
-  const jornada = currentBusinessDate({
-    timeZone: ctx.business.timeZone,
-    businessDayStartMinutes: ctx.business.businessDayStartMinutes,
-  });
-
+  /**
+   * No hay a dónde mandarlo, y hay que decirlo.
+   *
+   * El caso real: un negocio de mostrador que da de alta a un mesero. El mesero
+   * atiende mesas y este negocio no tiene, así que su pantalla no existe. Antes
+   * caía en el panel y veía dos botones que no llevaban a ninguna parte.
+   */
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">{ctx.business.name}</h1>
-        <p className="text-muted-foreground text-sm">
-          Jornada del {formatBusinessDate(jornada)} · {ctx.user.name} ({ctx.role.toLowerCase()})
-        </p>
-      </div>
-
-      {!ctx.user.emailVerifiedAt && <AvisoCorreoSinVerificar email={ctx.user.email} />}
-
-      {ctx.licencia.enGracia && (
-        <Card className="border-warning">
-          <CardContent>
-            <CardTitle className="text-warning text-base">
-              Tu licencia venció
-            </CardTitle>
-            <CardDescription>
-              Seguís trabajando por unos días de gracia. Renovala para no quedarte sin
-              acceso.
-            </CardDescription>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {usaMesas && <Indicador titulo="Mesas" valor={mesas} />}
-        <Indicador titulo="Productos en carta" valor={productos} />
-        <Indicador
-          titulo="Caja"
-          valor={cajaAbierta ? "Abierta" : "Cerrada"}
-          detalle={cajaAbierta ? "Hay un turno en curso" : "Sin turno abierto"}
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Button asChild size="lg">
-          <Link href={usaMesas ? "/salon" : "/pos"}>{usaMesas ? "Ir al salón" : "Ir al POS"}</Link>
-        </Button>
-        <Button asChild size="lg" variant="outline">
-          <Link href="/caja">{cajaAbierta ? "Ver la caja" : "Abrir la caja"}</Link>
-        </Button>
-      </div>
+    <div className="mx-auto max-w-lg pt-10">
+      <Card className="border-warning">
+        <CardContent className="space-y-3 p-6">
+          <CardTitle className="text-warning text-base">
+            {usaMesas ? "Todavía no tenés una pantalla asignada" : "Este negocio no tiene mesas"}
+          </CardTitle>
+          <CardDescription className="leading-relaxed">
+            {usaMesas ? (
+              <>
+                Tu usuario no tiene permiso sobre ninguna pantalla de operación. Pedile al
+                administrador del restaurante que te habilite el salón o el punto de venta.
+              </>
+            ) : (
+              <>
+                Tu rol es <strong className="text-foreground">mesero</strong> y trabajás sobre el
+                salón, pero este negocio tiene las mesas apagadas. Pedile al administrador del
+                restaurante que habilite las mesas en{" "}
+                <span className="text-foreground">Configuración → Módulos</span>, o que te cambie
+                el rol si vas a vender de mostrador.
+              </>
+            )}
+          </CardDescription>
+          <p className="text-muted-foreground text-xs">
+            {ctx.user.name} · {ctx.business.name}
+          </p>
+          <Link
+            href="/turnero"
+            className="text-brand inline-block text-sm font-medium hover:underline"
+          >
+            Ver el turnero mientras tanto →
+          </Link>
+        </CardContent>
+      </Card>
     </div>
-  );
-}
-
-function Indicador({
-  titulo,
-  valor,
-  detalle,
-}: {
-  titulo: string;
-  valor: string | number;
-  detalle?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-1">
-        <p className="text-muted-foreground text-sm">{titulo}</p>
-        <p className="numeral text-3xl font-semibold">{valor}</p>
-        {detalle && <p className="text-muted-foreground text-xs">{detalle}</p>}
-      </CardContent>
-    </Card>
   );
 }

@@ -89,3 +89,33 @@ describe("Lógica de permisos por rol", () => {
     expect(permisos3).toEqual(PERMISOS_POR_DEFECTO[Role.MESERO]);
   });
 });
+
+describe("el salón y el punto de venta son permisos distintos", () => {
+  /**
+   * Un mesero toma pedidos en la mesa pero no vende de mostrador. Con un solo
+   * permiso para las dos cosas, dejarle el salón le dejaba también el POS.
+   */
+  it("el mesero entra al salón y no al POS", () => {
+    expect(tienePermisoSeccion(Role.MESERO, "salon_pos")).toBe(true);
+    expect(tienePermisoSeccion(Role.MESERO, "pos")).toBe(false);
+  });
+
+  it("quien cobra sí vende sin mesa", () => {
+    for (const rol of [Role.CAJERO, Role.ADMINISTRADOR, Role.PROPIETARIO]) {
+      expect(tienePermisoSeccion(rol, "pos")).toBe(true);
+    }
+  });
+
+  it("la cocina no entra a ninguno de los dos", () => {
+    expect(tienePermisoSeccion(Role.COCINA, "salon_pos")).toBe(false);
+    expect(tienePermisoSeccion(Role.COCINA, "pos")).toBe(false);
+  });
+
+  it("un permiso que la empresa nunca guardó cae al valor por defecto del rol", () => {
+    // Es lo que hace que agregar `pos` no necesite migrar a nadie: el JSON viejo
+    // no lo trae y el mesero igual queda sin mostrador.
+    const jsonViejo = JSON.stringify({ [Role.MESERO]: { salon_pos: true } });
+    expect(tienePermisoSeccion(Role.MESERO, "pos", jsonViejo)).toBe(false);
+    expect(tienePermisoSeccion(Role.MESERO, "salon_pos", jsonViejo)).toBe(true);
+  });
+});

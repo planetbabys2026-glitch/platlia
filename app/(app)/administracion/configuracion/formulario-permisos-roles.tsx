@@ -7,6 +7,7 @@ import {
   Bike,
   BookOpen,
   Boxes,
+  Calculator,
   CheckCircle2,
   ChefHat,
   CreditCard,
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 
 const ICONOS_SECCION: Record<SeccionPermiso, React.ElementType> = {
   salon_pos: LayoutGrid,
+  pos: Calculator,
   cocina: ChefHat,
   caja: CreditCard,
   domicilios: Bike,

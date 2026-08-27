@@ -31,7 +31,7 @@ export default async function ModificadoresPage() {
           href="/administracion/carta"
           className="text-brand inline-block pt-1 text-sm font-medium hover:underline"
         >
-          ← Volver a la carta
+          Ver la carta →
         </Link>
       </div>
 

@@ -29,7 +29,9 @@ export default async function PosPage({
     pedidoId ? getPedido(ctx.business.id, pedidoId) : Promise.resolve(null),
   ]);
 
-  if (!tienePermisoSeccion(ctx.role, "salon_pos", settings.rolePermissions)) {
+  // `pos` y no `salon_pos`: el mesero tiene salón y no tiene mostrador. La
+  // pantalla se alcanza por URL sin pasar por el menú, así que la guarda va acá.
+  if (!tienePermisoSeccion(ctx.role, "pos", settings.rolePermissions)) {
     notFound();
   }
 

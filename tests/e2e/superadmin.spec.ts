@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * Superadministración.
@@ -31,7 +32,7 @@ test("sin cookie de soporte, /superadmin manda a su propio ingreso y no hace buc
 test("la sesión del producto no abre la consola de soporte", async ({ page }) => {
   // El dueño de un bar tiene sesión válida en la aplicación...
   await ingresarApp(page, DUENO);
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
   // ...y aun así la consola le pide su propia puerta.
   await page.goto("/superadmin");

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { DUENO, ingresar } from "./apoyo";
+import { DUENO, ingresar, PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * Verificación de correo y recuperación de contraseña.
@@ -94,7 +94,7 @@ test("un negocio recién registrado ve el aviso de correo sin confirmar", async 
   await page.getByLabel("Contraseña", { exact: true }).fill("contrasenasegura");
   await page.getByLabel("Repetir contraseña").fill("contrasenasegura");
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
   // CardTitle es un <div>, no un heading semántico —igual que la tarjeta de
   // "licencia venció" que ya vive en esta misma página—, así que se busca por

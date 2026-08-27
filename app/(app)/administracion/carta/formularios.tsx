@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { AlertTriangle } from "lucide-react";
 import {
   archivarCategoria,
   archivarProducto,
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { diagnosticarReceta } from "@/lib/inventory/receta";
 import { formatCop, formatRateBp } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +48,13 @@ export type ProductoAdmin = {
   taxRate: { name: string; rateBp: number };
   hasRecipe: boolean;
   recipeNeedsModifiers: boolean;
-  modifierGroups: Array<{ groupId: string; required: boolean }>;
+  /** Solo para contar: la carta no necesita el escandallo entero. */
+  recipeItems?: Array<{ id: string }>;
+  modifierGroups: Array<{
+    groupId: string;
+    required: boolean;
+    group?: { name: string; options: Array<{ name: string; supplies?: Array<{ id: string }> }> };
+  }>;
 };
 
 /**
@@ -631,6 +639,14 @@ export function FilaProducto({
     );
   }
 
+  const faltantes = diagnosticarReceta({
+    hasRecipe: producto.hasRecipe,
+    recipeItems: producto.recipeItems,
+    modifierGroups: producto.modifierGroups.flatMap((a) =>
+      a.group ? [{ required: a.required, group: a.group }] : [],
+    ),
+  });
+
   return (
     <li className="flex gap-3 py-3 first:pt-0">
       <ImagenProducto
@@ -653,6 +669,23 @@ export function FilaProducto({
           {producto.kitchenStation && ` · ${producto.kitchenStation}`}
           {producto.sku && ` · ${producto.sku}`}
         </p>
+
+        {/* Una receta a medias no rompe nada y por eso no se ve: el producto se
+            vende, sale la comanda y el inventario no se mueve. Acá se dice. */}
+        {faltantes.length > 0 && (
+          <ul className="space-y-0.5">
+            {faltantes.map((f, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-xs text-warning-soft">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                <span>
+                  {f.tipo === "RECETA_VACIA"
+                    ? "Lleva receta pero no tiene insumos cargados: se vende sin descontar inventario."
+                    : `En "${f.grupo}", ${f.opciones.join(" y ")} no ${f.opciones.length === 1 ? "descuenta" : "descuentan"} insumo: se ${f.opciones.length === 1 ? "vende" : "venden"} sin tocar el inventario.`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button

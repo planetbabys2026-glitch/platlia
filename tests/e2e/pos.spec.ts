@@ -100,12 +100,10 @@ test("el administrador también entra directo a POS", async ({ page }) => {
   await expect(page).toHaveURL(/\/pos$/);
 });
 
-test("el propietario sigue viendo el panel: es quien mira la salud del negocio", async ({
-  page,
-}) => {
+test("sin mesas, el propietario también entra directo al POS", async ({ page }) => {
+  // Ya no hay panel intermedio: `/panel` reparte y nadie ve indicadores al entrar.
   await ingresar(page, DUENO);
-  await expect(page).toHaveURL(/\/panel$/);
-  await expect(page.getByRole("link", { name: "Ir al POS" })).toBeVisible();
+  await expect(page).toHaveURL(/\/pos$/);
 });
 
 test("desde POS se abre un pedido para llevar y uno a domicilio", async ({ page }) => {

@@ -14,6 +14,7 @@ import {
   editarInsumoSchema,
   editarProductoTerminadoSchema,
   guardarRecetaSchema,
+  UNIDAD_INSUMO,
 } from "@/features/inventario/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { getSettings } from "@/features/negocio/queries";
@@ -53,8 +54,10 @@ export const crearInsumo = defineAction({
       data: {
         businessId: ctx.business.id,
         name: input.name,
-        sku: input.sku ?? null,
-        unit: input.unit,
+        // Todo insumo se mide en unidades: a cuánto equivale una lo dice el
+        // nombre ("Carne molida 125 g"), que es lo único que el sistema puede
+        // respetar sin convertir nada.
+        unit: UNIDAD_INSUMO,
         stockCurrent: input.stockCurrent,
         stockMin: input.stockMin,
         costCop: input.costCop,
@@ -97,8 +100,7 @@ export const editarInsumo = defineAction({
       where: { id: input.id },
       data: {
         name: input.name,
-        sku: input.sku ?? null,
-        unit: input.unit,
+        unit: UNIDAD_INSUMO,
         stockCurrent: input.stockCurrent,
         stockMin: input.stockMin,
         costCop: input.costCop,

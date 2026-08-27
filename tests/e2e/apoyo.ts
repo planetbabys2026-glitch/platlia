@@ -180,12 +180,21 @@ export async function irA(page: Page, ruta: string) {
   await page.goto(ruta);
 }
 
+/**
+ * A dónde cae alguien al entrar.
+ *
+ * `/panel` ya no pinta nada: reparte. La cocina va a su monitor, quien atiende
+ * mesas al salón y quien vende de mostrador al POS, así que la prueba no puede
+ * fijar una sola ruta.
+ */
+export const PANTALLA_DE_ENTRADA = /\/(salon|pos|cocina)$/;
+
 export async function ingresar(page: Page, datos = CAJERO) {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(datos.email);
   await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 }
 
 /**

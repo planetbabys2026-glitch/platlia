@@ -34,9 +34,27 @@ export async function getCartaAdmin(businessId: string) {
           taxRate: { select: { name: true, rateBp: true } },
           hasRecipe: true,
           recipeNeedsModifiers: true,
+          // Con qué se diagnostica una receta cargada a medias: un producto que
+          // declara escandallo sin renglones, o un grupo donde unas opciones
+          // descuentan insumo y otras no. Las dos cosas se venden sin que nada
+          // falle y sin mover el inventario.
+          recipeItems: { select: { id: true } },
           modifierGroups: {
             orderBy: { sortOrder: "asc" },
-            select: { groupId: true, required: true },
+            select: {
+              groupId: true,
+              required: true,
+              group: {
+                select: {
+                  name: true,
+                  options: {
+                    where: { deletedAt: null, active: true },
+                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                    select: { id: true, name: true, supplies: { select: { id: true } } },
+                  },
+                },
+              },
+            },
           },
         },
       },

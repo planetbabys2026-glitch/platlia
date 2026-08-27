@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, ChefHat, Bike, Volume2, VolumeX } from "lucide-react";
+import { Bell, ChefHat, Bike, Printer, ReceiptText, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,7 +11,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAvisos } from "@/features/avisos/proveedor";
+import type { TipoAviso } from "@/lib/avisos";
 import { cn } from "@/lib/utils";
+
+/**
+ * Un ícono por tipo, explícito.
+ *
+ * Antes era un ternario contra `DOMICILIO_NUEVO`, así que todo lo demás caía en
+ * el gorro de cocina: una impresora que no respondió y una cuenta esperando en la
+ * caja se veían las dos como una comanda. En una lista que se lee de reojo, el
+ * ícono es lo que separa una noticia de otra antes de leer el texto.
+ */
+const ICONO: Record<TipoAviso, typeof ChefHat> = {
+  COCINA_NUEVA_COMANDA: ChefHat,
+  CUENTA_EN_CAJA: ReceiptText,
+  DOMICILIO_NUEVO: Bike,
+  IMPRESION_FALLIDA: Printer,
+};
 
 /**
  * Los últimos avisos, para quien no estaba mirando.
@@ -73,7 +89,7 @@ export function Campana({ className }: { className?: string }) {
         ) : (
           <ul className="max-h-80 overflow-y-auto">
             {avisos.map((aviso) => {
-              const Icono = aviso.tipo === "DOMICILIO_NUEVO" ? Bike : ChefHat;
+              const Icono = ICONO[aviso.tipo] ?? ChefHat;
               return (
                 <li key={aviso.id}>
                   <Link

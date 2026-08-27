@@ -159,12 +159,6 @@ function Encabezado() {
         Lo que se archiva sale de la carta pero sigue en los pedidos viejos: un tiquete
         reimpreso no cambia.
       </p>
-      <Link
-        href="/administracion/carta/modificadores"
-        className="text-brand inline-flex min-h-11 tableta:min-h-0 items-center pt-1 text-sm font-medium hover:underline"
-      >
-        Modificadores (proteína, término, adiciones) ↗
-      </Link>
     </div>
   );
 }

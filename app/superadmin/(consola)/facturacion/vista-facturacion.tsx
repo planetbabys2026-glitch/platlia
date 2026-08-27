@@ -433,19 +433,38 @@ function FormularioNegocio({
             type="button"
             variant={habilitar ? "default" : "outline"}
             onClick={() => setHabilitar(true)}
+            aria-pressed={habilitar}
             className={cn("h-10 flex-1 text-xs font-bold", habilitar && "bg-success text-white")}
           >
             Activo
           </Button>
+          {/* El estado elegido tiene que distinguirse del no elegido de un
+              vistazo. Antes el "Apagado" seleccionado iba en `bg-muted`, que en
+              esta paleta es una superficie de panel: quedaba casi igual que el
+              `outline` del botón de al lado, y el módulo se guardaba apagado sin
+              que nadie lo notara. Pasó dos veces, con el rango y los documentos
+              bien puestos. */}
           <Button
             type="button"
-            variant={!habilitar ? "default" : "outline"}
+            variant="outline"
             onClick={() => setHabilitar(false)}
-            className={cn("h-10 flex-1 text-xs font-bold", !habilitar && "bg-muted text-foreground")}
+            aria-pressed={!habilitar}
+            className={cn(
+              "h-10 flex-1 text-xs font-bold",
+              !habilitar && "border-destructive bg-destructive/15 text-destructive-soft",
+            )}
           >
             Apagado
           </Button>
         </div>
+        {/* Asignar rango y documentos con el módulo apagado es el estado que deja
+            al dueño mirando "no habilitada" mientras soporte cree que lo activó. */}
+        {!habilitar && (Number(sumar) > 0 || rango.trim() !== "") && (
+          <p className="text-xs font-semibold text-warning-soft">
+            El módulo va a quedar <strong>apagado</strong>: el dueño va a seguir viendo
+            &ldquo;no habilitada&rdquo; aunque le asignes rango y documentos.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-3 tableta:grid-cols-2">

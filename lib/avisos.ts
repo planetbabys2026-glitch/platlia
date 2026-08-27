@@ -1,3 +1,4 @@
+import { formatCop } from "@/lib/money";
 import { formatTurno } from "@/lib/turns";
 
 /**
@@ -15,7 +16,11 @@ import { formatTurno } from "@/lib/turns";
  * cocina— se prueba sin levantar una pantalla.
  */
 
-export type TipoAviso = "COCINA_NUEVA_COMANDA" | "DOMICILIO_NUEVO" | "IMPRESION_FALLIDA";
+export type TipoAviso =
+  | "COCINA_NUEVA_COMANDA"
+  | "CUENTA_EN_CAJA"
+  | "DOMICILIO_NUEVO"
+  | "IMPRESION_FALLIDA";
 
 export type Aviso = {
   /** `orderId:tipo:ts`. El cliente descarta repetidos con esto. */
@@ -61,6 +66,26 @@ export type DatosAviso =
       cuenta: string | null;
       turno: number | null;
       productos: number;
+      ts?: number;
+    }
+  | {
+      /**
+       * Una cuenta que ACABA de llegar a la caja porque alguien la mandó.
+       *
+       * Es la misma clase de noticia que una comanda entrando a la cocina: hay
+       * alguien esperando del otro lado y el cajero tiene que enterarse ahora, no
+       * en la próxima reconciliación del contador. Antes `pedirCuenta` solo
+       * publicaba en `turnero:`, un canal que el stream del shell no escucha: la
+       * insignia de Caja tardaba hasta un minuto en moverse y no sonaba nada.
+       */
+      tipo: "CUENTA_EN_CAJA";
+      orderId: string;
+      code: number;
+      mesa: string | null;
+      cuenta: string | null;
+      turno: number | null;
+      productos: number;
+      totalCop: number;
       ts?: number;
     }
   | {
@@ -141,11 +166,24 @@ export function describirAviso(datos: DatosAviso): Aviso {
     : datos.turno !== null
       ? `Turno ${formatTurno(datos.turno)}`
       : `Pedido #${datos.code}`;
+  const titulo = cuenta ? `${destino} · ${cuenta}` : destino;
+
+  if (datos.tipo === "CUENTA_EN_CAJA") {
+    return {
+      ...base,
+      tipo: "CUENTA_EN_CAJA",
+      titulo,
+      // La plata primero: es lo que el cajero va a teclear, y el conteo de
+      // productos solo sirve para reconocer la cuenta si hay dos de la misma mesa.
+      detalle: `${formatCop(datos.totalCop)} · ${contarProductos(datos.productos)}`,
+      href: "/caja",
+    };
+  }
 
   return {
     ...base,
     tipo: "COCINA_NUEVA_COMANDA",
-    titulo: cuenta ? `${destino} · ${cuenta}` : destino,
+    titulo,
     detalle: contarProductos(datos.productos),
     href: "/cocina",
   };

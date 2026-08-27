@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   componerRecetaEfectiva,
+  diagnosticarReceta,
   insumoQueFrena,
   porcionesSegunReceta,
 } from "@/lib/inventory/receta";
@@ -393,5 +394,90 @@ describe("verificarYDescontarStockReceta con modificadores", () => {
 
     expect(tx.inventoryItem.update).not.toHaveBeenCalled();
     expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("diagnosticarReceta", () => {
+  const insumo = (id: string) => ({
+    quantityRequired: 1,
+    inventoryItem: { id, name: id, unit: "u", stockCurrent: 10 },
+  });
+
+  it("delata un producto que declara receta y no tiene renglones", () => {
+    // Se vende, sale la comanda y el inventario no se mueve. Nada falla.
+    expect(diagnosticarReceta({ hasRecipe: true, recipeItems: [] })).toEqual([
+      { tipo: "RECETA_VACIA" },
+    ]);
+  });
+
+  it("un producto sin receta declarada no tiene nada que reclamar", () => {
+    expect(diagnosticarReceta({ hasRecipe: false, recipeItems: [] })).toEqual([]);
+  });
+
+  it("delata el grupo donde unas opciones descuentan y otras no", () => {
+    const faltantes = diagnosticarReceta({
+      hasRecipe: true,
+      recipeItems: [insumo("arroz")],
+      modifierGroups: [
+        {
+          required: true,
+          group: {
+            name: "Proteína",
+            options: [
+              { name: "Carne", supplies: [insumo("res")] },
+              { name: "Pollo", supplies: [] },
+              { name: "Pescado", supplies: [] },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(faltantes).toEqual([
+      { tipo: "OPCIONES_SIN_INSUMOS", grupo: "Proteína", opciones: ["Pollo", "Pescado"] },
+    ]);
+  });
+
+  it("un grupo donde NINGUNA opción lleva insumos no es un error", () => {
+    // "Término medio" no consume nada, y eso está bien.
+    expect(
+      diagnosticarReceta({
+        hasRecipe: true,
+        recipeItems: [insumo("carne")],
+        modifierGroups: [
+          {
+            required: true,
+            group: {
+              name: "Término",
+              options: [
+                { name: "Medio", supplies: [] },
+                { name: "Tres cuartos", supplies: [] },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("un grupo con todas sus opciones cargadas está bien", () => {
+    expect(
+      diagnosticarReceta({
+        hasRecipe: true,
+        recipeItems: [insumo("arroz")],
+        modifierGroups: [
+          {
+            required: true,
+            group: {
+              name: "Proteína",
+              options: [
+                { name: "Carne", supplies: [insumo("res")] },
+                { name: "Pollo", supplies: [insumo("pechuga")] },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toEqual([]);
   });
 });

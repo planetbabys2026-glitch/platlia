@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * Flujo de autenticación contra la base sembrada (`pnpm seed`).
@@ -41,24 +42,22 @@ test("credenciales incorrectas no delatan si el correo existe", async ({ page })
   }
 });
 
-test("el propietario entra y el panel muestra su negocio", async ({ page }) => {
+test("entrar deja a cada quien en su pantalla de trabajo, no en un panel", async ({ page }) => {
+  // El panel de indicadores se fue: quien entra a las siete de la tarde va a
+  // atender, y tenía que cerrar una pantalla de paso antes de empezar. `/panel`
+  // quedó como repartidor —cocina al monitor, el resto al salón o al POS—.
   await ingresar(page);
 
-  await expect(page).toHaveURL(/\/panel$/);
-  await expect(page.getByRole("heading", { name: "Bar Demo" })).toBeVisible();
-  await expect(page.getByText(/jornada del \d{4}-\d{2}-\d{2}/i)).toBeVisible();
-
-  // Los números vienen del seed: 22 mesas en 3 áreas y 17 productos.
-  await expect(page.getByText("Mesas").locator("..")).toContainText("22");
-  await expect(page.getByText("Productos en carta").locator("..")).toContainText("17");
+  await expect(page).toHaveURL(/\/salon$/);
+  await expect(page.getByRole("heading", { name: "Salón en Vivo", level: 1 })).toBeVisible();
 });
 
-test("volver a /ingresar con sesión abierta lleva al panel", async ({ page }) => {
+test("volver a /ingresar con sesión abierta devuelve al trabajo", async ({ page }) => {
   await ingresar(page);
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
   await page.goto("/ingresar");
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 });
 
 test("al salir, la sesión queda cerrada de verdad", async ({ page }) => {
@@ -85,7 +84,7 @@ test("el registro crea negocio, licencia de prueba y deja adentro", async ({ pag
   await page.getByLabel("Repetir contraseña").fill("contrasenasegura");
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
 
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
   await expect(page.getByRole("heading", { name: `Bar de Prueba ${sufijo}` })).toBeVisible();
 
   // Negocio nuevo: sin mesas ni productos, y con la caja cerrada. Los

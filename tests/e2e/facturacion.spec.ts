@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * Licencia y cobro.
@@ -60,7 +61,7 @@ test("la pantalla de facturación muestra el estado de la licencia", async ({ pa
   await page.getByLabel("Correo").fill(DUENO.email);
   await page.getByLabel("Contraseña", { exact: true }).fill(DUENO.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
   await page.goto("/facturacion");
 

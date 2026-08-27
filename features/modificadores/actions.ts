@@ -15,7 +15,7 @@ const ADMINISTRAN = [Role.PROPIETARIO, Role.ADMINISTRADOR] as const;
 
 /** Todo lo que se toca acá se ve en la carta y en el modal de venta. */
 function revalidarCarta() {
-  revalidatePath("/administracion/carta/modificadores");
+  revalidatePath("/administracion/modificadores");
   revalidatePath("/administracion/carta");
   revalidatePath("/pos");
   revalidatePath("/inventario");

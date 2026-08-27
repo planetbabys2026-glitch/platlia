@@ -122,3 +122,65 @@ export function insumoQueFrena(
   }
   return null;
 }
+
+/**
+ * Lo que le falta a un producto para que su stock signifique algo.
+ *
+ * Un producto puede estar mal cargado de una manera que no rompe nada y no se
+ * ve: se vende, sale la comanda, y el inventario no se mueve. Pasó con un plato
+ * que declaraba receta sin renglones y con un grupo de proteínas donde solo una
+ * de las tres opciones tenía insumo cargado —vender con carne descontaba, vender
+ * con pollo no—. Ninguna pantalla lo decía.
+ */
+export type FaltanteDeReceta =
+  | { tipo: "RECETA_VACIA" }
+  | { tipo: "OPCIONES_SIN_INSUMOS"; grupo: string; opciones: string[] };
+
+/**
+ * Lo mínimo para diagnosticar: solo se miran cantidades, no contenidos.
+ *
+ * No extiende `ProductoConReceta` a propósito. La pantalla de la carta trae los
+ * renglones y los insumos como `{ id }` —le alcanza para contar y no tiene por
+ * qué cargar stock ni costos de media bodega para pintar una lista—, y exigir la
+ * receta completa la obligaría a traer columnas que no usa.
+ */
+export interface ProductoParaDiagnostico {
+  hasRecipe?: boolean;
+  recipeItems?: readonly unknown[];
+  modifierGroups?: ReadonlyArray<{
+    required: boolean;
+    group: { name: string; options: ReadonlyArray<{ name: string; supplies?: readonly unknown[] }> };
+  }>;
+}
+
+/**
+ * Qué le falta, para poder decirlo en la carta.
+ *
+ * La segunda regla mira **dentro del grupo**: una opción sin insumos no es un
+ * error por sí sola —"término medio" no consume nada—, pero convivir con
+ * hermanas que sí los tienen delata una carga a medias. Es el único caso que se
+ * puede afirmar sin adivinar la intención del dueño.
+ */
+export function diagnosticarReceta(prod: ProductoParaDiagnostico): FaltanteDeReceta[] {
+  const faltantes: FaltanteDeReceta[] = [];
+
+  if (prod.hasRecipe && (prod.recipeItems?.length ?? 0) === 0) {
+    faltantes.push({ tipo: "RECETA_VACIA" });
+  }
+
+  for (const asignado of prod.modifierGroups ?? []) {
+    const opciones = asignado.group.options ?? [];
+    const conInsumos = opciones.filter((o) => (o.supplies?.length ?? 0) > 0);
+    const sinInsumos = opciones.filter((o) => (o.supplies?.length ?? 0) === 0);
+
+    if (conInsumos.length > 0 && sinInsumos.length > 0) {
+      faltantes.push({
+        tipo: "OPCIONES_SIN_INSUMOS",
+        grupo: asignado.group.name,
+        opciones: sinInsumos.map((o) => o.name),
+      });
+    }
+  }
+
+  return faltantes;
+}

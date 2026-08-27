@@ -102,12 +102,19 @@ export function ControlCantidad({
   );
 }
 
-/** La nota de un renglón ("sin cebolla", "extra salsa"). */
+/**
+ * La nota de un renglón ("sin cebolla", "extra salsa").
+ *
+ * Se guarda sola al salir del campo. No hay botón: el que había no agregaba
+ * nada —el `onBlur` ya había guardado antes de que nadie llegara a tocarlo— y
+ * en la barra de acciones de un renglón cada botón de más es uno que se toca
+ * sin querer con el pulgar.
+ */
 export function NotaRenglon({ itemId, notes }: { itemId: string; notes: string | null }) {
-  const [estado, accion, isPending] = useActionState(ponerNotaItem, ESTADO_INICIAL);
+  const [estado, accion] = useActionState(ponerNotaItem, ESTADO_INICIAL);
 
   return (
-    <form action={accion} className="flex items-center gap-1.5 pt-0.5">
+    <form action={accion} className="pt-0.5">
       <input type="hidden" name="itemId" value={itemId} />
       <Input
         key={notes ?? ""}
@@ -116,16 +123,13 @@ export function NotaRenglon({ itemId, notes }: { itemId: string; notes: string |
         placeholder="Nota de cocina (ej. sin cebolla, término medio…)"
         aria-label="Nota del renglón"
         maxLength={200}
-        className="h-7 flex-1 text-xs rounded-lg bg-muted/30"
+        className="h-7 w-full text-xs rounded-lg bg-muted/30"
         onBlur={(e) => {
           if (e.target.value !== (notes ?? "")) {
             e.target.form?.requestSubmit();
           }
         }}
       />
-      <Enviar variant="ghost" size="sm" className="h-7 shrink-0 text-xs px-2" isPending={isPending}>
-        {isPending ? "Guardando…" : notes ? "Guardado" : "Nota"}
-      </Enviar>
       {!estado.ok && estado.error && <span className="sr-only">{estado.error}</span>}
     </form>
   );

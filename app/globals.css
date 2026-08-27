@@ -274,6 +274,23 @@
   --sidebar-ring: var(--brasa);
 }
 
+@layer utilities {
+  /**
+   * Una barra que scrollea sin barra de scroll.
+   *
+   * La usa el riel del menú: en 72px de ancho, la barra nativa se come el icono.
+   * `scrollbar-thin` y `scrollbar-none` se venían escribiendo por todo el
+   * proyecto sin que ninguna estuviera definida —eran clases inertes—, así que
+   * esta es la primera que de verdad hace algo.
+   */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;

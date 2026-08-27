@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * El dueño arma su equipo y cada rol ve solo lo suyo.
@@ -21,7 +22,7 @@ async function ingresar(page: Page, datos: { email: string; password: string }) 
   await page.getByLabel("Correo").fill(datos.email);
   await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
   await page.getByRole("button", { name: /ingresar/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 }
 
 test("el dueño agrega un mesero, aunque el correo de aviso no salga", async ({ page }) => {
@@ -88,7 +89,7 @@ test("el mesero dado de baja deja de entrar", async ({ page }) => {
   await page.getByLabel("Contraseña", { exact: true }).fill(MESERO.clave);
   await page.getByRole("button", { name: /ingresar/i }).click();
 
-  await expect(page).not.toHaveURL(/\/panel$/);
+  await expect(page).not.toHaveURL(PANTALLA_DE_ENTRADA);
   const salon = await page.request.get("/salon", { maxRedirects: 0 });
   expect(salon.status()).toBe(307);
 });

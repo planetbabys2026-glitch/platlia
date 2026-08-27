@@ -1,13 +1,26 @@
 import { z } from "zod";
 import { montoCopPositivo, textoOpcional } from "@/lib/validaciones";
 
+/**
+ * El insumo se mide en unidades y en nada más.
+ *
+ * Antes había que elegir entre gramo, kilo, mililitro, litro y paquete, y esa
+ * elección no la usaba nadie: el sistema no convierte —una receta que pide 1
+ * "kilogramo" descuenta 1 del stock, no 1000 gramos—, así que la unidad era una
+ * etiqueta que solo servía para escribirla en pantalla. Peor: invitaba a cargar
+ * un insumo en kilos y pedirlo en gramos en la receta, y ahí el descuento queda
+ * mil veces mal sin que nada falle.
+ *
+ * Ahora todo es "unidad" y a cuánto equivale una lo decide quien la carga, en el
+ * nombre del insumo: "Carne molida 125 g", "Aceite 500 ml", "Gaseosa 350 ml".
+ */
+export const UNIDAD_INSUMO = "UNIDAD";
+
 export const crearInsumoSchema = z.object({
   name: z.string().trim().min(2, "Escribí el nombre del insumo o producto.").max(120),
-  sku: textoOpcional(40),
-  unit: z.string().trim().min(1, "Elegí o escribí la unidad de medida.").max(20),
   stockCurrent: z.preprocess(
     (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),
-    z.number().int("El stock debe ser un número entero (ej. 1500 gramos o 10 unidades).").min(0),
+    z.number().int("El stock tiene que ser un número entero de unidades.").min(0),
   ),
   stockMin: z.preprocess(
     (v) => (v === "" || v === undefined || v === null ? 0 : Number(v)),

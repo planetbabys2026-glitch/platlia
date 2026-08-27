@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { laCuenta } from "./apoyo";
+import { laCuenta, PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * El camino del cliente real: alguien se registra y monta su negocio desde cero.
@@ -25,7 +25,7 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
   await page.getByLabel("Contraseña", { exact: true }).fill(CLAVE);
   await page.getByLabel("Repetir contraseña").fill(CLAVE);
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
   // Arranca vacío: sin mesas y sin carta.
   await expect(page.getByText("Mesas").locator("..")).toContainText("0");
@@ -99,7 +99,7 @@ test("la configuración cambia cómo se factura", async ({ page }) => {
   await page.getByRole("button", { name: /ingresar/i }).click();
   // Hay que esperar la navegación: un goto inmediato cancela el envío del
   // formulario y la sesión nunca llega a crearse.
-  await expect(page).toHaveURL(/\/panel$/);
+  await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
   await page.goto("/administracion/configuracion");
 

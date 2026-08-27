@@ -726,14 +726,26 @@ export const pedirCuenta = defineAction({
   async handler({ input, db, ctx }) {
     const pedido = await db.order.findFirst({
       where: { id: input.orderId },
-      select: { id: true, status: true, tableId: true, tipCop: true },
+      select: {
+        id: true,
+        status: true,
+        tableId: true,
+        tipCop: true,
+        // Para el aviso que le salta al cajero. Se piden acá, dentro de la
+        // consulta que igual se hace, y no en un viaje aparte después.
+        code: true,
+        turnNumber: true,
+        customerName: true,
+        table: { select: { name: true } },
+        _count: { select: { items: { where: { status: { not: "ANULADO" } } } } },
+      },
     });
     if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
     if (pedido.status !== "ABIERTA") {
       throw new ErrorDeUsuario("La cuenta ya fue pedida o el pedido está cerrado.");
     }
 
-    await db.$transaction(async (tx) => {
+    const totalCop = await db.$transaction(async (tx) => {
       /**
        * La propina se guarda en el mismo commit que manda la cuenta a caja.
        *
@@ -754,6 +766,14 @@ export const pedirCuenta = defineAction({
         data: { status: "CUENTA_PEDIDA", billRequestedAt: new Date() },
       });
       await sincronizarEstadoMesa(tx, pedido.tableId);
+
+      // El total, ya con la propina adentro: es el número que el cajero va a
+      // cobrar, y se lee después del update para no anunciar el viejo.
+      const { totalCop } = await tx.order.findUniqueOrThrow({
+        where: { id: pedido.id },
+        select: { totalCop: true },
+      });
+      return totalCop;
     });
 
     revalidatePath("/salon");
@@ -761,6 +781,28 @@ export const pedirCuenta = defineAction({
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${pedido.id}`);
     void publishTurneroUpdate(ctx.business.id);
+    /**
+     * Este es el momento canónico en que una cuenta llega a la caja, así que acá
+     * sí se levanta un aviso —igual que `confirmarPedido` con la cocina—.
+     *
+     * Y es lo único que mueve la insignia de Caja en el acto: el stream del shell
+     * (`/api/avisos/stream`) escucha `avisos:`, `cocina:` y `domicilios:`, pero no
+     * `turnero:`. Con solo el publish del turnero, el cajero no se enteraba hasta
+     * la reconciliación de los 60 segundos y no sonaba nada.
+     */
+    void publicarAviso(
+      ctx.business.id,
+      describirAviso({
+        tipo: "CUENTA_EN_CAJA",
+        orderId: pedido.id,
+        code: pedido.code,
+        mesa: pedido.table?.name ?? null,
+        cuenta: pedido.customerName,
+        turno: pedido.turnNumber,
+        productos: pedido._count.items,
+        totalCop,
+      }),
+    );
   },
 });
 
@@ -1902,6 +1944,14 @@ export const procesarVentaPosCompleta = defineAction({
           impresos += await encolarRecibo(tx, ctx.business.id, pedido.id);
         }
 
+        // El total final —con propina y domicilio— para el aviso que le salta al
+        // cajero. Se lee al cierre de la transacción, después de todos los
+        // recálculos, para no anunciar una cifra que ya cambió.
+        const { totalCop } = await tx.order.findUniqueOrThrow({
+          where: { id: pedido.id },
+          select: { totalCop: true },
+        });
+
         return {
           orderId: pedido.id,
           code: pedido.code,
@@ -1909,6 +1959,8 @@ export const procesarVentaPosCompleta = defineAction({
           tableId: pedido.tableId,
           mesa: pedido.table?.name ?? null,
           pagado: input.accion === "PAGAR_DIRECTO",
+          totalCop,
+          renglones: renglonesVivos,
           impresos,
         };
       }),
@@ -1924,19 +1976,50 @@ export const procesarVentaPosCompleta = defineAction({
       revalidatePath("/turnero");
       void publishCocinaUpdate(ctx.business.id);
       void publishTurneroUpdate(ctx.business.id);
-      // Los renglones que van a cocina son los del carrito: este camino borra y
-      // recrea todos los del pedido, así que `input.items` es exactamente lo que
-      // la cocina va a ver.
+      // Los renglones que van a cocina son los del carrito: este camino recrea
+      // solo los que todavía no tomó la plancha, así que `input.items` es
+      // exactamente lo que la cocina va a ver de nuevo.
+      //
+      // Con el carrito vacío no hay nada nuevo que anunciar: pasa al retomar un
+      // pedido que ya está en la plancha solo para mandarlo a caja, y sin esta
+      // guarda la cocina recibía un toast que decía "0 productos".
+      if (input.items.length > 0) {
+        void publicarAviso(
+          ctx.business.id,
+          describirAviso({
+            tipo: "COCINA_NUEVA_COMANDA",
+            orderId: resultado.orderId,
+            code: resultado.code,
+            mesa: resultado.mesa,
+            cuenta: input.customerName ?? null,
+            turno: resultado.turnNumber,
+            productos: input.items.length,
+          }),
+        );
+      }
+    }
+
+    /**
+     * Mandar la cuenta a la caja avisa, venga del salón o del POS.
+     *
+     * Sin esto, la única razón por la que la insignia de Caja se movía desde acá
+     * era de rebote: `ENVIAR_CAJA` también manda a cocina, y el stream del shell
+     * escucha `cocina:`. O sea que el contador andaba por accidente y el cajero
+     * veía un toast que decía "comanda a cocina" cuando lo que le llegó fue una
+     * cuenta para cobrar.
+     */
+    if (input.accion === "ENVIAR_CAJA") {
       void publicarAviso(
         ctx.business.id,
         describirAviso({
-          tipo: "COCINA_NUEVA_COMANDA",
+          tipo: "CUENTA_EN_CAJA",
           orderId: resultado.orderId,
           code: resultado.code,
           mesa: resultado.mesa,
           cuenta: input.customerName ?? null,
           turno: resultado.turnNumber,
-          productos: input.items.length,
+          productos: resultado.renglones,
+          totalCop: resultado.totalCop,
         }),
       );
     }

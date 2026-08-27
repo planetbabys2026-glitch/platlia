@@ -568,23 +568,15 @@ function ModalNuevoInsumo({ open, onOpenChange }: { open: boolean; onOpenChange:
             <Input name="name" placeholder="Ej. Carne Molida, Harina, Queso Mozzarella" required className="text-xs" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">SKU / Código</label>
-              <Input name="sku" placeholder="INS-001" className="text-xs" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">Unidad de Medida *</label>
-              <select name="unit" defaultValue="GRAMO" className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background">
-                <option value="UNIDAD">Unidad (UN)</option>
-                <option value="GRAMO">Gramo (g)</option>
-                <option value="KILOGRAMO">Kilogramo (kg)</option>
-                <option value="MILILITRO">Mililitro (ml)</option>
-                <option value="LITRO">Litro (L)</option>
-                <option value="PAQUETE">Paquete</option>
-              </select>
-            </div>
-          </div>
+          {/* A cuánto equivale una unidad lo decide quien carga el insumo, y lo
+              escribe en el nombre. El sistema no convierte entre medidas: si un
+              insumo se carga en kilos y la receta lo pide en gramos, el descuento
+              queda mil veces mal sin que nada falle. */}
+          <p className="rounded-lg border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+            El insumo se mide en <strong className="text-foreground">unidades</strong>. Definí vos a
+            cuánto equivale una y escribilo en el nombre: &ldquo;Carne molida 125 g&rdquo;,
+            &ldquo;Aceite 500 ml&rdquo;. La receta después pide cuántas unidades lleva el plato.
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -648,16 +640,15 @@ function ModalEditarInsumo({ item, open, onOpenChange }: { item: InsumoItem; ope
             <Input name="name" defaultValue={item.name} required className="text-xs" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">SKU</label>
-              <Input name="sku" defaultValue={item.sku ?? ""} className="text-xs" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold">Unidad *</label>
-              <Input name="unit" defaultValue={item.unit} required className="text-xs" />
-            </div>
-          </div>
+          {/* A cuánto equivale una unidad lo decide quien carga el insumo, y lo
+              escribe en el nombre. El sistema no convierte entre medidas: si un
+              insumo se carga en kilos y la receta lo pide en gramos, el descuento
+              queda mil veces mal sin que nada falle. */}
+          <p className="rounded-lg border border-dashed border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+            El insumo se mide en <strong className="text-foreground">unidades</strong>. Definí vos a
+            cuánto equivale una y escribilo en el nombre: &ldquo;Carne molida 125 g&rdquo;,
+            &ldquo;Aceite 500 ml&rdquo;. La receta después pide cuántas unidades lleva el plato.
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -1493,7 +1484,7 @@ function TarjetaRecetaProducto({
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <span className="text-muted-foreground font-medium">Según lo que se elija:</span>
               <Link
-                href="/administracion/carta/modificadores"
+                href="/administracion/modificadores"
                 className="text-brand text-rotulo font-semibold hover:underline"
               >
                 Editar modificadores ↗

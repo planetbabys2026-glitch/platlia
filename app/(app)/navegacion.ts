@@ -141,11 +141,14 @@ export function construirNavegacion({
   };
 
   const operacion: ItemNav[] = [
-    ...(puedeVer("salon_pos")
+    ...(usaMesas && puedeVer("salon_pos")
+      ? [{ titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }]
+      : []),
+    // El POS va con su propio permiso: un mesero toma pedidos en la mesa pero no
+    // vende de mostrador, y con `salon_pos` para los dos no había forma de darle
+    // el salón sin darle también el punto de venta.
+    ...(puedeVer("pos")
       ? [
-          ...(usaMesas
-            ? [{ titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }]
-            : []),
           {
             // Con mesas es la pantalla del pedido sin mesa; sin mesas es el punto
             // de venta y la entrada del negocio.
@@ -245,7 +248,14 @@ export function construirNavegacion({
 
   const administracion: ItemNav[] = [
     ...(puedeVer("carta")
-      ? [{ titulo: "Carta", href: "/administracion/carta", icono: BookOpen }]
+      ? [
+          { titulo: "Carta", href: "/administracion/carta", icono: BookOpen },
+          // Al mismo nivel que la Carta y no adentro: los modificadores son una
+          // pantalla entera —grupos, opciones, insumos por opción— y colgada de un
+          // enlace dentro de Carta no aparecía en ningún menú. Es el mismo criterio
+          // por el que los módulos con varias pantallas declaran sus secciones.
+          { titulo: "Modificadores", href: "/administracion/modificadores", icono: SlidersHorizontal },
+        ]
       : []),
     ...(usaMesas && puedeVer("salon_plano")
       ? [{ titulo: "Salón", href: "/administracion/salon", icono: LayoutGrid }]

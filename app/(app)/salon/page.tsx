@@ -23,6 +23,7 @@ export default async function SalonPage() {
   if (!tienePermisoSeccion(ctx.role, "salon_pos", settings.rolePermissions)) {
     notFound();
   }
+  const puedeVenderSinMesa = tienePermisoSeccion(ctx.role, "pos", settings.rolePermissions);
 
   const [areas, caja, pedidos] = await Promise.all([
     getSalon(ctx.business.id),
@@ -75,7 +76,9 @@ export default async function SalonPage() {
               un televisor que se abre una vez por turno y la caja tiene su
               propio ítem en el menú, siempre a la vista. Repetirlos acá era
               ruido en la barra que más se toca del sistema. */}
-          <AbrirPedidoSinMesa />
+          {/* Un pedido sin mesa es una venta de mostrador: la abre quien tiene
+              el POS. Al mesero le queda el salón, que es lo suyo. */}
+          {puedeVenderSinMesa && <AbrirPedidoSinMesa />}
         </div>
       </div>
 

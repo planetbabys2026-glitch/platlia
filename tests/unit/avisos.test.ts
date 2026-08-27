@@ -138,3 +138,59 @@ describe("describirAviso · domicilio nuevo", () => {
     expect(aviso.titulo).toBe("Domicilio #419");
   });
 });
+
+describe("describirAviso · cuenta en la caja", () => {
+  it("se lee igual que la comanda —mesa y cuenta— pero manda a la caja", () => {
+    // A propósito el mismo título que el aviso de cocina: la misma cuenta vista
+    // por dos personas distintas tiene que llamarse igual en las dos pantallas.
+    const aviso = describirAviso({
+      tipo: "CUENTA_EN_CAJA",
+      orderId: "ord9",
+      code: 420,
+      mesa: "5",
+      cuenta: "Andrés",
+      turno: 7,
+      productos: 3,
+      totalCop: 15_000,
+      ts: TS,
+    });
+
+    expect(aviso.titulo).toBe("Mesa 5 · Andrés");
+    expect(aviso.href).toBe("/caja");
+    expect(aviso.id).toBe(`ord9:CUENTA_EN_CAJA:${TS}`);
+  });
+
+  it("el detalle abre con la plata, que es lo que el cajero va a teclear", () => {
+    const aviso = describirAviso({
+      tipo: "CUENTA_EN_CAJA",
+      orderId: "ord10",
+      code: 421,
+      mesa: "3",
+      cuenta: null,
+      turno: null,
+      productos: 1,
+      totalCop: 5_000,
+      ts: TS,
+    });
+
+    expect(aviso.titulo).toBe("Mesa 3");
+    expect(aviso.detalle).toBe("$5.000 · 1 producto");
+  });
+
+  it("una cuenta sin mesa —la del POS— se nombra por su turno", () => {
+    const aviso = describirAviso({
+      tipo: "CUENTA_EN_CAJA",
+      orderId: "ord11",
+      code: 422,
+      mesa: null,
+      cuenta: "Prueba mostrador",
+      turno: 1,
+      productos: 2,
+      totalCop: 27_000,
+      ts: TS,
+    });
+
+    expect(aviso.titulo).toBe("Turno 01 · Prueba mostrador");
+    expect(aviso.detalle).toBe("$27.000 · 2 productos");
+  });
+});

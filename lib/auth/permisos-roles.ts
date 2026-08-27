@@ -5,6 +5,7 @@ import { Role } from "@/generated/prisma/enums";
  */
 export type SeccionPermiso =
   | "salon_pos"
+  | "pos"
   | "cocina"
   | "caja"
   | "domicilios"
@@ -26,8 +27,23 @@ export type InfoSeccion = {
 export const SECCIONES_SISTEMA: readonly InfoSeccion[] = [
   {
     id: "salon_pos",
-    nombre: "Salón / Punto de Venta (POS)",
-    descripcion: "Toma de pedidos en mesas, pedidos para llevar y mostrador.",
+    nombre: "Salón",
+    descripcion: "Plano de mesas y toma de pedidos en la mesa.",
+    categoria: "Operación",
+  },
+  {
+    /**
+     * Separado del salón a propósito: un mesero toma pedidos en la mesa pero no
+     * vende de mostrador. Con un solo permiso para las dos cosas, dejarle el
+     * salón le dejaba también el punto de venta.
+     *
+     * El id es nuevo, así que las empresas que ya tienen permisos guardados no
+     * lo traen en su JSON y caen al valor por defecto de su rol: no hace falta
+     * migrar nada.
+     */
+    id: "pos",
+    nombre: "Punto de Venta (POS)",
+    descripcion: "Pedidos sin mesa: para llevar, en sitio y mostrador.",
     categoria: "Operación",
   },
   {
@@ -134,6 +150,7 @@ export const PERMISOS_POR_DEFECTO: Record<
 > = {
   [Role.ADMINISTRADOR]: {
     salon_pos: true,
+    pos: true,
     cocina: true,
     caja: true,
     domicilios: true,
@@ -147,6 +164,7 @@ export const PERMISOS_POR_DEFECTO: Record<
   },
   [Role.CAJERO]: {
     salon_pos: true,
+    pos: true,
     cocina: false,
     caja: true,
     domicilios: true,
@@ -160,6 +178,7 @@ export const PERMISOS_POR_DEFECTO: Record<
   },
   [Role.MESERO]: {
     salon_pos: true,
+    pos: false,
     cocina: false,
     caja: false,
     domicilios: false,
@@ -173,6 +192,7 @@ export const PERMISOS_POR_DEFECTO: Record<
   },
   [Role.COCINA]: {
     salon_pos: false,
+    pos: false,
     cocina: true,
     caja: false,
     domicilios: false,
@@ -216,6 +236,7 @@ export function obtenerPermisosRol(
   if (rol === Role.PROPIETARIO) {
     return {
       salon_pos: true,
+      pos: true,
       cocina: true,
       caja: true,
       domicilios: true,
@@ -231,6 +252,7 @@ export function obtenerPermisosRol(
 
   const defaults = PERMISOS_POR_DEFECTO[rol] ?? {
     salon_pos: false,
+    pos: false,
     cocina: false,
     caja: false,
     domicilios: false,

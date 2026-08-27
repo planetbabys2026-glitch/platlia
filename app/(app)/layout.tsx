@@ -8,6 +8,7 @@ import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { diasParaElCorte } from "@/lib/billing/suscripcion";
 import { currentBusinessDate } from "@/lib/time";
 import { AppShell } from "./app-shell";
+import { AvisoCorreoSinVerificar } from "./aviso-correo";
 import { AvisoLicencia } from "./aviso-licencia";
 
 /**
@@ -97,6 +98,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {mostrarAviso && (
         <AvisoLicencia diasRestantes={diasParaCorte} puedeFacturar={puedeFacturar} />
       )}
+      {/* Vivía en el panel, que ya no se pinta. Acá se ve desde cualquier pantalla,
+          que es lo que corresponde a algo que rompe la recuperación de la cuenta
+          justo el día que hace falta. */}
+      {!ctx.user.emailVerifiedAt && <AvisoCorreoSinVerificar email={ctx.user.email} />}
       {children}
     </AppShell>
   );
