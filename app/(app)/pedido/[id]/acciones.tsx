@@ -3,8 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { PaymentMethod } from "@/generated/prisma/enums";
-import { CheckCircle2, CreditCard, Minus, Plus, ReceiptText, Trash2, UtensilsCrossed } from "lucide-react";
+import { CheckCircle2, Minus, Plus, ReceiptText, Trash2, UtensilsCrossed } from "lucide-react";
 import {
   anularItem,
   anularPedido,
@@ -13,30 +12,14 @@ import {
   pedirCuenta,
   ponerNotaItem,
   quitarItem,
-  registrarPago,
 } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-import { formatCop } from "@/lib/money";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
-import { CalculadoraDividirCuenta } from "./calculadora-dividir-cuenta";
-
-/** Etiquetas de los métodos de pago en Colombia. */
-const METODOS: Record<string, string> = {
-  EFECTIVO: "Efectivo",
-  TARJETA_DEBITO: "Tarjeta débito",
-  TARJETA_CREDITO: "Tarjeta crédito",
-  NEQUI: "Nequi",
-  DAVIPLATA: "Daviplata",
-  TRANSFERENCIA: "Transferencia bancaria",
-  BONO: "Bono",
-  OTRO: "Otro",
-};
 
 function Enviar({
   children,
@@ -44,17 +27,27 @@ function Enviar({
   size,
   className,
   isPending,
+  etiqueta,
 }: {
   children: React.ReactNode;
   variant?: React.ComponentProps<typeof Button>["variant"];
   size?: React.ComponentProps<typeof Button>["size"];
   className?: string;
   isPending?: boolean;
+  /** Para los botones que solo llevan un ícono adentro. */
+  etiqueta?: string;
 }) {
   const { pending } = useFormStatus();
   const cargando = pending || isPending;
   return (
-    <Button type="submit" variant={variant} size={size} className={className} disabled={cargando}>
+    <Button
+      type="submit"
+      variant={variant}
+      size={size}
+      className={className}
+      disabled={cargando}
+      aria-label={etiqueta}
+    >
       {cargando ? "…" : children}
     </Button>
   );
@@ -79,7 +72,15 @@ export function ControlCantidad({
       <form action={accion}>
         <input type="hidden" name="itemId" value={itemId} />
         <input type="hidden" name="quantity" value={Math.max(1, quantity - 1)} />
-        <Enviar variant="outline" size="sm" className="size-6 p-0 rounded-md" isPending={isPending}>
+        {/* Un botón que solo lleva un ícono no tiene nombre accesible: ni el
+            lector de pantalla ni una prueba pueden nombrarlo. */}
+        <Enviar
+          variant="outline"
+          size="sm"
+          className="size-6 p-0 rounded-md"
+          isPending={isPending}
+          etiqueta="Quitar una unidad"
+        >
           <Minus className="size-3" />
         </Enviar>
       </form>
@@ -87,7 +88,13 @@ export function ControlCantidad({
       <form action={accion}>
         <input type="hidden" name="itemId" value={itemId} />
         <input type="hidden" name="quantity" value={quantity + 1} />
-        <Enviar variant="outline" size="sm" className="size-6 p-0 rounded-md" isPending={isPending}>
+        <Enviar
+          variant="outline"
+          size="sm"
+          className="size-6 p-0 rounded-md"
+          isPending={isPending}
+          etiqueta="Agregar una unidad"
+        >
           <Plus className="size-3" />
         </Enviar>
       </form>
@@ -264,105 +271,6 @@ export function PedirCuenta({
       {!estado.ok && estado.error && (
         <p className="text-destructive mt-1 text-xs">{estado.error}</p>
       )}
-    </form>
-  );
-}
-
-/** Registro de cobro directo (POS mostrador). */
-export function Cobrar({
-  orderId,
-  faltanteCop,
-}: {
-  orderId: string;
-  faltanteCop: number;
-}) {
-  const [estado, accion, isPending] = useActionState(registrarPago, ESTADO_INICIAL);
-  const [montoACobrar, setMontoACobrar] = useState<number>(faltanteCop);
-
-  // Sincronizar monto si cambia el faltante externo
-  useEffect(() => {
-    setMontoACobrar(faltanteCop);
-  }, [faltanteCop]);
-
-  return (
-    <form action={accion} className="space-y-3">
-      <input type="hidden" name="orderId" value={orderId} />
-
-      {!estado.ok && estado.error && (
-        <Alert variant="destructive" role="alert">
-          <AlertDescription>{estado.error}</AlertDescription>
-        </Alert>
-      )}
-
-      {estado.ok && estado.data && !estado.data.cerrado && (
-        <Alert role="status">
-          <AlertDescription>
-            Pago registrado. Faltan {formatCop(estado.data.faltanteCop)}.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {estado.ok && estado.data?.changeCop ? (
-        <Alert role="status">
-          <AlertDescription>
-            Vuelto: <strong className="numeral">{formatCop(estado.data.changeCop)}</strong>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <CalculadoraDividirCuenta
-        faltanteCop={faltanteCop}
-        onSeleccionarMonto={(monto) => setMontoACobrar(monto)}
-      />
-
-      <div className="space-y-1">
-        <Label htmlFor="metodo" className="text-xs text-muted-foreground">Método de pago</Label>
-        <select
-          id="metodo"
-          name="method"
-          defaultValue={PaymentMethod.EFECTIVO}
-          className="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
-        >
-          {Object.values(PaymentMethod).map((metodo) => (
-            <option key={metodo} value={metodo}>
-              {METODOS[metodo]}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2.5">
-        <div className="space-y-1">
-          <Label htmlFor="monto" className="text-xs text-muted-foreground">Monto a cobrar</Label>
-          <Input
-            id="monto"
-            name="amountCop"
-            inputMode="numeric"
-            value={montoACobrar}
-            onChange={(e) => setMontoACobrar(parseInt(e.target.value, 10) || 0)}
-            required
-            className="h-9 text-xs rounded-lg font-mono font-bold text-brand"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="entregado" className="text-xs text-muted-foreground">Recibido (efectivo)</Label>
-          <Input
-            id="entregado"
-            name="tenderedCop"
-            inputMode="numeric"
-            placeholder="Opcional"
-            className="h-9 text-xs rounded-lg font-mono"
-          />
-        </div>
-      </div>
-
-      <Enviar
-        className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold text-xs h-10 rounded-xl shadow-xs gap-1.5"
-        isPending={isPending}
-      >
-        <CreditCard className="size-3.5" />
-        <span>Registrar pago</span>
-      </Enviar>
     </form>
   );
 }

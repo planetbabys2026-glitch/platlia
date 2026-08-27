@@ -24,7 +24,7 @@ import {
   SegunConsumo,
   TotalesEnVivo,
 } from "./cuenta-en-vivo";
-import { AnularPedido, Cobrar, ConfirmarPedido, PedirCuenta } from "./acciones";
+import { AnularPedido, ConfirmarPedido, PedirCuenta } from "./acciones";
 
 export const metadata: Metadata = { title: "Pedido · Platlia" };
 export const dynamic = "force-dynamic";
@@ -89,7 +89,6 @@ export default async function PedidoPage({
   const itemsSinEnviarCount = pedido.items.filter(
     (i) => i.status === "PENDIENTE" && i.sentToKitchenAt === null,
   ).length;
-  const faltanteCop = Math.max(0, pedido.totalCop - pedido.paidCop);
   const nombreDeCuenta = pedido.customerName?.trim() || null;
   const puedeCobrar = tieneRol(ctx.role, [Role.CAJERO, Role.ADMINISTRADOR]);
 
@@ -126,13 +125,18 @@ export default async function PedidoPage({
         </CardContent>
       </Card>
 
-      {/* Pedir la cuenta a la mesa (marca CUENTA_PEDIDA y avisa a caja) */}
-      {pedido.status === "ABIERTA" && pedido.type === "MESA" && (
+      {/* Mandar la cuenta a caja (marca CUENTA_PEDIDA).
+          Sin condición de tipo: una cuenta llega a la caja porque alguien la
+          manda, tenga mesa o no. Hoy acá solo llegan pedidos de mesa —el early
+          return de arriba deriva el resto al POS, que tiene su propio "Enviar a
+          caja"—, así que la condición que había no cambiaba nada y solo sugería
+          que un pedido sin mesa se cierra distinto. No se cierra distinto. */}
+      {pedido.status === "ABIERTA" && (
         <SegunConsumo
           conConsumo={
             <PedirCuenta
               orderId={pedido.id}
-              esMesa={true}
+              esMesa={pedido.type === "MESA"}
               tipActualCop={pedido.tipCop}
               propina={{
                 habilitada: settings.tipSuggestionEnabled,
@@ -143,22 +147,6 @@ export default async function PedidoPage({
                 ),
               }}
             />
-          }
-        />
-      )}
-
-      {/* Cobro directo si aplica */}
-      {editable && pedido.type !== "MESA" && (
-        <SegunConsumo
-          conConsumo={
-            <Card className="rounded-2xl border-border/80 shadow-xs">
-              <CardContent className="p-4 space-y-3">
-                <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                  Cobrar pedido
-                </h2>
-                <Cobrar orderId={pedido.id} faltanteCop={faltanteCop} />
-              </CardContent>
-            </Card>
           }
         />
       )}

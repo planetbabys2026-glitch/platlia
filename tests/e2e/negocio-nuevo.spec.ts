@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { laCuenta } from "./apoyo";
 
 /**
  * El camino del cliente real: alguien se registra y monta su negocio desde cero.
@@ -74,7 +75,7 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
   await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
 
   await page.getByRole("button", { name: /cerveza nacional/i }).click();
-  const cuenta = page.getByRole("complementary", { name: "La cuenta" });
+  const cuenta = laCuenta(page);
   // 8% incluido en $5.000: $4.630 de base y $370 de impuesto.
   await expect(cuenta.getByText("Base gravable").locator("..")).toContainText("$4.630");
   await expect(cuenta.getByText("Total").locator("..")).toContainText("$5.000");
@@ -120,7 +121,7 @@ test("la configuración cambia cómo se factura", async ({ page }) => {
   await page.getByRole("button", { name: /abrir pedido en la mesa 2$/i }).click();
   await page.getByRole("button", { name: /cerveza nacional/i }).click();
 
-  const cuenta = page.getByRole("complementary", { name: "La cuenta" });
+  const cuenta = laCuenta(page);
   await expect(cuenta.getByText("Base gravable").locator("..")).toContainText("$5.000");
   await expect(cuenta.getByText("Impuesto").locator("..")).toContainText("$400");
   await expect(cuenta.getByText("Total").locator("..")).toContainText("$5.400");

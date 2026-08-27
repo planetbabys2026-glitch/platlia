@@ -1,5 +1,7 @@
 import "server-only";
+import { getSettings } from "@/features/negocio/queries";
 import { tenantDb } from "@/lib/db/tenant";
+import { currentBusinessDate } from "@/lib/time";
 
 /** El pedido con todo lo que necesita la pantalla de cuenta. */
 export async function getPedido(businessId: string, orderId: string) {
@@ -191,6 +193,9 @@ export async function getCarta(businessId: string) {
         select: {
           id: true,
           name: true,
+          // El código de barras: es por donde el POS encuentra el producto cuando
+          // quien atiende lo pasa por el lector en vez de buscarlo por nombre.
+          sku: true,
           priceCop: true,
           isAvailable: true,
           imageUrl: true,
@@ -253,10 +258,20 @@ export async function getCarta(businessId: string) {
   });
 }
 
-/** Los pedidos que siguen vivos, para el panel y para lo que no es mesa. */
+/**
+ * Los pedidos que siguen vivos, para el panel y para lo que no es mesa.
+ *
+ * Acotado a la jornada en curso. Sin eso, un pedido que alguien se olvidó de
+ * cerrar anteanoche seguía apareciendo en la lista "En espera" del POS para
+ * siempre, y encima trababa el cierre de caja de una jornada que no era la suya.
+ */
 export async function getPedidosAbiertos(businessId: string) {
+  const settings = await getSettings(businessId);
   const pedidos = await tenantDb(businessId).order.findMany({
-    where: { status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } },
+    where: {
+      businessDate: currentBusinessDate(settings),
+      status: { in: ["ABIERTA", "CUENTA_PEDIDA"] },
+    },
     orderBy: { openedAt: "asc" },
     select: {
       id: true,
@@ -267,6 +282,9 @@ export async function getPedidosAbiertos(businessId: string) {
       totalCop: true,
       openedAt: true,
       customerName: true,
+      // "En sitio" viaja como prefijo de las notas, no como `type`: la lista del
+      // salón lo lee de acá para poder etiquetarlo.
+      notes: true,
       tableId: true,
       table: { select: { name: true } },
       // Los que quedaron en cero se pueden cerrar sin cobrar, y hay que poder

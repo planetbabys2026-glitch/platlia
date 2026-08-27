@@ -15,6 +15,8 @@ import {
   PauseCircle,
   Plus,
   Printer,
+  ReceiptText,
+  ScanLine,
   Search,
   ShoppingBag,
   ShoppingCart,
@@ -60,6 +62,8 @@ export type PosProducto = ProductoConModificadores & {
   priceCop: number;
   isAvailable: boolean;
   imageUrl: string | null;
+  /** El código de barras del producto, para el lector del mostrador. */
+  sku?: string | null;
   trackStock?: boolean;
   stockQty?: number;
   /**
@@ -94,6 +98,8 @@ export type PosPedidoAbierto = {
   totalCop: number;
   openedAt: Date;
   customerName: string | null;
+  /** Con mesa la cuenta es del salón, no de esta pantalla. */
+  tableId: string | null;
 };
 
 export type PosPedidoDetalle = {
@@ -119,6 +125,9 @@ export type PosPedidoDetalle = {
     basePriceCopSnapshot: number;
     quantity: number;
     status?: string;
+    /** Puesto = la cocina ya lo tiene. Deja de ser del carrito. */
+    sentToKitchenAt?: Date | string | null;
+    lineTotalCop?: number;
     notes: string | null;
     modifiers: Array<{
       id: string;
@@ -130,8 +139,40 @@ export type PosPedidoDetalle = {
   }[];
 };
 
+/** Las cuatro cosas que se pueden hacer con lo que hay en pantalla. */
+type AccionPos = "PAGAR_DIRECTO" | "ENVIAR_COCINA" | "ENVIAR_CAJA" | "PARQUEAR";
+
+type RenglonDePedido = PosPedidoDetalle["items"][number];
+
+/**
+ * Un renglón vuelve al carrito solo si la cocina todavía no lo tiene.
+ *
+ * Es el mismo corte que usa `confirmarPedido` para decidir qué mandar a la
+ * plancha, y el que usa la acción del servidor para decidir qué borrar. Tienen
+ * que coincidir: si la pantalla mete al carrito algo que el servidor ya no borra,
+ * el renglón se duplica; al revés, se pierde.
+ */
+export function esDelCarrito(item: RenglonDePedido): boolean {
+  return (
+    item.status !== "ANULADO" &&
+    (item.status ?? "PENDIENTE") === "PENDIENTE" &&
+    !item.sentToKitchenAt
+  );
+}
+
+/** Lo que ya tomó la cocina: se muestra, no se edita. */
+export function yaEstaEnCocina(item: RenglonDePedido): boolean {
+  return item.status !== "ANULADO" && !esDelCarrito(item);
+}
+
 /**
  * Rearma el carrito de un pedido parqueado que se vuelve a abrir.
+ *
+ * Solo los renglones que siguen siendo del carrito. Antes entraban todos —los
+ * anulados incluidos, que así resucitaban y se volvían a cobrar—, y al guardar,
+ * el servidor borraba y recreaba también lo que la cocina ya estaba preparando:
+ * se le borraba el estado y el cronómetro, media pantalla del KDS desaparecía de
+ * golpe y la comanda se volvía a imprimir entera.
  *
  * Los modificadores se reconstruyen de las instantáneas del renglón, no del
  * catálogo actual: si mientras el pedido estaba parqueado alguien le cambió el
@@ -140,7 +181,7 @@ export type PosPedidoDetalle = {
  * lo volvía a guardar mal.
  */
 function cartDesdePedido(pedido: PosPedidoDetalle): CartItem[] {
-  return pedido.items.map((i) => {
+  return pedido.items.filter(esDelCarrito).map((i) => {
     const opciones = i.modifiers.map((m) => ({
       id: m.optionId ?? m.id,
       groupName: m.groupNameSnapshot,
@@ -238,6 +279,16 @@ export function ModuloPosInteractive({
   // ── Estado de catálogo y búsqueda ──────────────────────────────────────────
   const [busqueda, setBusqueda] = useState("");
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string | null>(null);
+  /**
+   * El lector de código de barras.
+   *
+   * Un lector de mostrador se comporta como un teclado que escribe rápido y
+   * termina con Enter, así que no hace falta ninguna API de cámara: alcanza con un
+   * campo enfocado y un `submit`. Venía del módulo de Venta Rápida, que era lo
+   * único que esa pantalla tenía y esta no.
+   */
+  const [codigoLeido, setCodigoLeido] = useState("");
+  const [modalEscanerAbierto, setModalEscanerAbierto] = useState(false);
 
   // ── Estado del Pedido Activo / Parqueado ───────────────────────────────────
   const [activeOrderId, setActiveOrderId] = useState<string | null>(pedidoInicial?.id ?? null);
@@ -266,12 +317,42 @@ export function ModuloPosInteractive({
    * lado sería una forma cómoda de perder el carrito de un clic.
    */
   const pedidoGuardadoVacio =
-    !!pedidoInicial && pedidoInicial.items.filter((i) => i.status !== "ANULADO").length === 0;
+    !!pedidoInicial && pedidoInicial.items.every((i) => i.status === "ANULADO");
   const [customerName, setCustomerName] = useState(pedidoInicial?.customerName ?? "");
   const [customerPhone, setCustomerPhone] = useState(pedidoInicial?.customerPhone ?? "");
   const [deliveryAddress, setDeliveryAddress] = useState(pedidoInicial?.deliveryAddress ?? "");
   const [orderNotes, setOrderNotes] = useState(
     pedidoInicial?.notes?.replace("[PARA COMER AQUÍ / EN SITIO]", "").trim() ?? ""
+  );
+
+  /**
+   * Los renglones que ya tomó la cocina. Se muestran y no se editan.
+   *
+   * Sin esto, reabrir un pedido que está en la plancha mostraba un carrito vacío
+   * y un total en cero: parecía que el pedido se había perdido, y guardarlo así
+   * habría sido cobrarle al cliente solo lo que se agregara después.
+   */
+  /**
+   * La lista "En espera" solo muestra pedidos sin mesa.
+   *
+   * `getPedidosAbiertos` trae todo lo vivo, cuentas de mesa incluidas, y esta
+   * pantalla las cargaba en el carrito como si fueran suyas: al guardar quedaban
+   * convertidas en pedido para llevar, con la mesa perdida y el nombre de la
+   * cuenta pisado. Una cuenta de mesa se atiende desde el salón.
+   */
+  const enEspera = useMemo(
+    () => pedidosAbiertos.filter((p) => p.tableId === null),
+    [pedidosAbiertos],
+  );
+
+  const enCocina = useMemo(
+    () => (pedidoInicial?.items ?? []).filter(yaEstaEnCocina),
+    [pedidoInicial],
+  );
+  const totalEnCocinaCop = useMemo(
+    () =>
+      enCocina.reduce((suma, i) => suma + (i.lineTotalCop ?? i.unitPriceCop * i.quantity), 0),
+    [enCocina],
   );
 
   // Sincronizar estado cuando se carga un pedido parqueado (pedidoInicial)
@@ -280,12 +361,7 @@ export function ModuloPosInteractive({
       setActiveOrderId(pedidoInicial.id);
       setOrderCode(pedidoInicial.code);
       setTurnNumber(pedidoInicial.turnNumber);
-      setCart(
-        cartDesdePedido({
-          ...pedidoInicial,
-          items: pedidoInicial.items.filter((i) => i.status !== "ANULADO"),
-        })
-      );
+      setCart(cartDesdePedido(pedidoInicial));
       setTipoConsumo(
         pedidoInicial.type === "DOMICILIO"
           ? "DOMICILIO"
@@ -307,6 +383,8 @@ export function ModuloPosInteractive({
   /** El producto cuyo modal de opciones está abierto, o null si no hay ninguno. */
   const [productoAElegir, setProductoAElegir] = useState<PosProducto | null>(null);
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
+  /** El panel donde se elige la propina antes de mandar la cuenta a la caja. */
+  const [modalCajaAbierto, setModalCajaAbierto] = useState(false);
   const [modalParqueadosAbierto, setModalParqueadosAbierto] = useState(false);
   const [modalAlertasStockAbierto, setModalAlertasStockAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState<"EFECTIVO" | "TARJETA_DEBITO" | "TARJETA_CREDITO" | "NEQUI" | "DAVIPLATA" | "TRANSFERENCIA">("EFECTIVO");
@@ -395,7 +473,22 @@ export function ModuloPosInteractive({
   } | null>(null);
 
   // ── Cálculos del Carrito ───────────────────────────────────────────────────
-  const subtotalCart = cart.reduce((acc, item) => acc + precioUnitario(item) * item.quantity, 0);
+  /**
+   * El subtotal es el del PEDIDO, no el del carrito.
+   *
+   * Lo que ya está en la plancha sigue siendo parte de la cuenta aunque no se
+   * pueda editar; sumarlo acá es lo que hace que el total en pantalla coincida
+   * con el que el servidor recalcula al guardar. Con el total del carrito solo,
+   * reabrir un pedido a medio preparar mostraba una cifra más chica que la que se
+   * iba a cobrar.
+   */
+  const subtotalCarrito = cart.reduce(
+    (acc, item) => acc + precioUnitario(item) * item.quantity,
+    0,
+  );
+  const subtotalCart = subtotalCarrito + totalEnCocinaCop;
+  /** Hay algo que mandar o que cobrar: en el carrito o ya en la plancha. */
+  const hayPedido = cart.length > 0 || enCocina.length > 0;
   const costoDomicilio = tipoConsumo === "DOMICILIO" ? (settings.deliveryFeeCop ?? 0) : 0;
   const totalCart = subtotalCart + costoDomicilio;
 
@@ -500,6 +593,46 @@ export function ModuloPosInteractive({
     agregarCombinacion(producto, [], 1, "");
   };
 
+  /** Lo mismo que un toque, pero pasando por el modal si hay algo que elegir. */
+  const tocarProducto = (producto: PosProducto) => {
+    if (tieneModificadores(producto)) setProductoAElegir(producto);
+    else agregarAlCarrito(producto);
+  };
+
+  /**
+   * Un código leído (o tecleado) se resuelve contra SKU, id o nombre exacto.
+   *
+   * Exacto primero y por subcadena después: un SKU es único, un nombre no, y
+   * agregar "Cerveza" cuando hay cuatro sería agregar la que salga. La subcadena
+   * queda como última chance para quien escribe a mano.
+   */
+  const procesarCodigoDeBarras = (codigo: string) => {
+    const query = codigo.trim().toLowerCase();
+    if (!query) return;
+
+    const todos = carta.flatMap((c) => c.products);
+    const exacto = todos.find(
+      (prod) =>
+        (prod.sku && prod.sku.toLowerCase() === query) ||
+        prod.id.toLowerCase() === query ||
+        prod.name.toLowerCase() === query,
+    );
+    const encontrado = exacto ?? todos.find((prod) => prod.name.toLowerCase().includes(query));
+
+    if (!encontrado) {
+      setErrorGlobal(`No se encontró ningún producto con el código o nombre "${codigo}".`);
+      return;
+    }
+    if (!encontrado.isAvailable) {
+      setErrorGlobal(`${encontrado.name} está marcado como no disponible en la carta.`);
+      return;
+    }
+
+    tocarProducto(encontrado);
+    setCodigoLeido("");
+    setErrorGlobal(null);
+  };
+
   const cambiarCantidadCart = (lineKey: string, delta: number) => {
     const item = cart.find((i) => i.lineKey === lineKey);
 
@@ -565,11 +698,12 @@ export function ModuloPosInteractive({
     router.push(usaMesas ? "/salon" : "/pos");
   };
 
-  // ── Procesar Acción (PAGAR_DIRECTO, ENVIAR_COCINA, PARQUEAR) ───────────────
-  const ejecutarProcesarPos = async (
-    accion: "PAGAR_DIRECTO" | "ENVIAR_COCINA" | "PARQUEAR"
-  ) => {
-    if (cart.length === 0) {
+  // ── Procesar Acción (PAGAR_DIRECTO, ENVIAR_COCINA, ENVIAR_CAJA, PARQUEAR) ──
+  const ejecutarProcesarPos = async (accion: AccionPos) => {
+    // Un pedido retomado puede tener el carrito vacío y todo en la plancha: eso
+    // no es un pedido vacío, y mandarlo a caja o cobrarlo es exactamente lo que
+    // se está haciendo.
+    if (!hayPedido) {
       setErrorGlobal("El pedido está vacío. Tocá un producto para agregarlo.");
       return;
     }
@@ -637,6 +771,9 @@ export function ModuloPosInteractive({
         modifierOptionIds: i.opciones.map((o) => o.id),
       })),
       accion,
+      // La propina de "Enviar a caja" viaja suelta: ahí no hay pago todavía, y es
+      // el mismo momento en que `pedirCuenta` la pregunta en la mesa.
+      ...(accion === "ENVIAR_CAJA" ? { tipCop: propinaCop } : {}),
       ...(accion === "PAGAR_DIRECTO"
         ? {
             pago: {
@@ -680,7 +817,13 @@ export function ModuloPosInteractive({
       } else if (accion === "ENVIAR_COCINA") {
         setMensajeExito({
           titulo: "Comanda enviada a cocina",
-          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Pedido listo en Caja para cobrar.`,
+          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Queda en espera: mandalo a caja cuando el cliente pida la cuenta.`,
+          orderId: data.orderId,
+        });
+      } else if (accion === "ENVIAR_CAJA") {
+        setMensajeExito({
+          titulo: "Cuenta enviada a caja",
+          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Ya aparece en Caja para cobrar.`,
           orderId: data.orderId,
         });
       } else {
@@ -718,7 +861,9 @@ export function ModuloPosInteractive({
 
       const productosFiltrados = cat.products.filter((p) => {
         if (!q) return true;
-        return p.name.toLowerCase().includes(q);
+        // También por SKU: quien tiene el producto en la mano lee el código, no
+        // el nombre.
+        return p.name.toLowerCase().includes(q) || Boolean(p.sku?.toLowerCase().includes(q));
       });
 
       if (productosFiltrados.length === 0) return null;
@@ -848,9 +993,9 @@ export function ModuloPosInteractive({
               >
                 <PauseCircle className="size-3.5 text-muted-foreground" />
                 <span>En espera</span>
-                {pedidosAbiertos.length > 0 && (
+                {enEspera.length > 0 && (
                   <Badge className="bg-warning text-white text-rotulo px-1.5 py-0 h-4 min-w-4 rounded-full">
-                    {pedidosAbiertos.length}
+                    {enEspera.length}
                   </Badge>
                 )}
               </Button>
@@ -925,6 +1070,38 @@ export function ModuloPosInteractive({
                     </button>
                   )}
                 </div>
+
+                {/* El lector de barras es su propio formulario: termina en Enter y
+                    no puede arrastrar al resto de la pantalla al enviarse. */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    procesarCodigoDeBarras(codigoLeido);
+                  }}
+                  className="hidden sm:block w-44"
+                >
+                  <label htmlFor="codigoBarras" className="sr-only">
+                    Código de barras
+                  </label>
+                  <Input
+                    id="codigoBarras"
+                    value={codigoLeido}
+                    onChange={(e) => setCodigoLeido(e.target.value)}
+                    placeholder="Código + Enter"
+                    className="h-10 text-xs rounded-xl bg-card border-border font-mono"
+                  />
+                </form>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalEscanerAbierto(true)}
+                  className="h-10 rounded-xl border-border bg-card text-xs font-bold gap-1.5 px-3"
+                >
+                  <ScanLine className="size-4 text-brand" />
+                  <span className="hidden sm:inline">Escanear</span>
+                </Button>
 
                 {/* Pill Modesto de Alertas de Stock (solo visible si el inventario está activado) */}
                 {settings.inventoryEnabled && (
@@ -1295,15 +1472,53 @@ export function ModuloPosInteractive({
                   </div>
 
                   {/* Lista de Ítems en el Carrito */}
+                  {/* Lo que la cocina ya tomó: se muestra y no se edita. Cambiar
+                      un renglón que está en la plancha no es cambiar un renglón,
+                      es cambiarle el plato a alguien que ya lo está haciendo; para
+                      eso está anular desde la cuenta, con motivo y bitácora. */}
+                  {enCocina.length > 0 && (
+                    <div className="space-y-1.5 pt-2 border-t border-border/80">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
+                          Ya en cocina
+                        </Label>
+                        <span className="numeral text-rotulo font-bold text-foreground">
+                          {formatCop(totalEnCocinaCop)}
+                        </span>
+                      </div>
+                      <ul className="space-y-1 rounded-xl border border-dashed border-border/80 bg-[var(--panel-2)] p-2.5">
+                        {enCocina.map((item) => (
+                          <li
+                            key={item.id}
+                            className="flex items-baseline justify-between gap-2 text-xs"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                              <span className="numeral font-bold text-foreground">
+                                {item.quantity}
+                              </span>
+                              {" · "}
+                              {item.nameSnapshot}
+                            </span>
+                            <span className="numeral shrink-0 text-muted-foreground">
+                              {formatCop(item.lineTotalCop ?? item.unitPriceCop * item.quantity)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5 pt-2 border-t border-border/80">
                     <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Productos seleccionados
+                      {enCocina.length > 0 ? "Agregar al pedido" : "Productos seleccionados"}
                     </Label>
                     <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
                       {cart.length === 0 ? (
                         <div className="p-6 text-center text-muted-foreground space-y-1 bg-[var(--panel-2)] rounded-xl border border-dashed border-border/80">
                           <ShoppingBag className="size-6 mx-auto opacity-30" />
-                          <p className="text-xs font-medium">El pedido está vacío</p>
+                          <p className="text-xs font-medium">
+                            {enCocina.length > 0 ? "Sin adiciones" : "El pedido está vacío"}
+                          </p>
                           <p className="text-rotulo opacity-75">
                             Tocá productos del catálogo a la izquierda para agregarlos.
                           </p>
@@ -1425,18 +1640,39 @@ export function ModuloPosInteractive({
                           <Button
                             type="button"
                             onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                            disabled={cart.length === 0 || procesandoAccion}
+                            disabled={!hayPedido || procesandoAccion}
                             className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
                           >
                             <UtensilsCrossed className="size-4" />
-                            <span>Mandar comanda a cocina y caja</span>
+                            <span>Mandar comanda a cocina</span>
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              if (!customerName.trim()) {
+                                setErrorGlobal(
+                                  "Falta el nombre: es lo que el cajero busca en la lista.",
+                                );
+                                document.getElementById("customerName")?.focus();
+                                return;
+                              }
+                              setErrorGlobal(null);
+                              setModalCajaAbierto(true);
+                            }}
+                            disabled={!hayPedido || procesandoAccion}
+                            className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
+                          >
+                            <ReceiptText className="size-3.5 text-brand" />
+                            <span>Enviar a caja</span>
                           </Button>
 
                           <Button
                             type="button"
                             variant="ghost"
                             onClick={() => ejecutarProcesarPos("PARQUEAR")}
-                            disabled={cart.length === 0 || procesandoAccion}
+                            disabled={!hayPedido || procesandoAccion}
                             className="w-full text-muted-foreground hover:text-foreground h-8 text-xs gap-1.5"
                           >
                             <PauseCircle className="size-3.5" />
@@ -1464,7 +1700,7 @@ export function ModuloPosInteractive({
                               }
                               setModalPagoAbierto(true);
                             }}
-                            disabled={cart.length === 0 || procesandoAccion}
+                            disabled={!hayPedido || procesandoAccion}
                             className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
                           >
                             <CreditCard className="size-4" />
@@ -1475,7 +1711,7 @@ export function ModuloPosInteractive({
                             type="button"
                             variant="outline"
                             onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                            disabled={cart.length === 0 || procesandoAccion}
+                            disabled={!hayPedido || procesandoAccion}
                             className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
                           >
                             <UtensilsCrossed className="size-3.5 text-brand" />
@@ -1484,9 +1720,30 @@ export function ModuloPosInteractive({
 
                           <Button
                             type="button"
+                            variant="outline"
+                            onClick={() => {
+                              if (!customerName.trim()) {
+                                setErrorGlobal(
+                                  "Falta el nombre: es lo que el cajero busca en la lista.",
+                                );
+                                document.getElementById("customerName")?.focus();
+                                return;
+                              }
+                              setErrorGlobal(null);
+                              setModalCajaAbierto(true);
+                            }}
+                            disabled={!hayPedido || procesandoAccion}
+                            className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
+                          >
+                            <ReceiptText className="size-3.5 text-brand" />
+                            <span>Enviar a caja</span>
+                          </Button>
+
+                          <Button
+                            type="button"
                             variant="ghost"
                             onClick={() => ejecutarProcesarPos("PARQUEAR")}
-                            disabled={cart.length === 0 || procesandoAccion}
+                            disabled={!hayPedido || procesandoAccion}
                             className="w-full text-muted-foreground hover:text-foreground h-8 text-xs gap-1.5"
                           >
                             <PauseCircle className="size-3.5" />
@@ -1500,6 +1757,134 @@ export function ModuloPosInteractive({
               </Card>
             </div>
           </div>
+
+          {/* ── LECTOR DE CÓDIGO DE BARRAS ───────────────────────────────────── */}
+          {modalEscanerAbierto && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+              <Card className="w-full max-w-md rounded-2xl border-border p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <ScanLine className="size-5 text-brand" />
+                    <h3 className="font-bold text-base text-foreground">Código de barras</h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="tap-libre size-8 p-0"
+                    aria-label="Cerrar"
+                    onClick={() => setModalEscanerAbierto(false)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-3 py-2 text-center">
+                  <div className="size-20 mx-auto rounded-2xl bg-brand/10 text-brand flex items-center justify-center">
+                    <ScanLine className="size-10" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pasá el producto por el lector, o escribí su código o SKU.
+                  </p>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const campo = e.currentTarget.elements.namedItem(
+                        "codigoModal",
+                      ) as HTMLInputElement | null;
+                      if (campo?.value) {
+                        procesarCodigoDeBarras(campo.value);
+                        setModalEscanerAbierto(false);
+                      }
+                    }}
+                    className="space-y-3 pt-1 text-left"
+                  >
+                    <label htmlFor="codigoModal" className="sr-only">
+                      Código o SKU del producto
+                    </label>
+                    <Input
+                      id="codigoModal"
+                      name="codigoModal"
+                      autoFocus
+                      placeholder="Escaneá o escribí el código + Enter"
+                      className="h-11 rounded-xl text-sm font-mono"
+                    />
+                    <Button
+                      type="submit"
+                      className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold rounded-xl h-11 text-xs"
+                    >
+                      Agregar al pedido
+                    </Button>
+                  </form>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* ── ENVIAR A CAJA: la propina se elige acá, no en la caja ─────────── */}
+          {modalCajaAbierto && (
+            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <Card className="w-full max-w-sm bg-card border-border shadow-2xl rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ReceiptText className="size-5 text-brand" />
+                    <h3 className="font-bold text-base text-foreground">Enviar a caja</h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="tap-libre size-8 p-0"
+                    aria-label="Cerrar"
+                    onClick={() => setModalCajaAbierto(false)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    La cuenta queda esperando en Caja. Si el cliente pide algo más, se
+                    agrega desde acá y vuelve a estar en curso.
+                  </p>
+
+                  {/* La propina se pregunta ANTES de que la cuenta llegue a la caja:
+                      si se eligiera allá, el papel que se le mostró al cliente diría
+                      un total y la caja cobraría otro. */}
+                  <SelectorDePropina
+                    habilitado={settings.tipSuggestionEnabled}
+                    sugeridaCop={propinaSugeridaCop}
+                    rateBp={settings.tipSuggestionRateBp}
+                    valorCop={propinaCop}
+                    onCambiar={setPropinaCop}
+                    id="pos-caja"
+                  />
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--panel-2)] border border-border">
+                    <span className="text-rotulo font-bold uppercase tracking-wider text-muted-foreground">
+                      Total a cobrar
+                    </span>
+                    <span className="numeral text-xl font-extrabold text-brand">
+                      {formatCop(totalConPropina)}
+                    </span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setModalCajaAbierto(false);
+                      void ejecutarProcesarPos("ENVIAR_CAJA");
+                    }}
+                    disabled={procesandoAccion}
+                    className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl gap-2"
+                  >
+                    <ReceiptText className="size-4" />
+                    <span>Mandar la cuenta a caja</span>
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
 
           {/* ── MODAL COBRO EXPRESS CON VERIFICACION DE CAMBIO / COMPROBANTE ──── */}
           {modalPagoAbierto && (
@@ -1688,7 +2073,7 @@ export function ModuloPosInteractive({
                   <div className="flex items-center gap-2">
                     <PauseCircle className="size-5 text-warning-soft" />
                     <h3 className="font-bold text-base text-foreground">
-                      Pedidos en espera ({pedidosAbiertos.length})
+                      Pedidos en espera ({enEspera.length})
                     </h3>
                   </div>
                   <button
@@ -1701,7 +2086,7 @@ export function ModuloPosInteractive({
                 </div>
 
                 <div className="p-4 max-h-[70vh] overflow-y-auto space-y-3">
-                  {pedidosAbiertos.length === 0 ? (
+                  {enEspera.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground space-y-1">
                       <PauseCircle className="size-10 mx-auto opacity-30" />
                       <p className="text-sm font-semibold">No hay pedidos en espera</p>
@@ -1710,7 +2095,7 @@ export function ModuloPosInteractive({
                       </p>
                     </div>
                   ) : (
-                    pedidosAbiertos.map((p) => (
+                    enEspera.map((p) => (
                       <div
                         key={p.id}
                         className="p-3.5 rounded-2xl border border-border bg-muted/30 hover:border-brand transition-all flex items-center justify-between gap-3"

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { abrirCaja, dejarCajaCerrada, ingresar } from "./apoyo";
+import { abrirCaja, dejarCajaCerrada, ingresar, laCuenta } from "./apoyo";
 
 /**
  * Comandas y tiquete: lo que pasa después de que el mesero canta un producto.
@@ -25,9 +25,9 @@ test("lo que se canta aparece en cocina, separado por estación", async ({ page 
 
   // Uno de barra y uno de cocina: el seed les puso estación distinta.
   await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
-  await expect(page.getByRole("complementary", { name: "La cuenta" })).toContainText("Cerveza nacional");
+  await expect(laCuenta(page)).toContainText("Cerveza nacional");
   await page.getByRole("button", { name: /bandeja paisa/i }).click();
-  await expect(page.getByRole("complementary", { name: "La cuenta" })).toContainText("Bandeja paisa");
+  await expect(laCuenta(page)).toContainText("Bandeja paisa");
 
   await page.goto("/cocina");
   await expect(page.getByRole("heading", { name: /^barra ·/i })).toBeVisible();
@@ -71,7 +71,7 @@ test("el tiquete sale cuadrado y con el impuesto desagregado", async ({ page }) 
   await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
   await page.getByRole("button", { name: "+" }).first().click();
   await page.getByRole("button", { name: "+" }).first().click();
-  await expect(page.getByRole("complementary", { name: "La cuenta" }).getByText("Total").locator("..")).toContainText(
+  await expect(laCuenta(page).getByText("Total").locator("..")).toContainText(
     "$15.000",
   );
 

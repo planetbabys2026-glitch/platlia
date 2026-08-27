@@ -213,8 +213,27 @@ const ventaPosCompleta = z
           modifierOptionIds: listaDeIds.default([]),
         }),
       )
-      .min(1, "Agregá al menos un producto al pedido."),
-    accion: z.enum(["PAGAR_DIRECTO", "ENVIAR_COCINA", "PARQUEAR"]),
+      .default([]),
+    /**
+     * Qué se hace con el carrito.
+     *
+     * `ENVIAR_CAJA` es la puerta explícita: guarda el pedido, lo manda a cocina y
+     * lo deja en `CUENTA_PEDIDA` para que la caja lo vea. Sin ella, un pedido del
+     * POS no llega nunca a la caja —que es justamente el punto: mandar la comanda
+     * a la plancha no es mandar la cuenta a cobrar—.
+     */
+    accion: z.enum(["PAGAR_DIRECTO", "ENVIAR_COCINA", "PARQUEAR", "ENVIAR_CAJA"]),
+    /**
+     * La propina elegida al mandar la cuenta a la caja.
+     *
+     * Va suelta y no dentro de `pago` porque en `ENVIAR_CAJA` no hay pago: es el
+     * mismo momento que `pedirCuenta`, cuando se le pregunta al cliente. `0` es
+     * válido y significa que la deseleccionaron.
+     */
+    tipCop: z.preprocess(
+      (v) => (v === "" || v === undefined ? undefined : Number(v)),
+      montoCopPositivo.optional(),
+    ),
     pago: z
       .object({
         method: z.enum(PaymentMethod),
@@ -231,6 +250,18 @@ const ventaPosCompleta = z
         reference: textoOpcional(60),
       })
       .optional(),
+  })
+  /**
+   * Un pedido nuevo necesita al menos un producto; uno que se retoma, no.
+   *
+   * El carrito del POS solo trae lo que todavía no tomó la cocina, así que
+   * reabrir un pedido que ya está en la plancha para mandarlo a caja o cobrarlo
+   * llega con `items` vacío y `orderId` puesto. Que igual quede algo vivo lo
+   * verifica el servidor contra la base, que es donde están los renglones.
+   */
+  .refine((v) => Boolean(v.orderId) || v.items.length > 0, {
+    error: "Agregá al menos un producto al pedido.",
+    path: ["items"],
   })
   .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.deliveryAddress?.trim()), {
     error: "Ingresá la dirección de entrega para el domicilio.",

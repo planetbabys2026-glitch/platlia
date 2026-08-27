@@ -59,7 +59,6 @@ type PanelCajaProps = {
   puedeFacturar: boolean;
   /** Si el negocio sugiere propina al cobrar, y con qué tarifa. */
   propina: { habilitada: boolean; rateBp: number };
-  cobraCuentas: boolean;
   /** Null si el negocio no reparte: ahí no hay nada que abrir ni que cerrar. */
   domiciliosQr: { abierto: boolean } | null;
   timeZone: string;
@@ -78,7 +77,6 @@ export function PanelCaja({
   esHoy,
   puedeFacturar,
   propina,
-  cobraCuentas,
   domiciliosQr,
   timeZone,
 }: PanelCajaProps) {
@@ -87,24 +85,21 @@ export function PanelCaja({
    * tira de píldoras que había acá se fue: el menú es el único navegador, como
    * en Informes.
    *
-   * La vista de entrada depende de si el negocio cobra cuentas —un negocio de
-   * mostrador no tiene
-   * cuentas de mesa que cobrar— y sale del mismo lugar que la lista del menú,
-   * para que no puedan divergir. Es configuración del negocio, no dato del
-   * momento: el enlace sigue llevando siempre al mismo lado.
+   * La vista de entrada sale del mismo lugar que la lista del menú, para que no
+   * puedan divergir.
    */
   const [tabActiva] = useVistaEnUrl(
     "vista",
     ["cobros", "cobradas", "movimientos"] as const,
-    vistaInicialDeCaja(cobraCuentas),
+    vistaInicialDeCaja(),
   );
 
   return (
     <div className="space-y-6">
       {/* ─────────────────────────────────────────────────────────────
-          MÓDULO 1: COBRO DE CUENTAS (SALÓN / MESAS)
+          MÓDULO 1: COBRO DE CUENTAS
           ───────────────────────────────────────────────────────────── */}
-      {tabActiva === "cobros" && cobraCuentas && (
+      {tabActiva === "cobros" && (
         <CuentasPorCobrar
           cuentas={cuentas}
           puedeFacturar={puedeFacturar}

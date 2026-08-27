@@ -789,11 +789,12 @@ El acordeón de Administración cuelga del grupo marcado con `conAdministracion`
 comparando `grupo.titulo === "Gestión"` en dos lugares distintos, así que renombrar el grupo borraba
 Administración del menú entero sin que nada fallara.
 
-**Caja tiene tres secciones y su vista de entrada depende del negocio.** `seccionesDeCaja(usaMesas)` y
-`vistaInicialDeCaja(usaMesas)` viven juntas en `navegacion.ts` porque el menú y la pantalla tienen
-que coincidir: un negocio de mostrador no tiene cuentas de mesa que cobrar, así que no se le ofrece
-"Cobrar cuentas" y entra por el historial. Depende de configuración del negocio, no de datos del
-momento, así que el enlace sigue llevando siempre al mismo lado.
+**Caja tiene tres secciones y siempre entra por "Cobrar cuentas".** `seccionesDeCaja()` y
+`vistaInicialDeCaja()` viven juntas en `navegacion.ts` porque el menú y la pantalla tienen que
+coincidir: si divergen, el enlace del menú lleva a una pantalla que no se dibuja. Antes las dos
+recibían `usaMesas || deliveryEnabled`, con el argumento de que un mostrador no tiene cuentas de mesa
+que cobrar; desde que el POS tiene su propio **Enviar a caja** eso dejó de ser cierto, y esconderle
+la sección al negocio de mostrador le escondía justamente las cuentas que acababa de mandar.
 
 **La sección viaja en la URL** (`?vista=`), porque un enlace del menú no puede apuntar a un
 `useState`. `lib/vista-en-url.ts` es el hook compartido: usa `replace` y no `push` —cambiar de
@@ -823,13 +824,18 @@ sus tests, `ponerPropina` era una Server Action completa y `Order.tipCop` ya ent
 Configuración era decorativo, `pagoSchema` no tenía el campo, y en 27 pedidos la suma de propinas era
 cero. Informes mostraba "PROPINAS SUGERIDAS $0" para siempre.
 
-**Se decide en el momento en que se le pregunta al cliente, no en la caja.** Son tres puertas:
+**Se decide en el momento en que se le pregunta al cliente, no en la caja.** Son cuatro puertas:
 
 | Dónde | Quién elige | Con qué acción |
 |---|---|---|
 | `/pedido/[id]`, al **Pedir la cuenta** | el mesero, en la mesa | `pedirCuenta` |
 | Menú QR, al confirmar el pedido | el propio comensal | `crearPedidoClienteQR` |
 | POS, en el modal de cobro | el cajero de mostrador | `procesarVentaPosCompleta` |
+| POS, al **Enviar a caja** | quien atiende, antes de mandarla | `procesarVentaPosCompleta` (`ENVIAR_CAJA`) |
+
+La cuarta es la misma decisión que la primera vista desde el POS: mandar la cuenta a la caja es el
+momento en que se le pregunta. Por eso `tipCop` viaja **suelto** en el esquema del POS y no dentro de
+`pago`: ahí todavía no hay pago.
 
 La caja la muestra **ya elegida** y deja cambiarla o quitarla (`registrarPago`), pero ahí es la
 corrección, no la decisión. Si se eligiera recién al cobrar, la pre-cuenta que el mesero llevó a la
@@ -850,6 +856,78 @@ sumarla: preseleccionarla es exactamente lo que esa regla evita. Sugerirla es of
 `features/pedidos/components/propina.tsx` es el único selector, con `tema="qr"` para el menú público,
 que no se pinta con la paleta de la aplicación. Un solo componente para que la propina no termine
 calculándose de tres maneras según por dónde entre el pedido.
+
+### Un pedido llega a la caja porque alguien lo manda
+
+**Tomar el pedido no es cobrarlo, y mandar la comanda a la plancha tampoco.** Que la cocina termine
+un plato no significa que el cliente quiera irse. Hay **dos puertas** a la caja
+(`features/caja/reglas.ts`), y ninguna es automática:
+
+1. `Order.status = CUENTA_PEDIDA` — lo escribe una persona: el mesero desde la cuenta de la mesa
+   (`pedirCuenta`) o quien atiende desde el POS (`procesarVentaPosCompleta` con `ENVIAR_CAJA`).
+2. `Order.deliveryStatus ∈ DOMICILIOS_COBRABLES` — el recorrido propio del domicilio, donde el
+   disparador explícito es que la cocina terminó el último renglón (`avanzarComanda`).
+
+`HAY_QUE_COBRAR` tenía dos ramas más y las dos mandaban cuentas a la caja sin que nadie lo
+decidiera. `{ tableId: null, status: "ABIERTA" }` metía todo pedido sin mesa apenas nacía —los del
+POS guardados en espera, los recién mandados a cocina y, como un domicilio nunca tiene mesa, **todos
+los domicilios, incluso sin confirmar**—, con lo cual anulaba por completo a la primera puerta y
+contradecía el comentario que tenía encima. Y `{ items: { every: LISTO|ENTREGADO|ANULADO } }` daba la
+cuenta por pedida en cuanto salía el último plato. El propio botón del POS lo decía en voz alta:
+*"Mandar comanda a cocina **y caja**"*.
+
+El predicado vive en `features/caja/reglas.ts` y no en `queries.ts` —que tiene `server-only` y
+arrastra Prisma— para poder probarlo: `HAY_QUE_COBRAR` es el fragmento del `where` y `debeIrACaja` su
+espejo puro, y hay un test que fija que el `OR` tenga **exactamente dos ramas**. Una tercera rama es
+una cuenta llegando a la caja sin que nadie la haya mandado.
+
+**Lo simétrico también hace falta: si a la cuenta ya en la caja se le agrega algo, vuelve a
+`ABIERTA`.** Lo hacía `confirmarPedido` y ahora también `procesarVentaPosCompleta`. Sin eso la cuenta
+se queda en la caja con un total que cambió por debajo mientras el cajero la tenía abierta.
+
+**Nada de esto afloja el cierre de caja**: `cerrarCaja` sigue bloqueando con cualquier pedido
+`ABIERTA` / `CUENTA_PEDIDA` del turno, así que un pedido que quedó en espera y nadie mandó aparece —
+por su nombre— al intentar cerrar. Esa es la red, y es la correcta: avisa al final del turno, no le
+llena la pantalla al cajero toda la noche.
+
+### El POS es el único punto de venta, y no le pisa la comanda a la cocina
+
+**Venta Rápida se eliminó.** Era un fork de `/pos` que llamaba a la misma acción con
+`accion: "PAGAR_DIRECTO"` fija: sin parquear, sin mandar a cocina, sin domicilio, sin propina y sin
+factura electrónica —los props `puedeFacturar` y `usaMesas` y los imports de `DatosFiscales` estaban
+declarados y no se usaban—, con un descuento que **no viajaba al servidor**, así que la pantalla decía
+"¡Venta Facturada!" mientras el pedido quedaba `ABIERTA` con faltante. Y como el commit que la creó
+cambió el ítem del menú de `/pos` a `/venta-rapida`, el POS de verdad quedó fuera del menú y con dos
+pruebas e2e fallando en silencio. Lo único que tenía y el POS no —el **lector de código de barras**,
+que busca por SKU— se portó antes de borrarla.
+
+**El POS no toca los renglones que ya tomó la cocina.** Ese camino borra y recrea los renglones en
+vez de calcular un diff, lo cual está bien para un carrito y es destructivo para una comanda: sobre un
+pedido que ya estaba en la plancha les borraba el `sentToKitchenAt`, el estado y los cronómetros,
+media pantalla del KDS desaparecía de golpe y la comanda se volvía a imprimir entera. El corte es el
+mismo que usa `confirmarPedido` para decidir qué mandar: `status: PENDIENTE` **y** `sentToKitchenAt:
+null` es del carrito; cualquier otra cosa es de la cocina, se muestra en un bloque de solo lectura
+("Ya en cocina") y suma al total sin poder editarse.
+
+Por eso el carrito del POS puede llegar **vacío** con `orderId` puesto —un pedido que ya está en la
+plancha y se retoma solo para mandarlo a caja o cobrarlo—, y el `min(1)` de `items` pasó a exigirse
+solo cuando no hay `orderId`. Que quede al menos un renglón vivo lo verifica el servidor contra la
+base, que es donde están.
+
+**El modal "En espera" solo lista pedidos sin mesa.** `getPedidosAbiertos` trae todo lo vivo, cuentas
+de mesa incluidas, y el POS las cargaba en el carrito como si fueran suyas: al guardar quedaban
+convertidas en pedido `LLEVAR`, con la mesa perdida y el nombre de la cuenta pisado. Esa consulta
+además está acotada a la jornada en curso; sin eso, un pedido que alguien se olvidó de cerrar
+anteanoche seguía apareciendo para siempre.
+
+**`procesarVentaPosCompleta` se había ido separando de `registrarPago` sin motivo.** Cuatro cosas que
+el cobro por el POS hacía distinto, y ninguna a propósito: no despachaba el domicilio —lo dejaba en
+`LISTO`, en el KDS para siempre y con el rastreo del comensal callado—; aceptaba cobrar sin caja
+abierta cuando `requireOpenCashSession` estaba apagado, creando un `OrderPayment` con
+`cashSessionId: null` invisible para el arqueo y para el bloqueo de cierre; no validaba que lo
+entregado alcanzara; y con `p.tipCop > 0` no había forma de **quitar** una propina ya cargada. Cobrar
+exige caja siempre, la exija el negocio o no: `requireOpenCashSession` decide si se pueden *tomar*
+pedidos sin turno, que es otra cosa.
 
 ### Caja: lo cobrado no desaparece
 

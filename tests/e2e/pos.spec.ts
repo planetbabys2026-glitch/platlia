@@ -117,8 +117,8 @@ test("desde POS se abre un pedido para llevar y uno a domicilio", async ({ page 
   // abierto y el carrito a la vista. Antes se preguntaban dos veces: una en la
   // barra del salón y otra en esta misma pantalla.
   await page.getByRole("button", { name: /^llevar$/i }).click();
-  await page.getByLabel(/a nombre de qui[eé]n/i).fill("Recoge en mostrador");
-  await expect(page.getByRole("button", { name: /cobrar y entregar/i })).toBeVisible();
+  await page.getByLabel(/nombre del cliente/i).fill("Recoge en mostrador");
+  await expect(page.getByRole("button", { name: /cobrar y facturar/i })).toBeVisible();
 
   // Un domicilio exige celular y dirección, y los pide en el mismo lugar.
   await page.getByRole("button", { name: /^domicilio$/i }).click();

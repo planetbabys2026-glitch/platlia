@@ -1,7 +1,6 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
 import { tenantDb, type TenantDb } from "@/lib/db/tenant";
-import { DOMICILIOS_COBRABLES } from "@/features/domicilios/reglas";
+import { HAY_QUE_COBRAR } from "@/features/caja/reglas";
 
 /**
  * Consultas de caja.
@@ -143,28 +142,6 @@ export async function getMovimientos(businessId: string, cashSessionId: string) 
  * al sacar la tira: es urgencia, no tamaño, así que sube al menú y se ve desde
  * cualquier pantalla en vez de solo estando parado en Caja.
  */
-/**
- * Qué pedido tiene algo que cobrar.
- *
- * Un domicilio entra recién cuando salió de la cocina. Antes el filtro miraba
- * solo el `status` de la venta, así que un pedido del menú QR aparecía en caja en
- * el mismo instante en que el comensal tocaba "enviar": el cajero veía cuentas de
- * comida que todavía no existía y la insignia del menú contaba de más.
- *
- * `deliveryStatus: null` es todo lo que no es domicilio —mesa y mostrador—, que
- * sigue entrando como siempre.
- */
-const HAY_QUE_COBRAR = {
-  status: { in: ["ABIERTA", "CUENTA_PEDIDA"] },
-  items: { some: { status: { not: "ANULADO" } } },
-  OR: [
-    { deliveryStatus: { in: [...DOMICILIOS_COBRABLES] } },
-    { status: "CUENTA_PEDIDA" },
-    { tableId: null, status: "ABIERTA" },
-    { items: { every: { status: { in: ["LISTO", "ENTREGADO", "ANULADO"] } } } },
-  ],
-} satisfies Prisma.OrderWhereInput;
-
 export async function contarCuentasPorCobrar(businessId: string, businessDate: Date) {
   return tenantDb(businessId).order.count({
     where: { businessDate, ...HAY_QUE_COBRAR },

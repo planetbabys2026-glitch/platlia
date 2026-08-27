@@ -24,9 +24,17 @@ export const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
  */
 const CIERRE_DE_TURNO = "/caja?vista=movimientos";
 
-/** La cuenta de la pantalla de pedido, ya desambiguada del menú lateral. */
+/**
+ * La cuenta de la pantalla de pedido, ya desambiguada del menú lateral.
+ *
+ * El nombre accesible es "Resumen de la cuenta" (`app/(app)/pedido/[id]/page.tsx`).
+ * Este ayudante buscaba "La cuenta", que no existe en ninguna parte: devolvía un
+ * locator vacío, así que `agregarProducto` y todo lo que se apoya en él esperaban
+ * un renglón que nunca iba a aparecer. `.first()` porque el mismo panel se pinta
+ * dos veces —el aside de escritorio y el cajón del teléfono—.
+ */
 export function laCuenta(page: Page) {
-  return page.getByRole("complementary", { name: "La cuenta" });
+  return page.getByRole("complementary", { name: /resumen de la cuenta/i }).first();
 }
 
 /**
@@ -45,13 +53,21 @@ export function laCuenta(page: Page) {
  * el panel a medias mientras las tarjetas todavía están animando su entrada.
  */
 export async function agregarProducto(page: Page, producto: RegExp) {
-  const renglon = laCuenta(page).getByText(producto).first();
+  const cuenta = laCuenta(page);
+  const renglon = cuenta.getByText(producto).first();
+  // El renglón optimista aparece al instante y dice "Agregando…"; el de verdad es
+  // el que trae los controles de cantidad. Esperar solo al texto daba por hecho el
+  // agregado antes de que el servidor lo confirmara, y el paso siguiente no
+  // encontraba nada que tocar.
+  const confirmado = cuenta.getByRole("button", { name: /agregar una unidad/i }).first();
 
   for (let intento = 0; intento < 6; intento++) {
-    if (await renglon.isVisible().catch(() => false)) return;
-    await page.getByRole("button", { name: producto }).click();
+    if (await confirmado.isVisible().catch(() => false)) return;
+    if (!(await renglon.isVisible().catch(() => false))) {
+      await page.getByRole("button", { name: producto }).click();
+    }
     try {
-      await expect(renglon).toBeVisible({ timeout: 5000 });
+      await expect(confirmado).toBeVisible({ timeout: 8000 });
       return;
     } catch {
       // El clic cayó antes de la hidratación: se vuelve a intentar.
@@ -59,6 +75,34 @@ export async function agregarProducto(page: Page, producto: RegExp) {
   }
 
   throw new Error(`No se pudo agregar ${producto} a la cuenta.`);
+}
+
+/**
+ * Sube en uno la cantidad del primer renglón, hasta ver el total esperado.
+ *
+ * Reintenta por lo mismo que `agregarProducto`: el `<form action={serverAction}>`
+ * de `ControlCantidad` no funciona hasta que la página hidrata, y un clic
+ * anterior se pierde sin error visible.
+ */
+export async function sumarUnidad(page: Page, totalEsperado: string) {
+  const cuenta = laCuenta(page);
+  const boton = cuenta.getByRole("button", { name: /agregar una unidad/i }).first();
+
+  for (let intento = 0; intento < 6; intento++) {
+    if (await cuenta.getByText(totalEsperado).first().isVisible().catch(() => false)) return;
+    // El botón se deshabilita mientras la acción está en vuelo: sin esperarlo, el
+    // reintento cae sobre un botón muerto y se come el presupuesto entero.
+    await expect(boton).toBeEnabled({ timeout: 10_000 });
+    await boton.click();
+    try {
+      await expect(cuenta.getByText(totalEsperado).first()).toBeVisible({ timeout: 5000 });
+      return;
+    } catch {
+      // El clic cayó antes de la hidratación: se vuelve a intentar.
+    }
+  }
+
+  throw new Error(`No se pudo subir la cantidad hasta ${totalEsperado}.`);
 }
 
 /**
@@ -219,7 +263,19 @@ export async function cerrarPedidosAbiertos(page: Page) {
       continue;
     }
 
-    // Con consumo y sin poder cobrar acá (una mesa se cobra en caja): se anula.
+    // Una cuenta de mesa con consumo se manda a caja y se cobra ahí: es el camino
+    // real, y el único que tiene un cajero —anular un pedido con productos exige
+    // administrador (`anularPedido`), así que el `catch` de abajo se quedaba
+    // esperando un "Anulada" que nunca iba a llegar—.
+    const pedirCuenta = page.getByRole("button", { name: /pedir la cuenta/i });
+    if (await pedirCuenta.isVisible().catch(() => false)) {
+      await pedirCuenta.click();
+      await expect(pedirCuenta).toBeHidden();
+      await cobrarLoQueEstaEnCaja(page);
+      continue;
+    }
+
+    // Con consumo y sin poder cobrar acá ni mandarlo: se anula.
     const anular = page.getByRole("button", { name: /anular pedido/i });
     if (await anular.isVisible().catch(() => false)) {
       await page.getByLabel(/motivo de la anulación del pedido/i).fill("Limpieza de pruebas");
@@ -232,11 +288,23 @@ export async function cerrarPedidosAbiertos(page: Page) {
     // dentro de un modal y no hay ni "registrar pago" ni "anular pedido". Sin
     // este caso el bucle daba sus 25 vueltas sin resolver nada y dejaba la caja
     // sin poder cerrarse, que es como se trababa la suite entera.
-    const cobrarPos = page.getByRole("button", { name: /cobrar y entregar/i });
+    const cobrarPos = page.getByRole("button", { name: /cobrar y facturar/i });
     if (await cobrarPos.isVisible().catch(() => false)) {
       await cobrarPos.click();
-      await page.getByRole("button", { name: /confirmar pago y cerrar pedido/i }).click();
-      await expect(page.getByText(/venta realizada/i)).toBeVisible();
+      await page.getByRole("button", { name: /confirmar pago de/i }).click();
+      await expect(page.getByText(/venta cobrada/i)).toBeVisible();
+      continue;
+    }
+
+    // Con mesas encendidas, el POS de un pedido sin mesa no cobra: manda a caja,
+    // y ahí se cobra. Es el camino real desde que una cuenta llega a la caja solo
+    // porque alguien la mandó —antes aparecía sola y este caso no existía—.
+    const enviarACaja = page.getByRole("button", { name: /^enviar a caja$/i });
+    if (await enviarACaja.isVisible().catch(() => false)) {
+      await enviarACaja.click();
+      await page.getByRole("button", { name: /mandar la cuenta a caja/i }).click();
+      await expect(page.getByText(/cuenta enviada a caja/i)).toBeVisible();
+      await cobrarLoQueEstaEnCaja(page);
       continue;
     }
 

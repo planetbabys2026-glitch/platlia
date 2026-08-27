@@ -5,6 +5,7 @@ import {
   AppModule,
   DeliveryStatus,
   OrderChannel,
+  OrderItemStatus,
   OrderType,
   Role,
 } from "@/generated/prisma/enums";
@@ -1379,6 +1380,18 @@ export const procesarVentaPosCompleta = defineAction({
         "No hay caja abierta. Abrí el turno antes de tomar pedidos.",
       );
     }
+    /**
+     * Cobrar SIEMPRE necesita caja, la exija el negocio o no.
+     *
+     * `requireOpenCashSession` decide si se pueden *tomar* pedidos sin turno, que
+     * es otra cosa. Sin este chequeo el `OrderPayment` nacía con
+     * `cashSessionId: null`: invisible para el arqueo y para el bloqueo de
+     * `cerrarCaja`, o sea plata cobrada que no aparece en ningún corte.
+     * `registrarPago` nunca lo permitió.
+     */
+    if (input.accion === "PAGAR_DIRECTO" && !caja) {
+      throw new ErrorDeUsuario("No hay caja abierta: no se puede recibir un pago.");
+    }
 
     // Los datos de la factura electrónica solo se guardan si el negocio de verdad
     // puede emitir: el gate va acá y no solo en la pantalla, porque una Server
@@ -1392,10 +1405,27 @@ export const procesarVentaPosCompleta = defineAction({
           }
         : {};
 
+    /**
+     * `ENVIAR_CAJA` también manda a la plancha.
+     *
+     * Un renglón que llega a la caja sin haber pasado por la cocina es comida que
+     * nadie prepara, y acá quien atiende está mirando un solo carrito: no tiene
+     * cómo saber que le faltó un paso.
+     *
+     * Se define **una sola vez**, acá afuera, porque lo usan la transacción —para
+     * sellar `sentToKitchenAt` y encolar la comanda— y el bloque de avisos de
+     * después. Cuando eran dos constantes, agregar una acción a una y olvidarse de
+     * la otra dejaba comandas impresas que la pantalla de cocina no se enteraba de
+     * mostrar hasta que alguien recargara.
+     */
+    const debeEnviarACocina =
+      input.accion === "ENVIAR_COCINA" ||
+      input.accion === "PAGAR_DIRECTO" ||
+      input.accion === "ENVIAR_CAJA";
+
     const resultado = await conReintento(() =>
       db.$transaction(async (tx) => {
         const ahora = new Date();
-        const debeEnviarACocina = input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
 
         let pedido: {
           id: string;
@@ -1404,6 +1434,8 @@ export const procesarVentaPosCompleta = defineAction({
           tableId: string | null;
           table: { name: string } | null;
         };
+        /** En qué estado estaba antes de tocarlo: un pedido nuevo nace ABIERTA. */
+        let statusPrevio: string = "ABIERTA";
 
         if (input.orderId) {
           const existente = await tx.order.findFirst({
@@ -1420,6 +1452,7 @@ export const procesarVentaPosCompleta = defineAction({
           if (existente.status === "PAGADA" || existente.status === "ANULADA") {
             throw new ErrorDeUsuario("El pedido ya está cerrado.");
           }
+          statusPrevio = existente.status;
 
           let turnNumber = existente.turnNumber;
           if (turnNumber === null && debeEnviarACocina) {
@@ -1463,13 +1496,28 @@ export const procesarVentaPosCompleta = defineAction({
             },
           });
 
-          // Este camino borra y recrea todos los renglones en vez de calcular un
-          // diff. Los renglones que se borran ya habían descontado su stock al
-          // parquear el pedido, así que hay que devolverlo antes: los que sigan
-          // en el carrito se vuelven a descontar más abajo. Sin esto, parquear y
-          // reabrir un pedido descuenta los insumos dos veces.
+          /**
+           * Este camino borra y recrea los renglones en vez de calcular un diff,
+           * pero **solo los que todavía son del carrito**.
+           *
+           * Lo que ya tomó la cocina (`sentToKitchenAt` puesto, o un `status` que
+           * no es PENDIENTE) no se toca: borrarlo y recrearlo le borraba a la
+           * plancha el estado y los cronómetros, sacaba de golpe media pantalla
+           * del KDS y volvía a encolar la comanda entera. Es el mismo corte que
+           * usa `confirmarPedido` para decidir qué mandar a cocina.
+           *
+           * Los que sí se borran ya habían descontado su stock al parquear el
+           * pedido, así que hay que devolverlo antes: los que sigan en el carrito
+           * se vuelven a descontar más abajo. Sin esto, parquear y reabrir un
+           * pedido descuenta los insumos dos veces.
+           */
+          const DEL_CARRITO = {
+            status: OrderItemStatus.PENDIENTE,
+            sentToKitchenAt: null,
+          } as const;
+
           const itemsPrevios = await tx.orderItem.findMany({
-            where: { orderId: pedido.id, status: { not: "ANULADO" } },
+            where: { orderId: pedido.id, ...DEL_CARRITO },
             select: {
               productId: true,
               quantity: true,
@@ -1489,7 +1537,7 @@ export const procesarVentaPosCompleta = defineAction({
           }
 
           await tx.orderItem.deleteMany({
-            where: { orderId: pedido.id, status: { not: "ANULADO" } },
+            where: { orderId: pedido.id, ...DEL_CARRITO },
           });
         } else {
           const ultimo = await tx.order.findFirst({
@@ -1693,8 +1741,63 @@ export const procesarVentaPosCompleta = defineAction({
           });
         }
 
-        // 4. Recalcular totales del pedido
+        /**
+         * 4. Que el pedido tenga algo, mirando la base y no el carrito.
+         *
+         * El carrito puede llegar vacío legítimamente —un pedido que ya está en la
+         * plancha y se retoma solo para mandarlo a caja—, pero un pedido sin un
+         * renglón vivo no se manda a ningún lado ni se cobra.
+         */
+        const renglonesVivos = await tx.orderItem.count({
+          where: { orderId: pedido.id, status: { not: OrderItemStatus.ANULADO } },
+        });
+        if (renglonesVivos === 0) {
+          throw new ErrorDeUsuario("El pedido no tiene productos. Agregá al menos uno.");
+        }
+
+        // 4b. Recalcular totales del pedido
         await recalcularTotales(tx, pedido.id);
+
+        /**
+         * 4c. La cuenta entra o sale de la caja, y nunca sola.
+         *
+         * `ENVIAR_CAJA` es el equivalente de `pedirCuenta` para el POS: no puede
+         * ser una acción aparte porque el carrito vive en el navegador y los
+         * renglones no existen en la base hasta este commit. La propina viaja con
+         * ella por la misma razón que viaja con `pedirCuenta`: una propina
+         * guardada que después no se cobra deja el pedido con un total que nadie
+         * pagó.
+         *
+         * Y al revés: si al pedido ya en la caja se le agrega algo, vuelve a
+         * `ABIERTA`. Es la misma regla de `confirmarPedido`; sin ella la cuenta se
+         * queda en la caja con un total que cambió por debajo mientras el cajero
+         * la tenía abierta.
+         */
+        if (input.accion === "ENVIAR_CAJA") {
+          if (input.tipCop !== undefined) {
+            await tx.order.update({
+              where: { id: pedido.id },
+              data: { tipCop: input.tipCop },
+            });
+            await recalcularTotales(tx, pedido.id);
+          }
+          await tx.order.update({
+            where: { id: pedido.id },
+            data: { status: "CUENTA_PEDIDA", billRequestedAt: ahora },
+          });
+          // El estado de la mesa se deriva de sus cuentas, nunca se escribe a
+          // mano. Es no-op sin mesa, que es el caso normal de esta pantalla.
+          await sincronizarEstadoMesa(tx, pedido.tableId);
+        } else if (
+          statusPrevio === "CUENTA_PEDIDA" &&
+          (input.accion === "ENVIAR_COCINA" || input.accion === "PARQUEAR")
+        ) {
+          await tx.order.update({
+            where: { id: pedido.id },
+            data: { status: "ABIERTA", billRequestedAt: null },
+          });
+          await sincronizarEstadoMesa(tx, pedido.tableId);
+        }
 
         // 5. Si la acción es PAGAR_DIRECTO
         if (input.accion === "PAGAR_DIRECTO") {
@@ -1705,7 +1808,9 @@ export const procesarVentaPosCompleta = defineAction({
           if (!p) throw new ErrorDeUsuario("Faltan los datos del pago.");
 
           // La propina va antes de recalcular, para que el total ya la incluya.
-          if (p.tipCop !== undefined && p.tipCop > 0) {
+          // `0` es válido y significa que la deseleccionaron: con `> 0` no había
+          // forma de quitar una propina ya cargada.
+          if (p.tipCop !== undefined) {
             await tx.order.update({
               where: { id: pedido.id },
               data: { tipCop: p.tipCop },
@@ -1715,11 +1820,20 @@ export const procesarVentaPosCompleta = defineAction({
 
           const pActualizado = await tx.order.findUniqueOrThrow({
             where: { id: pedido.id },
-            select: { totalCop: true, paidCop: true, cashSessionId: true },
+            select: {
+              totalCop: true,
+              paidCop: true,
+              cashSessionId: true,
+              deliveryStatus: true,
+            },
           });
+          const deliveryStatusActual = pActualizado.deliveryStatus;
 
           const amountCop = p.amountCop > 0 ? p.amountCop : pActualizado.totalCop;
           const tenderedCop = p.tenderedCop ?? null;
+          if (tenderedCop !== null && tenderedCop < amountCop) {
+            throw new ErrorDeUsuario("Con lo que entregó no alcanza para cubrir el pago.");
+          }
           const changeCop =
             tenderedCop !== null && tenderedCop > amountCop ? tenderedCop - amountCop : null;
 
@@ -1744,6 +1858,14 @@ export const procesarVentaPosCompleta = defineAction({
             faltante <= 0 || (huboEfectivo && faltante > 0 && faltante < settings.cashRoundingCop);
 
           if (cerrado) {
+            /**
+             * Facturar un domicilio que ya salió de la cocina lo pone en reparto,
+             * igual que `registrarPago`. Sin esto, un domicilio cobrado por acá se
+             * quedaba en `LISTO`: seguía en la pantalla de cocina para siempre y
+             * el rastreo del comensal nunca decía que su comida había salido.
+             */
+            const despacha = deliveryStatusActual === "LISTO";
+
             await tx.order.update({
               where: { id: pedido.id },
               data: {
@@ -1755,8 +1877,12 @@ export const procesarVentaPosCompleta = defineAction({
                 // cosas; acá faltaban.
                 closedById: ctx.user.id,
                 cashSessionId: pActualizado.cashSessionId ?? caja?.id ?? null,
+                ...(despacha
+                  ? { deliveryStatus: DeliveryStatus.EN_CAMINO, dispatchedAt: new Date() }
+                  : {}),
               },
             });
+            if (despacha) await cerrarComandaAlDespachar(tx, pedido.id);
             await sincronizarEstadoMesa(tx, pedido.tableId);
           }
         }
@@ -1788,15 +1914,12 @@ export const procesarVentaPosCompleta = defineAction({
       }),
     );
 
-    const debeEnviarACocinaNotificacion =
-      input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
-
     if (resultado.impresos > 0) avisarAlAgente(ctx.business.id);
 
     revalidatePath("/pos");
     revalidatePath("/caja");
     revalidatePath("/salon");
-    if (debeEnviarACocinaNotificacion) {
+    if (debeEnviarACocina) {
       revalidatePath("/cocina");
       revalidatePath("/turnero");
       void publishCocinaUpdate(ctx.business.id);

@@ -11,9 +11,17 @@ export type PedidoSinMesa = {
   type: string;
   totalCop: number;
   customerName: string | null;
+  /**
+   * "En sitio" no es un `OrderType`: el POS lo marca con un prefijo en las notas
+   * y el pedido viaja como `LLEVAR`. Acá se lee de ahí, que es donde está.
+   */
+  notes: string | null;
   /** Renglones no anulados: en cero, el pedido se puede cerrar sin cobrar. */
   renglones: number;
 };
+
+/** La marca que le pone el POS a lo que se come en el local sin mesa asignada. */
+const MARCA_EN_SITIO = "[PARA COMER AQUÍ / EN SITIO]";
 
 /**
  * Los pedidos para llevar, en sitio (sin mesa) y a domicilio que siguen abiertos.
@@ -33,7 +41,9 @@ export function ListaSinMesa({ pedidos }: { pedidos: PedidoSinMesa[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {pedidos.map((pedido) => {
           const esDomicilio = pedido.type === "DOMICILIO";
-          const esEnSitio = pedido.type === "EN_SITIO";
+          // Antes comparaba con `type === "EN_SITIO"`, un valor que no existe en
+          // el enum: la etiqueta "En sitio" no se mostró nunca.
+          const esEnSitio = !esDomicilio && Boolean(pedido.notes?.includes(MARCA_EN_SITIO));
           const TipoIcono = esDomicilio ? Bike : esEnSitio ? Utensils : ShoppingBag;
 
           return (

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { abrirCaja, dejarCajaCerrada, ingresar } from "./apoyo";
+import { abrirCaja, dejarCajaCerrada, ingresar, laCuenta } from "./apoyo";
 
 /**
  * El informe de la jornada.
@@ -31,7 +31,7 @@ test("una venta cobrada aparece en el informe con el impuesto desagregado", asyn
   await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
   await page.getByRole("button", { name: "+" }).first().click();
   await page.getByRole("button", { name: "+" }).first().click();
-  await expect(page.getByRole("complementary", { name: "La cuenta" }).getByText("Total").locator("..")).toContainText(
+  await expect(laCuenta(page).getByText("Total").locator("..")).toContainText(
     "$15.000",
   );
   await page.getByRole("button", { name: /registrar pago/i }).click();

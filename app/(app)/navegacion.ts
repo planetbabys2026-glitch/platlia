@@ -95,26 +95,25 @@ export function hrefDeSeccion(item: ItemNav, seccion: SeccionNav): string {
  * Las secciones de Caja y cuál es la de entrada.
  *
  * Vive acá —y no suelto en cada archivo— porque el menú y la pantalla tienen que
- * coincidir: un negocio de mostrador no tiene cuentas de mesa que cobrar, así que
- * "Cobrar cuentas" no se le ofrece y la vista de entrada pasa a ser el historial.
- * Si divergen, el enlace del menú lleva a una pantalla vacía.
+ * coincidir: si divergen, el enlace del menú lleva a una pantalla vacía.
  *
- * Depende de `usaMesas`, que es configuración del negocio y no dato del momento:
- * el enlace sigue siendo estable, que es lo que importaba.
+ * "Cobrar cuentas" se le ofrece a todo el mundo. Antes dependía de `usaMesas ||
+ * deliveryEnabled`, con el argumento de que un mostrador no tiene cuentas de mesa
+ * que cobrar; desde que el POS tiene su propio "Enviar a caja" eso dejó de ser
+ * cierto, y esconder la sección le habría escondido al cajero de mostrador
+ * exactamente las cuentas que acaba de mandar.
  */
-export function seccionesDeCaja(cobraCuentas: boolean, cuentasPorCobrar?: number): SeccionNav[] {
+export function seccionesDeCaja(cuentasPorCobrar?: number): SeccionNav[] {
   return [
-    ...(cobraCuentas
-      ? [{ titulo: "Cobrar cuentas", vista: "", insignia: cuentasPorCobrar }]
-      : []),
-    { titulo: "Cuentas cobradas", vista: cobraCuentas ? "cobradas" : "" },
+    { titulo: "Cobrar cuentas", vista: "", insignia: cuentasPorCobrar },
+    { titulo: "Cuentas cobradas", vista: "cobradas" },
     { titulo: "Movimientos y cierre", vista: "movimientos" },
   ];
 }
 
 /** La vista de entrada de `/caja`, la que va sin `?vista=`. */
-export function vistaInicialDeCaja(cobraCuentas: boolean): "cobros" | "cobradas" {
-  return cobraCuentas ? "cobros" : "cobradas";
+export function vistaInicialDeCaja(): "cobros" {
+  return "cobros";
 }
 
 export function construirNavegacion({
@@ -147,7 +146,14 @@ export function construirNavegacion({
           ...(usaMesas
             ? [{ titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }]
             : []),
-          { titulo: "Venta Rápida", href: "/venta-rapida", icono: Calculator, enBarraInferior: !usaMesas },
+          {
+            // Con mesas es la pantalla del pedido sin mesa; sin mesas es el punto
+            // de venta y la entrada del negocio.
+            titulo: usaMesas ? "Pedido sin mesa" : "POS",
+            href: "/pos",
+            icono: Calculator,
+            enBarraInferior: !usaMesas,
+          },
         ]
       : []),
     ...(usaCocina && puedeVer("cocina")
@@ -167,11 +173,9 @@ export function construirNavegacion({
             titulo: "Caja",
             href: "/caja",
             icono: CreditCard,
-            // Un negocio de puro domicilio también cobra cuentas: atarlo a mesas
-            // le dejaba la caja vacía justo a quien más la necesita.
-            insignia: usaMesas || usaDomicilios ? cuentasPorCobrar : undefined,
+            insignia: cuentasPorCobrar,
             enBarraInferior: true,
-            secciones: seccionesDeCaja(usaMesas || usaDomicilios, cuentasPorCobrar),
+            secciones: seccionesDeCaja(cuentasPorCobrar),
           },
         ]
       : []),
