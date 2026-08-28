@@ -434,7 +434,7 @@ function FormularioNegocio({
             variant={habilitar ? "default" : "outline"}
             onClick={() => setHabilitar(true)}
             aria-pressed={habilitar}
-            className={cn("h-10 flex-1 text-xs font-bold", habilitar && "bg-success text-white")}
+            className={cn("h-10 flex-1 text-xs font-bold", habilitar && "bg-success text-success-foreground")}
           >
             Activo
           </Button>

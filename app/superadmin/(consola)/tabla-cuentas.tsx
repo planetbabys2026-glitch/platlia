@@ -216,7 +216,7 @@ export function TablaCuentas({
               onChange={(e) =>
                 setOrden(e.target.value as "corte" | "recientes" | "nombre" | "pedidos")
               }
-              className="h-10 rounded-md border border-input bg-background px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="corte">Vencimiento más próximo</option>
               <option value="recientes">Más recientes primero</option>
@@ -237,25 +237,25 @@ export function TablaCuentas({
             label={`En prueba (${conteos.enPrueba})`}
             activo={filtroEstado === "PRUEBA"}
             onClick={() => setFiltroEstado("PRUEBA")}
-            colorActive="bg-warning text-white"
+            colorActive="bg-warning text-warning-foreground"
           />
           <FilterPill
             label={`Al día (${conteos.alDia})`}
             activo={filtroEstado === "ACTIVA"}
             onClick={() => setFiltroEstado("ACTIVA")}
-            colorActive="bg-success text-white"
+            colorActive="bg-success text-success-foreground"
           />
           <FilterPill
             label={`Vencidas (${conteos.vencidos})`}
             activo={filtroEstado === "VENCIDA"}
             onClick={() => setFiltroEstado("VENCIDA")}
-            colorActive="bg-destructive text-white"
+            colorActive="bg-destructive text-destructive-foreground"
           />
           <FilterPill
             label={`Suspendidas (${conteos.suspendidos})`}
             activo={filtroEstado === "SUSPENDIDO"}
             onClick={() => setFiltroEstado("SUSPENDIDO")}
-            colorActive="bg-destructive text-white"
+            colorActive="bg-destructive text-destructive-foreground"
           />
         </div>
 
@@ -307,7 +307,7 @@ function FilterPill({
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
         activo
           ? `${colorActive} shadow-xs`
           : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -468,6 +468,9 @@ function GestionarLicenciaModal({ cuenta }: { cuenta: CuentaItem }) {
   const [open, setOpen] = useState(false);
   const [diasExtender, setDiasExtender] = useState<number>(30);
   const [motivoExtender, setMotivoExtender] = useState("");
+  // Sacar la cuenta de la prueba sin cobrarle. Arranca apagado: convertir una
+  // licencia es una decisión aparte de regalar días, no una consecuencia.
+  const [activarLicencia, setActivarLicencia] = useState(false);
   const [motivoSuspender, setMotivoSuspender] = useState("");
   const [maxSucursales, setMaxSucursales] = useState<number>(
     cuenta.principal.subscription?.maxBranches ?? 1,
@@ -502,15 +505,19 @@ function GestionarLicenciaModal({ cuenta }: { cuenta: CuentaItem }) {
       const res = await extenderLicencia(ESTADO_INICIAL, {
         businessId,
         dias: Number(diasExtender),
+        activar: activarLicencia,
         motivo: motivoExtender.trim(),
       });
 
       if (res.ok) {
         toast.success(
-          `Licencia de ${cuenta.duenoNombre} extendida por ${diasExtender} días${sufijoSedes}.`,
+          activarLicencia
+            ? `Licencia de ${cuenta.duenoNombre} activada y extendida ${diasExtender} días${sufijoSedes}.`
+            : `Licencia de ${cuenta.duenoNombre} extendida por ${diasExtender} días${sufijoSedes}.`,
         );
         setOpen(false);
         setMotivoExtender("");
+        setActivarLicencia(false);
         router.refresh();
       } else {
         toast.error(res.error || "Ocurrió un error al extender la licencia.");
@@ -616,7 +623,7 @@ function GestionarLicenciaModal({ cuenta }: { cuenta: CuentaItem }) {
                       key={d}
                       type="button"
                       onClick={() => setDiasExtender(d)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
                         diasExtender === d
                           ? "bg-brand text-brand-foreground border-brand shadow-xs"
                           : "bg-muted/60 border-border hover:bg-muted text-foreground"
@@ -658,12 +665,41 @@ function GestionarLicenciaModal({ cuenta }: { cuenta: CuentaItem }) {
                 />
               </div>
 
+              {/* Sacar de la prueba, sin cobro.
+                  Extender días no cambia el estado —alargar una prueba es alargar
+                  una prueba—, así que una cadena en evaluación quedaba encerrada en
+                  PRUEBA y la única salida era pagar por MercadoPago. Y en prueba el
+                  cupo de sedes no alcanzaba para una segunda sucursal. */}
+              {cuenta.principal.subscription?.status === "PRUEBA" && (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[var(--linea-16)] bg-[var(--panel-2)] p-3">
+                  <input
+                    type="checkbox"
+                    checked={activarLicencia}
+                    onChange={(e) => setActivarLicencia(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-brand"
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-semibold text-foreground">
+                      Activar la licencia sin cobro
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      La cuenta sale de prueba y pasa a licencia paga. Es lo que hace falta para
+                      que pueda tener más de una sede sin pasar por MercadoPago.
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <Button
                 type="submit"
                 disabled={isPending}
-                className="w-full bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold h-10"
+                className="h-11 w-full rounded-xl bg-brand text-sm font-semibold text-brand-foreground hover:bg-brand/90"
               >
-                {isPending ? "Aplicando cambios..." : `Confirmar y sumar +${diasExtender} días`}
+                {isPending
+                  ? "Aplicando cambios…"
+                  : activarLicencia
+                    ? `Activar y sumar ${diasExtender} días`
+                    : `Sumar ${diasExtender} días`}
               </Button>
             </form>
           </TabsContent>

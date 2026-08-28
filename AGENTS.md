@@ -291,6 +291,31 @@ membresía, es plata cobrada sin servicio si algo falla a mitad de camino. Antes
 cuenta**; antes nacía con siete días de prueba propios, o sea que vencía en otro momento y se cobraba
 aparte.
 
+### El cupo de sedes es la única fuente, también en prueba
+
+`crearSucursalAdicional` tenía **dos** guardas y la primera cortaba antes de la segunda:
+
+```ts
+if (status === "PRUEBA") throw …        // bloqueo tajante
+if (sedes >= maxBranches) throw …       // el cupo, que nunca se leía
+```
+
+Con eso, el cupo que el superadministrador le asignaba a una cadena en evaluación **se guardaba y no
+servía para nada**: `/superadmin` mostraba `maxBranches: 3`, la cuenta seguía sin poder crear la
+segunda sede, y como extender días a mano tampoco saca de `PRUEBA`, la única salida era pagar por
+MercadoPago —justo lo que un cliente que está evaluando no va a hacer todavía—.
+
+Ahora manda el cupo y nada más (`lib/billing/sedes.ts`, puro y con tests). La prueba nace con cupo 1,
+así que por su cuenta sigue cubriendo una sola sede; lo que cambió es que un cupo asignado a mano
+—decisión de soporte, con motivo y en `AuditLog`— ahora vale. El estado solo decide **qué dice el
+mensaje**, que es lo único para lo que hacía falta.
+
+**Y soporte puede activar la licencia sin cobro.** `extenderLicencia` recibe `activar`: extender días
+no cambia el estado —alargar una prueba es alargar una prueba— así que la cuenta quedaba encerrada en
+`PRUEBA` para siempre. Al activar se apaga `trialEndsAt` y se le da la gracia de una licencia normal:
+sin eso `estadoSegunFechas` la devolvía a `PRUEBA` en el próximo recálculo, porque la cuenta seguía
+teniendo fecha de prueba.
+
 ### Cobro automático y avisos
 
 **El débito automático es otra API de MercadoPago**: `preapproval`, no Checkout Pro
@@ -332,8 +357,11 @@ Node plano y `server-only` lanza fuera de la condición `react-server`. La guard
 
 **Lo que no pasa por `defineAction` verifica la licencia a mano.** `crearPedidoClienteQR` es pública
 —la usa un comensal sin sesión— y no tenía ningún chequeo: un negocio vencido siguió recibiendo
-pedidos por QR indefinidamente. Misma clase de olvido: `crearNegocioPropio` validaba "ya tenés
-negocio" solo en la página, y una Server Action es un POST alcanzable con curl.
+pedidos por QR indefinidamente. **El servidor MCP tuvo exactamente el mismo olvido** y se corrigió en
+`autenticar()`: sin eso, una llave emitida antes del corte no caducaba nunca y un negocio vencido
+—o suspendido a mano por soporte— seguía entregando sus ventas, sus costos y sus márgenes para
+siempre. Misma clase de olvido: `crearNegocioPropio` validaba "ya tenés negocio" solo en la página, y
+una Server Action es un POST alcanzable con curl.
 
 ## Facturación electrónica DIAN (Factus)
 
@@ -482,6 +510,69 @@ que ofrece el archivo de configuración.
 Separarlo del build no es solo por Go: la URL del servidor va **horneada** en el binario, así que
 actualizarlo es reemplazar un archivo, no volver a desplegar la aplicación.
 
+## Conexión con IA (MCP)
+
+Un negocio puede darle a su asistente —ChatGPT, Claude, el que use— acceso a **su** información y
+preguntarle en lenguaje natural. El servidor vive en `app/api/mcp/route.ts` y habla JSON-RPC 2.0,
+que es lo que pide el Model Context Protocol: `initialize`, `tools/list`, `tools/call`.
+
+**Está escrito a mano y no con el SDK oficial**: son tres métodos, y el SDK trae su propio manejo de
+transporte que pelea con el ciclo de vida de una ruta de Next. Adaptarlo costaba más que los cien
+renglones que ocupa, y con una dependencia más en el arranque.
+
+**El `businessId` sale del TOKEN, nunca de los argumentos.** Es toda la separación que hay entre la
+información de un negocio y la de otro, así que en ese archivo no existe un solo camino donde el id
+venga de algo que mandó el cliente. Es el mismo esquema del agente de impresión y del webhook de
+MercadoPago: ruta pública en el `middleware` que **se autentica sola**, porque del otro lado no hay
+navegador y no va a haber cookie. De `TokenIa` se guarda **solo el hash** —SHA-256, no argon2: son 32
+bytes aleatorios y esto se verifica en cada pregunta— y el prefijo `plt_ia_` está para que un token
+pegado por error en un repositorio lo detecten los escáneres de secretos.
+
+`TokenIa` tiene `businessId`, así que **va en `lib/db/tenant-models.ts`**. El test de scoping lo
+atrapó al agregarlo, que es exactamente para lo que existe: sin esa línea, `tenantDb` no le habría
+puesto el `businessId` al `where` y un negocio podría revocar las llaves de otro.
+
+**Las siete herramientas son de solo lectura, y eso es una decisión de seguridad, no una etapa.** El
+radio de daño de un asistente confundido —o de un token filtrado— tiene que ser "alguien vio mis
+números", nunca "alguien me anuló la noche". Un agente que se equivoca al leer da una respuesta mala;
+uno que se equivoca al escribir arruina una caja.
+
+**No sale un solo dato de comensal**: ni nombres, ni teléfonos, ni direcciones de entrega. Esa
+información es de terceros que se la dieron al restaurante, no al proveedor de IA que el restaurante
+eligió; mandarla afuera sin consentimiento es justamente lo que la ley de habeas data no permite.
+Todo lo que sale es agregado.
+
+**No hay SQL nuevo**: las herramientas llaman a las mismas funciones de `features/informes/queries.ts`
+que pintan la pantalla de Informes. Si "ventas" se calculara distinto acá, el dueño tendría dos cifras
+y ninguna confiable, que es peor que no tener el módulo.
+
+Se devuelve **texto ya formateado**, no JSON crudo: quien lo lee es un modelo que va a repetirlo casi
+tal cual, y `$1.250.000` se lee mejor que `1250000`. Por lo mismo, `initialize` avisa en sus
+`instructions` que la jornada **no termina a medianoche**: sin eso el asistente interpreta "hoy" como
+el día del calendario y contesta un número que no coincide con el arqueo.
+
+Los errores se registran y **no se devuelven**: del otro lado hay un modelo que repite lo que reciba,
+y una excepción de Prisma le contaría a quien pregunte cómo está hecha la base. Es la misma regla que
+el menú QR.
+
+**La licencia se verifica en cada llamada, dentro de `autenticar()`.** `Business.status` y
+`licenciaVigente(subscription)` se miran por separado porque son dos decisiones distintas: una es el
+cobro y la otra es soporte suspendiendo la cuenta a mano. Se contesta **403 y no 401** —el token está
+bien, volver a emitirlo no arregla nada— y acá sí se dice cuál es el problema, al revés que en el
+menú QR: allá el que lee es un comensal y enterarlo expondría al negocio delante de su cliente; acá
+el que lee es el dueño, que es quien puede resolverlo.
+
+**Una llave es de UNA sede.** En este modelo cada `Business` es una sede, así que el token apunta a
+una sola y no hay forma de que vea otra: verificado mandando el `businessId` de una sede en los
+argumentos de una herramienta con la llave de la otra —se ignora, porque el id sale del token—. La
+dirección del servidor, en cambio, es la misma para todas, y eso hay que decirlo en pantalla: en el
+cliente de IA las dos conexiones se ven idénticas, así que con más de una sede la pantalla nombra de
+cuál es la llave. Con una sola no lo dice: sería ruido.
+
+Las llaves las crea el **propietario** en Configuración → Conexión con IA, hasta cinco, y el token se
+muestra **una sola vez**. La lista guarda `ultimoUsoEn`, que es lo que le permite al dueño reconocer
+cuál apagar meses después: sin eso, revocar es adivinar entre cinco nombres.
+
 ## Marca (Dark Kitchen-Fire)
 
 La paleta cromática se basa en el acero inoxidable de cocina, el papel de tirilla térmica, la tinta de impresión y el fuego de las brasas:
@@ -499,6 +590,12 @@ blanco sobre el fondo oscuro. Hoy `--muted` es `--panel-2` y el beige vive solo 
 **Los campos tienen pozo.** `--input-bg` (acero 26% sobre tinta) y `--input-bg-focus` existen y hay
 que usarlos: un campo tiene que ser MÁS oscuro que el panel que lo contiene. `bg-input/20` da un
 beige al 3%, o sea nada, y el campo desaparece.
+
+**El chip de estado tiene sus tres variantes y no se pinta a mano.** Junto a `.chip.is-hot` viven
+`.is-ok`, `.is-live` y `.is-wait` (éxito, en curso, en espera). El panel de preparaciones las escribía
+con `emerald-500`, `cyan-400` y `amber-400` —tres paletas crudas, y el cian no existe en ningún otro
+lado del producto—. El color va en la variante `-soft`, que es la que se lee como texto sobre el
+fondo oscuro.
 
 **Nada de paletas crudas de Tailwind.** No hay `emerald-`, `amber-`, `rose-`, `slate-` en la
 interfaz: para estado va la tríada semántica `success` / `warning` / `destructive` / `info`, cada
@@ -1346,6 +1443,36 @@ acento; a 20px es un rectángulo beige. Por eso **no va dentro de los botones** 
 qué está pasando y alcanza con el spinner de siempre—, y el ciclo de 2400ms tampoco llegaría a
 completarse en una acción de 400ms.
 
+### Un aviso que no se puede atender no es un aviso
+
+`avisos:{businessId}` es **un canal por negocio**, y el stream reenviaba todo lo que pasara por ahí a
+cualquiera que estuviera conectado: solo pedía licencia vigente. Así, el mesero recibía "entró una
+comanda a cocina" —la que él acababa de mandar— con un botón **Ver** que empujaba a `/cocina`, una
+pantalla que su rol no tiene: el DAL respondía 404 y el toast terminaba en una pantalla de error.
+
+Se arregla **en el origen y no escondiendo el botón**: si alguien no puede entrar a una pantalla,
+tampoco tiene por qué enterarse de lo que pasa adentro. De paso deja de viajar al navegador de la
+cocina el total de cada cuenta que llega a caja.
+
+`SECCION_QUE_EXIGE` (`lib/avisos.ts`, puro y con tests) mapea cada tipo al permiso que hace falta, y
+`leCorresponde()` lo decide. **El destino del aviso y el permiso que exige salen del mismo lugar**,
+así que no pueden separarse; hay un test que lo fija comparando el `href` contra la sección.
+
+| Aviso | Exige |
+|---|---|
+| `COCINA_NUEVA_COMANDA` | `cocina` |
+| `CUENTA_EN_CAJA` | `caja` |
+| `DOMICILIO_NUEVO` | `domicilios` |
+| `IMPRESION_FALLIDA` | `configuracion` |
+
+**Los permisos se leen una sola vez, al conectar.** Alcanza: esto decide qué avisos se muestran, no
+qué pantallas se abren —de eso se encarga el DAL en cada `page.tsx`—, y un cambio llega en la
+próxima reconexión. Releerlos por mensaje sería una consulta por cada comanda de la noche y por cada
+pantalla conectada.
+
+Medido con dos sesiones y publicando en el canal a mano: el MESERO recibe **cero**; la COCINA recibe
+la comanda y **no** la cuenta de caja.
+
 ### La carta del comensal es la otra cara de la comanda
 
 `app/m/[slug]` era el esqueleto de cualquier aplicación de delivery: logo redondo centrado, nombre
@@ -1449,6 +1576,7 @@ app/imprimir/            HTML limpio para @page 55mm/80mm
 app/turnero/             el televisor del salón: fuera de (app), sin barra de navegación
 lib/db/                  pool.ts · root.ts (rootDb) · tenant.ts (tenantDb) · tenant-models.ts
 lib/{auth,actions,billing,printing,email}/      infraestructura
+lib/mcp/                 token · herramientas (el servidor MCP por negocio)
 lib/printing/            ticket · recibo · comanda (puros) · escpos · cola · emitir · agente
 agente-impresion/        el binario en Go que corre en la PC del local
 lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plataforma

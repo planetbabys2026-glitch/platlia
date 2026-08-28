@@ -327,8 +327,24 @@ export const extenderLicencia = definePublicAction({
        * desde la pestaña Estado, que es donde se tomó la decisión.
        */
       const suspendidaPorSoporte = sub.business?.status !== "ACTIVO";
-      const estadoNuevo =
-        sub.status === "SUSPENDIDA" && !suspendidaPorSoporte && nuevoFin > ahora
+      /**
+       * Activar a mano gana sobre el cálculo por fechas.
+       *
+       * `estadoSegunFechas` mira el reloj y devolvería PRUEBA otra vez —la
+       * cuenta sigue teniendo `trialEndsAt`—, así que sin este caso especial la
+       * conversión no se pegaba. Cuando soporte activa, el período pasa a ser un
+       * período pago de verdad: se le da gracia como a cualquier licencia y se
+       * apaga el `trialEndsAt`, porque una cuenta activa que conserva fecha de
+       * prueba vuelve a caer en PRUEBA en el próximo recálculo.
+       */
+      if (input.activar) {
+        actualizacionData.trialEndsAt = null;
+        actualizacionData.graceUntil = new Date(nuevoFin.getTime() + DIAS_DE_GRACIA * DIA);
+      }
+
+      const estadoNuevo = input.activar
+        ? "ACTIVA"
+        : sub.status === "SUSPENDIDA" && !suspendidaPorSoporte && nuevoFin > ahora
           ? "ACTIVA"
           : estadoSegunFechas({ ...sub, ...actualizacionData }, ahora);
 
@@ -357,6 +373,7 @@ export const extenderLicencia = definePublicAction({
           entityId: sub.id,
           metadata: {
             dias: input.dias,
+            activadaAMano: input.activar,
             motivo: input.motivo,
             hasta: nuevoFin.toISOString(),
             estadoAnterior: sub.status,

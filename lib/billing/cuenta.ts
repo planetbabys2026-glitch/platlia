@@ -210,3 +210,17 @@ export async function sincronizarSedes(
     },
   });
 }
+
+/**
+ * Cuántas sedes tiene la cuenta a la que pertenece este negocio.
+ *
+ * Vive acá y no en la pantalla porque la respuesta cruza empresas a propósito
+ * —una cuenta son varias sedes— y eso necesita `rootDb`, que en código de
+ * negocio está prohibido. La pantalla de Conexión con IA la usa para decidir si
+ * hace falta aclarar de qué sede es la llave: con una sola sede, decirlo es
+ * ruido; con dos, es lo único que las distingue en el cliente de IA.
+ */
+export async function contarSedesDeLaCuenta(businessId: string): Promise<number> {
+  const sedes = await sedesDeLaMismaCuenta(rootDb, businessId);
+  return sedes.length;
+}

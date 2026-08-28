@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { getSuperAdmins } from "@/features/superadmin/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireSuperAdmin } from "@/lib/auth/dal";
@@ -17,24 +18,21 @@ export default async function EquipoSuperAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Equipo</h1>
-        <p className="text-muted-foreground text-sm">
-          {activos} {activos === 1 ? "persona con" : "personas con"} acceso a la consola de
-          soporte. No hay jerarquía: cualquiera puede asistir a cualquier negocio.
-        </p>
-      </div>
+      <EncabezadoPantalla
+        titulo="Equipo"
+        descripcion={`${activos} ${activos === 1 ? "persona con" : "personas con"} acceso a la consola de soporte. No hay jerarquía: cualquiera puede asistir a cualquier negocio.`}
+      />
 
       <Card>
         <CardContent className="space-y-4">
-          <h2 className="font-medium">Agregar superadministrador</h2>
+          <h2 className="rotulo-seccion">Agregar superadministrador</h2>
           <AgregarSuperAdmin />
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="font-medium">Con acceso</h2>
+          <h2 className="rotulo-seccion">Con acceso</h2>
           <ul className="divide-border divide-y">
             {superAdmins.map((persona) => (
               <li key={persona.id} className="space-y-2 py-3 first:pt-0">

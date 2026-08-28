@@ -25,6 +25,9 @@ export function Navbar() {
           <Link href="/#precios" className="transition-colors hover:text-[var(--papel)]">
             Precios
           </Link>
+          <Link href="/#preguntas" className="transition-colors hover:text-[var(--papel)]">
+            Preguntas
+          </Link>
           <Link href="/#contacto" className="transition-colors hover:text-[var(--papel)]">
             Contacto
           </Link>
@@ -71,6 +74,13 @@ export function Navbar() {
               className="text-[var(--linea)] hover:text-[var(--papel)] py-1"
             >
               Planes y precios
+            </Link>
+            <Link
+              href="/#preguntas"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-[var(--linea)] hover:text-[var(--papel)] py-1"
+            >
+              Preguntas frecuentes
             </Link>
             <Link
               href="/#contacto"

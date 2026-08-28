@@ -13,6 +13,7 @@ import {
   FormularioTurnero,
 } from "./formularios";
 import { FormularioPermisosRoles } from "./formulario-permisos-roles";
+import { FormularioIa, type ConexionIa } from "./formulario-ia";
 import {
   FormularioImpresoras,
   type ConfiguracionImpresionProps,
@@ -130,6 +131,11 @@ type PanelConfiguracionProps = {
   esPropietario: boolean;
   slug: string;
   mesas: { id: string; name: string }[];
+  /** Null para quien no es propietario: no configura conexiones de IA. */
+  conexionesIa: ConexionIa[] | null;
+  urlMcp: string | null;
+  sede: string;
+  cantidadDeSedes: number;
 };
 
 type TabId =
@@ -140,6 +146,7 @@ type TabId =
   | "qr"
   | "operacion"
   | "impresoras"
+  | "ia"
   | "factus"
   | "licencia";
 
@@ -153,13 +160,17 @@ export function PanelConfiguracion({
   esPropietario,
   slug,
   mesas,
+  conexionesIa,
+  urlMcp,
+  sede,
+  cantidadDeSedes,
 }: PanelConfiguracionProps) {
   // La sección vive en la URL: es lo que permite que el menú lateral enlace
   // "Menú digital QR" en vez de dejar al usuario buscarla adentro. Sin la tira de
   // píldoras ya nadie la cambia desde acá, así que el setter no se usa.
   const [tabActiva] = useVistaEnUrl<TabId>(
     "vista",
-    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "impresoras", "factus", "licencia"],
+    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "impresoras", "ia", "factus", "licencia"],
     "datos",
   );
 
@@ -294,6 +305,24 @@ export function PanelConfiguracion({
             <FormularioImpresoras
               {...impresion}
               comandaDestino={settings.comandaDestino}
+              timeZone={settings.timeZone}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {tabActiva === "ia" && esPropietario && conexionesIa && (
+        <Card className="shadow-sm overflow-visible">
+          <CardContent className="space-y-4 pt-6">
+            <EncabezadoPanel titulo="Conexión con IA">
+              Dejá que tu asistente —ChatGPT, Claude o el que uses— consulte la información de tu
+              negocio y te responda preguntándole.
+            </EncabezadoPanel>
+            <FormularioIa
+              conexiones={conexionesIa}
+              urlMcp={urlMcp ?? ""}
+              sede={sede}
+              cantidadDeSedes={cantidadDeSedes}
               timeZone={settings.timeZone}
             />
           </CardContent>

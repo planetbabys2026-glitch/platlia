@@ -401,6 +401,38 @@ export function ClienteMenuQr({
       "--foreground": `color-mix(in oklch, ${base} 96%, transparent)`,
       "--linea-30": `color-mix(in oklch, ${base} 30%, transparent)`,
       "--linea-16": `color-mix(in oklch, ${base} 16%, transparent)`,
+      "--papel-60": `color-mix(in oklch, ${base} 60%, transparent)`,
+      "--border": `color-mix(in oklch, ${base} 16%, transparent)`,
+      "--muted": `color-mix(in oklch, ${superficie} ${claro ? 55 : 34}%, transparent)`,
+
+      /**
+       * El pozo de los campos y la superficie de las tarjetas.
+       *
+       * `Input` y `Card` son de la aplicación y traen el acero sobre tinta del
+       * sistema: sobre una carta crema quedaban dos rectángulos oscuros en medio
+       * de la página. Un campo tiene que ser MÁS oscuro que su panel sobre fondo
+       * oscuro, y más CLARO sobre fondo claro; es la misma regla del pozo, leída
+       * en el sentido que corresponda.
+       */
+      "--input-bg": `color-mix(in oklch, ${superficie} ${claro ? 72 : 45}%, transparent)`,
+      "--input-bg-focus": `color-mix(in oklch, ${superficie} ${claro ? 90 : 58}%, transparent)`,
+      "--card": `color-mix(in oklch, ${superficie} ${claro ? 55 : 34}%, transparent)`,
+      "--card-foreground": `color-mix(in oklch, ${base} 96%, transparent)`,
+
+      /**
+       * **El acento del negocio manda, también en los componentes compartidos.**
+       *
+       * `--brand` y `--primary` son el Brasa de Platlia, y los controles de la
+       * aplicación los usan para el anillo de foco y los rellenos: en la carta de
+       * un local con acento verde o vinotinto, tocar el buscador encendía un
+       * anillo naranja que no es de nadie. Esta pantalla es el escaparate del
+       * negocio, así que acá el color de la marca es el suyo.
+       */
+      "--brand": acento,
+      "--primary": acento,
+      "--brand-foreground": textoSobre(acento),
+      "--primary-foreground": textoSobre(acento),
+      "--ring": acento,
     } as React.CSSProperties;
   }, [settings]);
 
@@ -725,7 +757,7 @@ export function ClienteMenuQr({
                             <span className="numeral text-base font-black text-[color:var(--qr-texto)]">
                               {formatCop(producto.priceCop)}
                               {quedanPocas && sePuedePedir && (
-                                <span className="text-rotulo ml-2 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 font-bold text-[color:var(--qr-texto-2)]">
+                                <span className="text-rotulo ml-2 rounded-md border border-[var(--qr-borde)] bg-[color:var(--qr-superficie)] px-1.5 py-0.5 font-bold text-[color:var(--qr-texto-2)]">
                                   quedan {disponibles}
                                 </span>
                               )}
@@ -752,7 +784,7 @@ export function ClienteMenuQr({
                                 <button
                                   type="button"
                                   onClick={() => quitarItem(claveDeLinea(producto.id, []))}
-                                  className="size-11 rounded-lg bg-black/50 hover:bg-black/80 flex items-center justify-center font-black text-[color:var(--qr-sobre-acento)] text-sm transition-all active:scale-90"
+                                  className="size-11 rounded-lg bg-[color:var(--qr-superficie-2)] hover:bg-[color:var(--qr-superficie-2)] flex items-center justify-center font-black text-[color:var(--qr-sobre-acento)] text-sm transition-all active:scale-90"
                                 >
                                   −
                                 </button>
@@ -793,7 +825,7 @@ export function ClienteMenuQr({
           anclaba al fondo de este div —1451px de menú— en vez de a la pantalla:
           para verla había que deslizar hasta el final, que es justo lo que no
           tiene que pasar. Lo mismo le ocurría al carrito y al rastreo. */}
-      <div className="mx-auto max-w-md min-h-screen flex flex-col relative pb-40 shadow-2xl border-x border-white/10">
+      <div className="mx-auto max-w-md min-h-screen flex flex-col relative pb-40 shadow-2xl border-x border-[var(--qr-borde)]">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 backdrop-blur-sm"
@@ -965,13 +997,31 @@ export function ClienteMenuQr({
             RASTREADOR DE PEDIDO EN TIEMPO REAL (REDIS SSE STREAM)
             ───────────────────────────────────────────────────────────── */}
         {pedidoActivoTrack && (
-          <div className="mx-4 my-3 p-4 rounded-2xl bg-[color:var(--qr-superficie-2)]/95 border-2 border-[var(--qr-acento)]/50 shadow-2xl text-[color:var(--qr-texto)] space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-lg text-[color:var(--qr-texto)]">Pedido #{pedidoActivoTrack.code}</span>
-                <Badge variant="outline" className="text-xs border-[var(--qr-acento)]/50 text-[color:var(--qr-acento-texto)] font-extrabold gap-1">
-                  <span className="size-2 rounded-full bg-success animate-ping inline-block" /> En vivo (Redis)
-                </Badge>
+          <div
+            className={cn(
+              "mx-4 my-3 space-y-4 border border-[var(--qr-acento)]/40 bg-[color:var(--qr-superficie-2)] p-4 text-[color:var(--qr-texto)] shadow-lg animate-in fade-in duration-300",
+              bordes === "RECTO" ? "rounded-none" : "rounded-2xl",
+            )}
+          >
+            {/* El talón del pedido: el número es el identificador, así que va en la
+                letra de los números —como el de una mesa en el salón— y no en un
+                `font-black` suelto. El borde baja a 1px: los 2px de antes eran el
+                único de la pantalla y se leían como un error. */}
+            <div className="flex items-center justify-between gap-3 border-b border-dashed border-[var(--qr-borde)] pb-2.5">
+              <div className="flex items-baseline gap-2.5">
+                <span className="font-mono text-rotulo uppercase tracking-[0.16em] text-[color:var(--qr-texto-3)]">
+                  Pedido
+                </span>
+                <span className="numeral text-xl font-bold leading-none text-[color:var(--qr-texto)]">
+                  #{pedidoActivoTrack.code}
+                </span>
+                {/* "En vivo (Redis)" le decía a un comensal el nombre de nuestra
+                    base de datos. Se nombra lo que la persona reconoce, nunca cómo
+                    está hecho el sistema por dentro. */}
+                <span className="inline-flex items-center gap-1.5 font-mono text-rotulo uppercase tracking-[0.14em] text-[color:var(--qr-acento-texto)]">
+                  <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-[var(--qr-acento)]" />
+                  En vivo
+                </span>
               </div>
               <button
                 type="button"
@@ -1040,7 +1090,7 @@ export function ClienteMenuQr({
             </div>
 
             {/* Detalles del Estado */}
-            <div className="rounded-xl bg-white/5 p-3 space-y-1.5 text-xs border border-white/10">
+            <div className="rounded-xl bg-[color:var(--qr-superficie)] p-3 space-y-1.5 text-xs border border-[var(--qr-borde)]">
               <div className="flex justify-between items-center">
                 <span className="text-[color:var(--qr-texto-2)]">Estado de Entrega:</span>
                 <span className="font-extrabold text-[color:var(--qr-texto)]">
@@ -1055,7 +1105,7 @@ export function ClienteMenuQr({
               </div>
 
               {pedidoActivoTrack.deliveryAddress && (
-                <div className="flex items-center gap-1 text-sm text-[color:var(--qr-texto-2)] pt-1 border-t border-white/10">
+                <div className="flex items-center gap-1 text-sm text-[color:var(--qr-texto-2)] pt-1 border-t border-[var(--qr-borde)]">
                   <MapPin className="size-3 text-[color:var(--qr-texto)] shrink-0" />
                   <span className="truncate">{pedidoActivoTrack.deliveryAddress}</span>
                 </div>
@@ -1079,9 +1129,9 @@ export function ClienteMenuQr({
             MODAL DE CONSULTA DE PEDIDO POR CELULAR / N° PEDIDO
             ───────────────────────────────────────────────────────────── */}
         {modalConsultaAbierto && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[color:var(--qr-superficie-2)] border border-white/15 rounded-2xl p-5 space-y-4 text-[color:var(--qr-texto)] shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <div className="fixed inset-0 bg-[color:var(--qr-superficie-2)] backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[color:var(--qr-superficie-2)] border border-[var(--qr-borde)] rounded-2xl p-5 space-y-4 text-[color:var(--qr-texto)] shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-[var(--qr-borde)] pb-2">
                 <h3 className="font-extrabold text-base text-[color:var(--qr-texto)] flex items-center gap-2">
                   🔍 Rastrear Pedido
                 </h3>
@@ -1101,7 +1151,7 @@ export function ClienteMenuQr({
                   value={queryConsulta}
                   onChange={(e) => setQueryConsulta(e.target.value)}
                   placeholder="Ej: 3001234567"
-                  className="bg-white/10 border-white/20 text-[color:var(--qr-texto)] text-sm h-11 rounded-xl placeholder:text-[color:var(--qr-texto-3)]"
+                  className="bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-sm h-11 rounded-xl placeholder:text-[color:var(--qr-texto-3)]"
                 />
 
                 {errorConsulta && (
@@ -1148,9 +1198,9 @@ export function ClienteMenuQr({
               </p>
             </div>
 
-            <Card className="bg-white/5 border-white/10 text-[color:var(--qr-texto)] text-left">
+            <Card className="bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-left">
               <CardContent className="p-4 space-y-2 text-xs">
-                <div className="flex justify-between font-bold text-sm text-[color:var(--qr-texto)] border-b border-white/10 pb-2">
+                <div className="flex justify-between font-bold text-sm text-[color:var(--qr-texto)] border-b border-[var(--qr-borde)] pb-2">
                   <span>Total del Pedido</span>
                   <span className="numeral">{formatCop(pedidoConfirmado.totalCop)}</span>
                 </div>
@@ -1180,7 +1230,7 @@ export function ClienteMenuQr({
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                   placeholder="Buscar plato, bebida, postre..."
-                  className="pl-9 h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] placeholder:text-[color:var(--qr-texto-2)] text-xs rounded-xl focus-visible:ring-[var(--qr-acento)]"
+                  className="pl-9 h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] placeholder:text-[color:var(--qr-texto-2)] text-xs rounded-xl focus-visible:ring-[var(--qr-acento)]"
                 />
                 {busqueda && (
                   <button
@@ -1200,7 +1250,7 @@ export function ClienteMenuQr({
                 ───────────────────────────────────────────────────────────── */}
             <main className="p-4 flex-1 space-y-3.5">
               {productosFiltrados.length === 0 ? (
-                <div className="p-8 text-center space-y-3 my-12 bg-white/5 rounded-3xl border border-white/10">
+                <div className="p-8 text-center space-y-3 my-12 bg-[color:var(--qr-superficie)] rounded-3xl border border-[var(--qr-borde)]">
                   <Utensils className="size-10 mx-auto text-[color:var(--qr-texto-3)] animate-pulse" />
                   <p className="text-sm font-semibold text-[color:var(--qr-texto-2)]">No se encontraron productos</p>
                   <p className="text-xs text-[color:var(--qr-texto-3)]">Prueba con otra palabra de búsqueda o categoría.</p>
@@ -1230,7 +1280,7 @@ export function ClienteMenuQr({
                   <button
                     type="button"
                     onClick={() => setAvisoStock(null)}
-                    className="mb-2 w-full rounded-xl border border-white/20 bg-black/70 px-3 py-2 text-left text-sm font-semibold text-[color:var(--qr-texto)] backdrop-blur-md"
+                    className="mb-2 w-full rounded-xl border border-[var(--qr-borde)] bg-[color:var(--qr-superficie-2)] px-3 py-2 text-left text-sm font-semibold text-[color:var(--qr-texto)] backdrop-blur-md"
                   >
                     {avisoStock}
                   </button>
@@ -1278,11 +1328,11 @@ export function ClienteMenuQr({
                 DRAWER / MODAL DEL CARRITO DE COMPRAS
                 ───────────────────────────────────────────────────────────── */}
             {carritoAbierto && (
-              <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-[color:var(--qr-superficie-2)] border-t border-white/10 rounded-t-3xl p-6 space-y-5 max-w-md mx-auto w-full max-h-[85vh] flex flex-col shadow-2xl">
+              <div className="fixed inset-0 z-50 flex flex-col justify-end bg-[color:var(--qr-superficie-2)] backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-[color:var(--qr-superficie-2)] border-t border-[var(--qr-borde)] rounded-t-3xl p-6 space-y-5 max-w-md mx-auto w-full max-h-[85vh] flex flex-col shadow-2xl">
                   
                   {/* Header Drawer */}
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center justify-between border-b border-[var(--qr-borde)] pb-3">
                     <div className="flex items-center gap-2">
                       <ShoppingBag className="size-5 text-[color:var(--qr-acento-texto)]" />
                       <h2 className="text-lg font-bold text-[color:var(--qr-texto)]">Resumen de tu Pedido</h2>
@@ -1307,7 +1357,7 @@ export function ClienteMenuQr({
 
                   {/* Datos del Cliente */}
                   {esMesa ? (
-                    <div className="space-y-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div className="space-y-2 p-3 rounded-xl bg-[color:var(--qr-superficie)] border border-[var(--qr-borde)]">
                       <label
                         htmlFor="nombre-cuenta-qr"
                         className="block font-bold text-[color:var(--qr-texto)] text-xs uppercase tracking-wider"
@@ -1321,7 +1371,7 @@ export function ClienteMenuQr({
                         placeholder="Tu nombre *"
                         required
                         maxLength={120}
-                        className="h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] text-sm"
+                        className="h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-sm"
                       />
                       <p className="text-xs text-[color:var(--qr-texto-2)] leading-snug">
                         Tu pedido va a la cocina a tu nombre y se cobra aparte.
@@ -1329,7 +1379,7 @@ export function ClienteMenuQr({
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-3 p-3 rounded-xl bg-white/5 border border-white/10 text-xs">
+                    <div className="space-y-3 p-3 rounded-xl bg-[color:var(--qr-superficie)] border border-[var(--qr-borde)] text-xs">
                       <h3 className="font-bold text-[color:var(--qr-texto)] text-xs uppercase tracking-wider">
                         Datos de Entrega (Domicilio)
                       </h3>
@@ -1339,7 +1389,7 @@ export function ClienteMenuQr({
                           onChange={(e) => setCustomerName(e.target.value)}
                           placeholder="Tu Nombre completo *"
                           required
-                          className="h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] text-xs"
+                          className="h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-xs"
                         />
                         <div className="grid grid-cols-2 gap-2">
                           <Input
@@ -1347,21 +1397,21 @@ export function ClienteMenuQr({
                             onChange={(e) => setCustomerPhone(e.target.value)}
                             placeholder="Celular / WhatsApp *"
                             required
-                            className="h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] text-xs"
+                            className="h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-xs"
                           />
                           <Input
                             value={customerAddress}
                             onChange={(e) => setCustomerAddress(e.target.value)}
                             placeholder="Dirección exacta *"
                             required
-                            className="h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] text-xs"
+                            className="h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-xs"
                           />
                         </div>
-                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/10">
+                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[var(--qr-borde)]">
                           <select
                             value={docType}
                             onChange={(e) => setDocType(e.target.value)}
-                            className="h-11 bg-[color:var(--qr-superficie)] border border-white/15 text-[color:var(--qr-texto)] text-xs rounded-md px-2"
+                            className="h-11 bg-[color:var(--qr-superficie)] border border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-xs rounded-md px-2"
                           >
                             <option value="CC">CC</option>
                             <option value="NIT">NIT</option>
@@ -1372,7 +1422,7 @@ export function ClienteMenuQr({
                             value={docNumber}
                             onChange={(e) => setDocNumber(e.target.value)}
                             placeholder="Nº Documento (opcional)"
-                            className="col-span-2 h-11 bg-white/10 border-white/15 text-[color:var(--qr-texto)] text-xs"
+                            className="col-span-2 h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-[color:var(--qr-texto)] text-xs"
                           />
                         </div>
                       </div>
@@ -1384,7 +1434,7 @@ export function ClienteMenuQr({
                     {cartList.map((item) => (
                       <div
                         key={item.lineKey}
-                        className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 text-xs"
+                        className="p-3 rounded-xl bg-[color:var(--qr-superficie)] border border-[var(--qr-borde)] space-y-2 text-xs"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-0.5">
@@ -1405,11 +1455,11 @@ export function ClienteMenuQr({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-lg p-1">
+                          <div className="flex items-center gap-1.5 bg-[color:var(--qr-superficie-2)] border border-[var(--qr-borde)] rounded-lg p-1">
                             <button
                               type="button"
                               onClick={() => quitarItem(item.lineKey)}
-                              className="size-11 rounded bg-white/10 text-[color:var(--qr-texto)] font-bold text-xs"
+                              className="size-11 rounded bg-[color:var(--qr-superficie)] text-[color:var(--qr-texto)] font-bold text-xs"
                             >
                               −
                             </button>
@@ -1430,14 +1480,14 @@ export function ClienteMenuQr({
                           value={item.notes}
                           onChange={(e) => cambiarNota(item.lineKey, e.target.value)}
                           placeholder="Notas (sin salsa, bien cocido...)"
-                          className="h-11 bg-white/5 border-white/10 text-sm text-[color:var(--qr-texto)] placeholder:text-[color:var(--qr-texto-3)]"
+                          className="h-11 bg-[color:var(--qr-superficie)] border-[var(--qr-borde)] text-sm text-[color:var(--qr-texto)] placeholder:text-[color:var(--qr-texto-3)]"
                         />
                       </div>
                     ))}
                   </div>
 
                   {/* Propina, Total y Confirmación */}
-                  <div className="border-t border-white/10 pt-3 space-y-3">
+                  <div className="border-t border-[var(--qr-borde)] pt-3 space-y-3">
                     <SelectorDePropina
                       tema="qr"
                       habilitado={settings.tipSuggestionEnabled}
@@ -1449,7 +1499,7 @@ export function ClienteMenuQr({
                     />
 
                     {(costoDomicilioCop > 0 || propinaCop > 0) && (
-                      <div className="space-y-1.5 border-b border-white/10 pb-2 text-xs text-[color:var(--qr-texto-2)]">
+                      <div className="space-y-1.5 border-b border-[var(--qr-borde)] pb-2 text-xs text-[color:var(--qr-texto-2)]">
                         <div className="flex justify-between items-center">
                           <span>Productos</span>
                           <span className="numeral font-medium text-[color:var(--qr-texto)]">{formatCop(totalConsumoCop)}</span>

@@ -22,6 +22,21 @@ const PUBLICAS = new Set([
   "/verificar-correo",
   "/terminos",
   "/privacidad",
+  "/pqr",
+  "/habeas-data",
+  /**
+   * Los archivos que lee un buscador ANTES de indexar.
+   *
+   * Sin esto el middleware los mandaba al login y devolvían un 307: Google y los
+   * asistentes no leían ni el `robots.txt` ni el mapa del sitio, así que el
+   * trabajo de posicionamiento no existía para nadie. Es la misma clase de
+   * defecto que ya había obligado a exceptuar `sw.js` y el ejecutable del
+   * agente: un archivo que no es una pantalla, pedido por algo que no es un
+   * navegador con sesión.
+   */
+  "/robots.txt",
+  "/sitemap.xml",
+  "/llms.txt",
   "/pl-bootstrap",
   // Sin esto, toda ruta /superadmin sin cookie se manda a /superadmin/ingresar,
   // que tampoco sería pública y se redirigiría a sí misma para siempre.
@@ -32,6 +47,16 @@ function esPublica(pathname: string): boolean {
   if (PUBLICAS.has(pathname)) return true;
   // Menú Digital QR público para clientes (mesas y domicilios)
   if (pathname.startsWith("/m/")) return true;
+  /**
+   * La imagen que se ve al compartir el enlace.
+   *
+   * Va por prefijo y no por nombre exacto porque Next le agrega un hash de
+   * contenido: la ruta real es `/opengraph-image-pwu6ef`, no `/opengraph-image`.
+   * Con la coincidencia exacta el middleware la mandaba al login, y quien pegara
+   * el enlace en WhatsApp recibía un 307 en vez de la imagen: enlace sin
+   * miniatura, que es el que nadie abre.
+   */
+  if (pathname.startsWith("/opengraph-image") || pathname.startsWith("/twitter-image")) return true;
   // Pantalla del televisor del salón (Turnero TV)
   if (pathname === "/turnero" || pathname.startsWith("/turnero/")) return true;
   // El health check lo consulta el monitoreo externo, sin cookie.
@@ -46,6 +71,16 @@ function esPublica(pathname: string): boolean {
   // id del pedido, que es un cuid, y el handler lo verifica por su cuenta —estar
   // en esta lista no autentica nada—.
   if (pathname.startsWith("/api/qr/")) return true;
+  /**
+   * La IA del negocio, que consulta por MCP.
+   *
+   * No es un navegador y nunca va a tener cookie: presenta su token en cada
+   * llamada y el handler lo verifica por su cuenta. Estar en esta lista no
+   * autentica nada —igual que el webhook y el agente de impresión—, solo evita
+   * que el middleware conteste un 307 al login que el cliente de IA leería como
+   * "el servidor está caído".
+   */
+  if (pathname.startsWith("/api/mcp")) return true;
   // El agente de impresión corre en una PC del local y tampoco es un navegador:
   // se autentica con su token en cada llamada, como el webhook de MercadoPago.
   if (pathname.startsWith("/api/impresion/")) return true;

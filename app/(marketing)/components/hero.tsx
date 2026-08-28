@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { formatCop } from "@/lib/money";
 import { ArrowRight, Clock, CheckCircle2, Flame, Zap, Sparkles } from "lucide-react";
 
 interface OrderDemo {
@@ -223,7 +224,15 @@ function ActiveHeroTicket({ order, onNext }: { order: OrderDemo; onNext: () => v
   );
 }
 
-export function Hero() {
+/**
+ * El precio del botón sale de la LISTA, no del código.
+ *
+ * Decía "Ver plan de $50.000 COP" escrito a mano: el día que el
+ * superadministrador mueva la lista —o lance una promoción— la portada prometía
+ * una cifra y el checkout cobraba otra. Es el mismo defecto que ya había costado
+ * que la sección de precios calculara los descuentos con `* 0.9` y `* 0.8`.
+ */
+export function Hero({ desdeCop }: { desdeCop: number | null }) {
   const [orderIndex, setOrderIndex] = useState(0);
 
   return (
@@ -235,16 +244,16 @@ export function Hero() {
           <div className="lg:col-span-6 space-y-6 text-center lg:text-left rise">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[var(--linea-30)] bg-[var(--panel-2)] text-xs font-mono tracking-widest text-[var(--brasa)] font-bold uppercase shadow-sm">
               <Zap className="size-3.5" />
-              <span>OPTIMIZACIÓN REAL DEL SERVICIO · COLOMBIA 🇨🇴</span>
+              <span>Para bares y restaurantes de Colombia</span>
             </div>
 
             <div className="space-y-4">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black font-display tracking-tight text-[var(--papel)] uppercase leading-[0.95]">
-                Cada segundo cuenta: <br />
-                <span className="text-[var(--brasa)]">Felicidad para tu cliente, rentabilidad para tu negocio</span>
+                Tomá el pedido, mandalo a cocina<br />
+                <span className="text-[var(--brasa)]">y cobralo facturado</span>
               </h1>
               <p className="text-[var(--linea)] text-base sm:text-lg lg:text-xl max-w-2xl mx-auto lg:mx-0 leading-relaxed font-normal">
-                Para nosotros, cada segundo que logramos optimizar en la toma de pedidos, el despacho en cocina y el cobro de cuentas se traduce en dos cosas: <strong>comensales felices que regresan</strong> y una <strong>mayor rotación de mesas</strong> para tu restaurante.
+                Un solo sistema para tu salón, tu cocina y tu caja, con <strong>factura electrónica DIAN</strong> lista para usar. Se instala hoy y esta noche ya estás cobrando: <strong>7 días gratis y sin tarjeta</strong>.
               </p>
             </div>
 
@@ -258,7 +267,7 @@ export function Hero() {
               </Button>
               <Button asChild size="lg" variant="outline" className="w-full sm:w-auto h-13 px-6 text-base font-bold border-[var(--linea-30)] text-[var(--papel)] hover:bg-[var(--panel-2)] transition-all hover:scale-[1.02]">
                 <a href="#precios" className="flex items-center justify-center gap-2">
-                  Ver plan de $50.000 COP
+                  {desdeCop === null ? "Ver planes" : `Ver planes desde ${formatCop(desdeCop)}`}
                 </a>
               </Button>
             </div>
@@ -267,15 +276,15 @@ export function Hero() {
             <div className="pt-4 flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-xs sm:text-sm text-[var(--linea)] font-medium">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-[var(--brasa)]" />
-                <span>Menos tiempo de espera por mesa</span>
+                <span>Sin tarjeta para probarlo</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-[var(--brasa)]" />
-                <span>Mayor rotación en horas pico</span>
+                <span>Mesas y meseros sin límite</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-[var(--brasa)]" />
-                <span>Cierre de caja en 60 segundos</span>
+                <span>Cancelás cuando quieras</span>
               </div>
             </div>
           </div>

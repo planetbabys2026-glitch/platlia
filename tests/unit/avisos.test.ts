@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describirAviso } from "@/lib/avisos";
+import { describirAviso, leCorresponde, SECCION_QUE_EXIGE } from "@/lib/avisos";
 
 /**
  * El título de un aviso es lo único que alguien lee de verdad: aparece dos
@@ -192,5 +192,52 @@ describe("describirAviso · cuenta en la caja", () => {
 
     expect(aviso.titulo).toBe("Turno 01 · Prueba mostrador");
     expect(aviso.detalle).toBe("$27.000 · 2 productos");
+  });
+});
+
+describe("a quién le corresponde cada aviso", () => {
+  const puedeTodo = () => true;
+  const puedeNada = () => false;
+  const soloCocina = (s: string) => s === "cocina";
+
+  it("la comanda es de quien puede ver cocina", () => {
+    expect(leCorresponde("COCINA_NUEVA_COMANDA", soloCocina)).toBe(true);
+    expect(leCorresponde("CUENTA_EN_CAJA", soloCocina)).toBe(false);
+    expect(leCorresponde("DOMICILIO_NUEVO", soloCocina)).toBe(false);
+  });
+
+  it("al mesero no le llega la comanda que él mismo mandó", () => {
+    // El caso que originó todo esto: el toast le ofrecía "Ver" y `/cocina` le
+    // respondía 404, porque el rol MESERO no tiene esa sección.
+    const comoMesero = (s: string) => ["salon_pos", "turnero"].includes(s);
+    expect(leCorresponde("COCINA_NUEVA_COMANDA", comoMesero)).toBe(false);
+  });
+
+  it("sin ningún permiso no llega ninguno", () => {
+    for (const tipo of ["COCINA_NUEVA_COMANDA", "CUENTA_EN_CAJA", "DOMICILIO_NUEVO", "IMPRESION_FALLIDA"] as const) {
+      expect(leCorresponde(tipo, puedeNada)).toBe(false);
+      expect(leCorresponde(tipo, puedeTodo)).toBe(true);
+    }
+  });
+
+  it("cada tipo de aviso declara qué sección exige, sin faltar ninguno", () => {
+    // Si mañana se agrega un tipo y se olvida el permiso, esto lo agarra: sin la
+    // entrada, el aviso no tendría destino ni guarda y volvería a repartirse a
+    // todo el mundo.
+    const tipos = Object.keys(SECCION_QUE_EXIGE).sort();
+    expect(tipos).toEqual(
+      ["COCINA_NUEVA_COMANDA", "CUENTA_EN_CAJA", "DOMICILIO_NUEVO", "IMPRESION_FALLIDA"].sort(),
+    );
+  });
+
+  it("el permiso que exige y el destino del aviso hablan de la misma pantalla", () => {
+    const destino = {
+      COCINA_NUEVA_COMANDA: "/cocina",
+      CUENTA_EN_CAJA: "/caja",
+      DOMICILIO_NUEVO: "/domicilios",
+    } as const;
+    for (const [tipo, href] of Object.entries(destino)) {
+      expect(href).toContain(SECCION_QUE_EXIGE[tipo as keyof typeof destino]);
+    }
   });
 });

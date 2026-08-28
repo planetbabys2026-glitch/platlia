@@ -387,7 +387,7 @@
     gap: 6px;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-size: 11px;
+    font-size: var(--text-rotulo);
     letter-spacing: 0.12em;
     padding: 4px 10px;
     border-radius: 999px;
@@ -401,6 +401,28 @@
     border-color: var(--brasa);
     color: var(--brasa);
     background: var(--brasa-soft);
+  }
+
+  /* Los tres estados de la tríada semántica, para que un chip de estado no se
+     pinte a mano con `emerald-500` y `cyan-400` cada vez. El color va en la
+     variante `-soft`, que es la que se lee como TEXTO sobre el fondo oscuro; la
+     sólida es para rellenos. */
+  .chip.is-ok {
+    border-color: color-mix(in oklch, var(--success) 40%, transparent);
+    color: var(--success-soft);
+    background: color-mix(in oklch, var(--success) 12%, transparent);
+  }
+
+  .chip.is-live {
+    border-color: color-mix(in oklch, var(--info) 40%, transparent);
+    color: var(--info-soft);
+    background: color-mix(in oklch, var(--info) 12%, transparent);
+  }
+
+  .chip.is-wait {
+    border-color: color-mix(in oklch, var(--warning) 40%, transparent);
+    color: var(--warning-soft);
+    background: color-mix(in oklch, var(--warning) 12%, transparent);
   }
 
   /* Botones primarios y secundarios */

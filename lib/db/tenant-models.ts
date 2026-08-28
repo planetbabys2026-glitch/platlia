@@ -47,6 +47,7 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "PrintRoute",
   "PrintJob",
   "PrintAgent",
+  "TokenIa",
 ]);
 
 /**

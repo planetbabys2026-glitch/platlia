@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CORREO_SOPORTE, WHATSAPP_SOPORTE_VISIBLE } from "@/lib/soporte";
 import { Logotipo } from "@/components/marca/logo";
 import { ShieldCheck, FileText, Phone, Mail } from "lucide-react";
 
@@ -71,11 +72,11 @@ export function Footer() {
               </li>
               <li className="pt-1 font-mono text-xs text-muted-foreground flex items-center gap-2">
                 <Mail className="size-3.5 text-[var(--brasa)]" />
-                <span>Atención: <strong className="text-[var(--papel)] font-sans">contacto@platlia.com</strong></span>
+                <span>Atención: <strong className="text-[var(--papel)] font-sans">{CORREO_SOPORTE}</strong></span>
               </li>
               <li className="font-mono text-xs text-muted-foreground flex items-center gap-2">
                 <Phone className="size-3.5 text-[var(--brasa)]" />
-                <span>WhatsApp: <strong className="text-[var(--papel)] font-sans">+57 (310) 574-2111</strong></span>
+                <span>WhatsApp: <strong className="text-[var(--papel)] font-sans">{WHATSAPP_SOPORTE_VISIBLE}</strong></span>
               </li>
             </ul>
           </div>

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { enviarMensajeComercial } from "@/features/marketing/actions";
+import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { CORREO_SOPORTE, WHATSAPP_SOPORTE_VISIBLE } from "@/lib/soporte";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,20 +22,30 @@ export function ContactSection() {
     mensaje: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // La trampa para robots: escondida y sin etiqueta, una persona nunca la llena.
+  const [sitio, setSitio] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nombre || !formData.correo || !formData.telefono) {
-      toast.error("Por favor completa los campos obligatorios (*)");
+      toast.error("Completá tu nombre, tu correo y tu teléfono.");
       return;
     }
 
     setEnviando(true);
-    // Simular envío de formulario comercial
-    setTimeout(() => {
+    try {
+      const res = await enviarMensajeComercial(ESTADO_INICIAL, { ...formData, sitio });
+      if (res.ok) {
+        setEnviado(true);
+        toast.success("Mensaje enviado. Te escribimos hoy mismo.");
+      } else {
+        // Si el envío falló, se dice: mostrar el mismo "enviado con éxito" es
+        // volver al defecto que este cambio vino a arreglar.
+        toast.error(res.error ?? "No pudimos enviar tu mensaje. Escribinos por WhatsApp.");
+      }
+    } finally {
       setEnviando(false);
-      setEnviado(true);
-      toast.success("¡Mensaje enviado con éxito! Un asesor comercial se comunicará contigo.");
-    }, 1200);
+    }
   };
 
   return (
@@ -60,7 +73,7 @@ export function ContactSection() {
                 </div>
                 <div>
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">WhatsApp & Línea Comercial</p>
-                  <p className="font-bold text-[var(--papel)] text-base">+57 (310) 574-2111</p>
+                  <p className="font-bold text-[var(--papel)] text-base">{WHATSAPP_SOPORTE_VISIBLE}</p>
                 </div>
               </div>
 
@@ -70,7 +83,7 @@ export function ContactSection() {
                 </div>
                 <div>
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Correo de Ventas & Soporte</p>
-                  <p className="font-bold text-[var(--papel)] text-base">contacto@platlia.com</p>
+                  <p className="font-bold text-[var(--papel)] text-base">{CORREO_SOPORTE}</p>
                 </div>
               </div>
 
@@ -211,6 +224,20 @@ export function ContactSection() {
                       className="w-full rounded-lg border border-[var(--linea-30)] bg-[var(--panel-2)] px-3.5 py-2.5 text-sm text-[var(--papel)] outline-none focus:border-[var(--brasa)] focus:ring-2 focus:ring-[var(--brasa)]/30 resize-none"
                     />
                   </div>
+
+                  {/* La trampa para robots. Va escondida a la vista y para el
+                      lector de pantalla, y fuera del recorrido con el tabulador:
+                      quien llena el formulario nunca se topa con ella. */}
+                  <input
+                    type="text"
+                    name="sitio"
+                    value={sitio}
+                    onChange={(e) => setSitio(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden
+                    className="hidden"
+                  />
 
                   <Button
                     type="submit"

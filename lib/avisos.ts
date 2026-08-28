@@ -1,4 +1,5 @@
 import { formatCop } from "@/lib/money";
+import type { SeccionPermiso } from "@/lib/auth/permisos-roles";
 import { formatTurno } from "@/lib/turns";
 
 /**
@@ -97,6 +98,44 @@ export type DatosAviso =
       productos: number;
       ts?: number;
     };
+
+/**
+ * Qué sección hay que poder ver para recibir cada aviso.
+ *
+ * **Un aviso que no se puede atender no es un aviso, es ruido.** El stream los
+ * repartía a todo el que estuviera conectado al negocio, así que un mesero
+ * recibía "entró una comanda a cocina" —que además él mismo acababa de mandar— y
+ * el botón "Ver" lo llevaba a `/cocina`, una pantalla que su rol no tiene: el
+ * DAL respondía 404 y el toast terminaba en una pantalla de error.
+ *
+ * Se resuelve acá y no escondiendo el botón: si alguien no puede entrar a la
+ * pantalla, tampoco tiene por qué enterarse de lo que pasa adentro. De paso deja
+ * de viajar al navegador de la cocina el total de cada cuenta que llega a caja.
+ *
+ * El destino de cada aviso y el permiso que exige salen del mismo lugar, así que
+ * no pueden separarse: si mañana un aviso apunta a otra pantalla, el permiso se
+ * cambia en el mismo renglón.
+ */
+export const SECCION_QUE_EXIGE: Record<TipoAviso, SeccionPermiso> = {
+  COCINA_NUEVA_COMANDA: "cocina",
+  CUENTA_EN_CAJA: "caja",
+  DOMICILIO_NUEVO: "domicilios",
+  // Va a Configuración → Impresoras, que es donde se arregla.
+  IMPRESION_FALLIDA: "configuracion",
+};
+
+/**
+ * Si a esta persona le corresponde este aviso.
+ *
+ * Puro a propósito: decide quién se entera de qué y eso tiene que poder probarse
+ * sin levantar un stream ni una base.
+ */
+export function leCorresponde(
+  tipo: TipoAviso,
+  puedeVer: (seccion: SeccionPermiso) => boolean,
+): boolean {
+  return puedeVer(SECCION_QUE_EXIGE[tipo]);
+}
 
 function contarProductos(n: number): string {
   return `${n} ${n === 1 ? "producto" : "productos"}`;

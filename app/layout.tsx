@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import { RegistroServiceWorker } from "@/components/pwa/registro-sw";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+import { env } from "@/lib/env";
 
 /**
  * General Sans para la interfaz operativa y los paneles táctiles.
@@ -64,13 +65,55 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
+  /**
+   * Sin `metadataBase`, Next resuelve las imágenes de `openGraph` contra
+   * `localhost` y el enlace compartido llega sin miniatura. En Colombia el canal
+   * es WhatsApp: un enlace sin imagen ni descripción se ve como spam y no se
+   * abre, así que esto vale más que cualquier palabra clave.
+   */
+  metadataBase: new URL(env.APP_URL),
+  alternates: { canonical: "/" },
   title: {
-    default: "Platlia — Gestión para bares y restaurantes",
+    // El título es lo que se lee en el resultado de búsqueda: dice qué es y
+    // para quién, no el nombre solo. "Software" y "punto de venta" están
+    // porque son las palabras con las que la gente busca esto.
+    default: "Platlia — Software y punto de venta para bares y restaurantes en Colombia",
     template: "%s · Platlia",
   },
   description:
-    "Administrá tu restaurante o bar: mesas, pedidos, caja, cocina e informes en un solo lugar.",
+    "Sistema para bares y restaurantes: toma de pedidos en mesa, pantalla de cocina, caja, menú QR, inventario y factura electrónica DIAN. 7 días gratis, sin tarjeta.",
+  keywords: [
+    "software para restaurantes",
+    "punto de venta restaurante Colombia",
+    "POS para bares",
+    "comanda digital",
+    "menú QR restaurante",
+    "factura electrónica DIAN restaurante",
+    "software para bares Colombia",
+    "sistema de pedidos para restaurante",
+  ],
   applicationName: "Platlia",
+  category: "business",
+  openGraph: {
+    type: "website",
+    locale: "es_CO",
+    siteName: "Platlia",
+    title: "Platlia — Software y punto de venta para bares y restaurantes",
+    description:
+      "Tomá el pedido, mandalo a cocina y cobralo facturado. Menú QR, inventario e informes. 7 días gratis y sin tarjeta.",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Platlia — Software para bares y restaurantes",
+    description:
+      "Salón, cocina, caja y factura electrónica DIAN en un solo sistema. 7 días gratis, sin tarjeta.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
   appleWebApp: { capable: true, title: "Platlia", statusBarStyle: "default" },
   manifest: "/manifest.webmanifest",
   icons: {

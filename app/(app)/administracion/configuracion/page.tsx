@@ -16,6 +16,7 @@ import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { preciosVigentes } from "@/lib/billing/lista";
 import { tenantDb } from "@/lib/db/tenant";
 import { env } from "@/lib/env";
+import { contarSedesDeLaCuenta } from "@/lib/billing/cuenta";
 import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { PanelConfiguracion } from "./panel-configuracion";
 
@@ -104,6 +105,27 @@ export default async function ConfiguracionPage() {
 
   const extra = parseExtraSettings(settings.rolePermissions);
 
+  /**
+   * Las conexiones de IA, solo para el propietario.
+   *
+   * Se consulta con `tenantDb`, así que la lista es de esta sede y de ninguna
+   * otra. Nunca sale el token —de él solo existe el hash— sino el nombre y
+   * cuándo se usó por última vez, que es lo que le permite al dueño reconocer
+   * cuál apagar.
+   */
+  const conexionesIa = esPropietario
+    ? await db.tokenIa.findMany({
+        orderBy: { createdAt: "desc" },
+        select: { id: true, nombre: true, ultimoUsoEn: true, createdAt: true },
+      })
+    : null;
+
+  // Cuántas sedes tiene la cuenta: la pantalla solo aclara de cuál es la llave
+  // cuando hay más de una, porque con una sola decirlo es ruido.
+  const sedesDeLaCuenta = esPropietario
+    ? await contarSedesDeLaCuenta(ctx.business.id)
+    : 1;
+
   return (
     <div className="space-y-6">
       {/* El `h1` estaba copiado a mano con su propio `clamp`, así que era la única
@@ -136,6 +158,10 @@ export default async function ConfiguracionPage() {
         esPropietario={esPropietario}
         slug={negocio.slug}
         mesas={mesas}
+        conexionesIa={conexionesIa}
+        sede={negocio.name}
+        cantidadDeSedes={sedesDeLaCuenta}
+        urlMcp={`${env.APP_URL}/api/mcp`}
       />
     </div>
   );

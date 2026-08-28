@@ -186,13 +186,13 @@ export function VistaAuditoria({
               label="Extensiones de Licencia"
               activo={filtroAccion === "EXTENDER"}
               onClick={() => setFiltroAccion("EXTENDER")}
-              colorActive="bg-success text-white"
+              colorActive="bg-success text-success-foreground"
             />
             <FiltroBoton
               label="Suspensiones / Reactivaciones"
               activo={filtroAccion === "SUSPENDER"}
               onClick={() => setFiltroAccion("SUSPENDER")}
-              colorActive="bg-warning text-white"
+              colorActive="bg-warning text-warning-foreground"
             />
             <FiltroBoton
               label="Gestión de Equipo"
@@ -276,13 +276,13 @@ export function VistaAuditoria({
               label="Aprobados / Licencia Otorgada"
               activo={filtroPago === "APROBADO"}
               onClick={() => setFiltroPago("APROBADO")}
-              colorActive="bg-success text-white"
+              colorActive="bg-success text-success-foreground"
             />
             <FiltroBoton
               label="Rechazados / Fallidos"
               activo={filtroPago === "FALLIDO"}
               onClick={() => setFiltroPago("FALLIDO")}
-              colorActive="bg-destructive text-white"
+              colorActive="bg-destructive text-destructive-foreground"
             />
           </div>
 

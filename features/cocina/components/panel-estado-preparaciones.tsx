@@ -25,26 +25,21 @@ function formatTiempoTranscurrido(fecha: Date | string | null): string {
   return `Hace ${min} min`;
 }
 
+/**
+ * El estado del renglón, con el chip del sistema.
+ *
+ * Estaba pintado a mano con `emerald-500`, `cyan-400` y `amber-400`: tres
+ * paletas crudas de Tailwind en una pantalla que el manual manda resolver con la
+ * tríada semántica. El cian no existe en ningún otro lado del producto.
+ *
+ * Se le fue el `animate-pulse` del "¡LISTO!": en una lista donde varios renglones
+ * pueden estar listos a la vez, media pantalla latiendo deja de señalar nada. La
+ * diferencia de color ya lo dice, y es lo único que hay que ver de reojo.
+ */
 function InsigniaEstado({ status }: { status: string }) {
-  if (status === "LISTO") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-xs font-bold text-emerald-500 border border-emerald-500/30 animate-pulse">
-        ¡LISTO!
-      </span>
-    );
-  }
-  if (status === "EN_PREPARACION") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2.5 py-0.5 font-mono text-xs font-bold text-cyan-400 border border-cyan-500/30">
-        EN PREPARACIÓN
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 font-mono text-xs font-bold text-amber-400 border border-amber-500/30">
-      PENDIENTE
-    </span>
-  );
+  if (status === "LISTO") return <span className="chip is-ok">Listo</span>;
+  if (status === "EN_PREPARACION") return <span className="chip is-live">En preparación</span>;
+  return <span className="chip is-wait">Pendiente</span>;
 }
 
 export function BotonEstadoPreparaciones({
@@ -133,8 +128,8 @@ export function BotonEstadoPreparaciones({
               className={cn(
                 "flex items-center justify-center rounded-full bg-brand font-mono font-black text-brand-foreground shadow-sm",
                 esIcono
-                  ? "absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[9px] leading-none"
-                  : "size-5 text-[10px] shrink-0",
+                  ? "absolute -top-1 -right-1 h-4 min-w-4 px-1 text-rotulo leading-none"
+                  : "size-5 text-rotulo shrink-0",
               )}
             >
               {items.length > 99 ? "99+" : items.length}
@@ -146,7 +141,7 @@ export function BotonEstadoPreparaciones({
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden border-[var(--linea-30)] bg-[var(--tinta)]">
         <DialogHeader className="p-4 border-b border-[var(--linea-16)] flex flex-row items-center justify-between space-y-0">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-brand/15 text-brand">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-brand/15 text-brand">
               <Utensils className="size-5" />
             </div>
             <div>
@@ -180,20 +175,23 @@ export function BotonEstadoPreparaciones({
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar por mesa, pedido o plato…"
-                className="pl-9 h-9 text-xs rounded-lg bg-[var(--panel)]"
+                className="h-11 rounded-xl bg-[var(--input-bg)] pl-9 text-sm"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-muted-foreground font-mono font-medium">
-              TOTAL EN COCINA: <strong className="text-foreground">{items.length}</strong>
+          {/* La cifra en `.numeral` y la palabra en la letra de cuerpo: en
+              monoespaciada el ancho fijo separa la palabra de su número como si
+              fueran dos datos. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-rotulo uppercase tracking-[0.12em] text-muted-foreground">
+            <span>
+              En cocina <span className="numeral font-bold text-foreground">{items.length}</span>
             </span>
-            <span className="text-amber-400 font-mono font-medium">
-              PENDIENTES: <strong>{pendientesCount}</strong>
+            <span>
+              Pendientes <span className="numeral font-bold text-warning-soft">{pendientesCount}</span>
             </span>
-            <span className="text-emerald-400 font-mono font-medium">
-              LISTOS: <strong>{listosCount}</strong>
+            <span>
+              Listos <span className="numeral font-bold text-success-soft">{listosCount}</span>
             </span>
           </div>
         </div>
@@ -230,7 +228,7 @@ export function BotonEstadoPreparaciones({
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] font-mono font-medium text-muted-foreground">
+                  <span className="font-mono text-rotulo text-muted-foreground">
                     {grupo.items.length} {grupo.items.length === 1 ? "plato" : "platos"}
                   </span>
                 </div>
@@ -239,7 +237,7 @@ export function BotonEstadoPreparaciones({
                   {grupo.items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-start justify-between gap-3 p-2 rounded-lg bg-[var(--panel-2)] border border-[var(--linea-10)] text-xs"
+                      className="flex items-start justify-between gap-3 p-2 rounded-xl bg-[var(--panel-2)] border border-[var(--linea-10)] text-xs"
                     >
                       <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -252,18 +250,18 @@ export function BotonEstadoPreparaciones({
                         </div>
 
                         {item.modificadores.length > 0 && (
-                          <p className="text-[11px] text-muted-foreground pl-5 italic">
+                          <p className="pl-5 text-xs italic text-muted-foreground">
                             + {item.modificadores.join(", ")}
                           </p>
                         )}
 
                         {item.notes && (
-                          <p className="text-[11px] text-amber-300/90 font-medium pl-5">
+                          <p className="pl-5 text-xs font-medium text-warning-soft">
                             Nota: {item.notes}
                           </p>
                         )}
 
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-5 pt-0.5">
+                        <div className="flex items-center gap-2 pl-5 pt-0.5 text-rotulo text-muted-foreground">
                           <span className="flex items-center gap-1 font-mono">
                             <Clock className="size-3 text-muted-foreground" />
                             {formatTiempoTranscurrido(item.sentToKitchenAt || item.createdAt)}

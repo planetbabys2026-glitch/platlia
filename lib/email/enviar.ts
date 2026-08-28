@@ -32,6 +32,14 @@ export async function enviarCorreo(args: {
   html: string;
   /** Alternativa en texto plano. Sin ella, varios clientes marcan el correo como spam. */
   texto: string;
+  /**
+   * A quién le contesta el botón "Responder".
+   *
+   * Para un aviso del sistema no aplica —nadie le responde a una notificación—,
+   * pero para un mensaje del formulario comercial es todo: sin esto, contestarle
+   * a un interesado obliga a copiar su correo a mano del cuerpo del mensaje.
+   */
+  responderA?: string;
 }): Promise<ResultadoEnvio> {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
     return {
@@ -48,6 +56,7 @@ export async function enviarCorreo(args: {
       subject: args.asunto,
       html: args.html,
       text: args.texto,
+      ...(args.responderA ? { replyTo: args.responderA } : {}),
     });
 
     if (error) return { enviado: false, motivo: error.message };

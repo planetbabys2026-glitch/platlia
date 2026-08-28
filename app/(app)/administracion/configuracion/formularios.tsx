@@ -26,9 +26,9 @@ import { cotizarTodas, type ListaDePrecios } from "@/lib/billing/precios";
 import { AvisoPromocion } from "@/features/facturacion/components/aviso-promocion";
 import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
-import { acentoSirveComoTexto } from "@/lib/contraste";
+import { acentoSirveComoTexto, textoSobre } from "@/lib/contraste";
 import { cn } from "@/lib/utils";
-import { BarraGuardar, useSucio } from "./guardar";
+import { BarraGuardar, useSucio, useSucioPorValor } from "./guardar";
 import type { BordesMenuQr, CartaMenuQr, FuenteMenuQr } from "@/features/negocio/extra-settings";
 
 /** Con qué letra se dibuja el título dentro del simulador. */
@@ -180,8 +180,8 @@ export type DatosNegocio = {
 };
 
 export function FormularioDatos({ negocio }: { negocio: DatosNegocio }) {
-  const [estado, accion] = useActionState(guardarDatosNegocio, ESTADO_INICIAL);
-  const { sucio, marcar } = useSucio(estado.ok);
+  const [estado, accion, pendiente] = useActionState(guardarDatosNegocio, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok, pendiente);
 
   return (
     <form action={accion} onChange={marcar} onInput={marcar} className="space-y-4">
@@ -231,8 +231,8 @@ function comoHora(minutos: number): string {
 }
 
 export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
-  const [estado, accion] = useActionState(guardarOperacion, ESTADO_INICIAL);
-  const { sucio, marcar } = useSucio(estado.ok);
+  const [estado, accion, pendiente] = useActionState(guardarOperacion, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok, pendiente);
 
   return (
     <form action={accion} onChange={marcar} onInput={marcar} className="space-y-5">
@@ -410,8 +410,8 @@ export function FormularioModulos({
   recipesEnabled: boolean;
   permitirVentaSinStock: boolean;
 }) {
-  const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
-  const { sucio, marcar } = useSucio(estado.ok);
+  const [estado, accion, pendiente] = useActionState(guardarModulos, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok, pendiente);
   const [invChecked, setInvChecked] = useState(inventoryEnabled);
   const [delivChecked, setDelivChecked] = useState(deliveryEnabled);
 
@@ -535,8 +535,8 @@ export type TurneroSettingsProps = {
 };
 
 export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps }) {
-  const [estado, accion] = useActionState(guardarTurneroSettings, ESTADO_INICIAL);
-  const { sucio, marcar } = useSucio(estado.ok);
+  const [estado, accion, pendiente] = useActionState(guardarTurneroSettings, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok, pendiente);
   const [modo, setModo] = useState(settings.turneroMediaMode);
   const [images, setImages] = useState(settings.turneroImages ?? "");
   const [interval, setIntervalVal] = useState(settings.turneroImageIntervalSeconds ?? 10);
@@ -1166,7 +1166,7 @@ const SUBTITLE_PRESETS = [
 ];
 
 export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }) {
-  const [estado, accion] = useActionState(guardarQrMenuSettings, ESTADO_INICIAL);
+  const [estado, accion, pendiente] = useActionState(guardarQrMenuSettings, ESTADO_INICIAL);
   const [habilitado, setHabilitado] = useState(settings.qrMenuEnabled);
   const [tabActiva, setTabActiva] = useState<"tema" | "textos" | "qrs">("tema");
 
@@ -1208,8 +1208,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
     headerTitle, headerSubtitle, accent, estimatedPrepTimeText,
     fuente, carta, bordesQr,
   });
-  const [instantaneaInicial] = useState(instantanea);
-  const sucio = instantanea !== instantaneaInicial && !estado.ok;
+  const sucio = useSucioPorValor(instantanea, estado.ok, pendiente);
   // Los grupos de estilo ya no necesitan avisar: el cambio de estado se ve solo.
   const marcar = () => {};
 
@@ -2184,8 +2183,16 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
           {/* Marco del Teléfono */}
           <div className="rounded-[2.5rem] border-4 border-[#2D2A26] bg-[#12100E] p-3 shadow-2xl overflow-hidden max-w-xs mx-auto">
             <div
-              className="rounded-[2rem] overflow-hidden text-[var(--papel)] min-h-[520px] flex flex-col relative text-xs shadow-inner transition-all duration-300"
-              style={previewBackgroundStyle}
+              className="rounded-[2rem] overflow-hidden min-h-[520px] flex flex-col relative text-xs shadow-inner transition-all duration-300"
+              style={{
+                ...previewBackgroundStyle,
+                // El acento del negocio y el texto que contrasta contra él, para
+                // que el preview reaccione a los dos ajustes que más se ven.
+                ["--sim-acento" as string]: accent,
+                ["--sim-sobre-acento" as string]: textoSobre(accent),
+                ["--sim-texto" as string]: textoSobre(bgMode === "SOLID" ? bgColor : "#171512"),
+                color: "var(--sim-texto)",
+              } as React.CSSProperties}
             >
               {/* Notch y Bocina */}
               <div className="w-24 h-4 bg-[#171512] mx-auto rounded-b-xl mb-2 flex items-center justify-center shadow-md">
@@ -2204,14 +2211,14 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   <div className="min-w-0 flex-1">
                     <h4
                       className={cn(
-                        "text-base font-black leading-[0.95] text-[var(--papel)] truncate",
+                        "text-base font-black leading-[0.95] text-[color:var(--sim-texto)] truncate",
                         TRATAMIENTO_PREVIEW[fuente],
                       )}
                       style={{ fontFamily: FAMILIA_PREVIEW[fuente] }}
                     >
                       {headerTitle || "Menú Digital"}
                     </h4>
-                    <p className="mt-0.5 text-rotulo leading-tight text-[var(--linea)] truncate">
+                    <p className="mt-0.5 text-rotulo leading-tight text-[color:var(--sim-texto)]/70 truncate">
                       {headerSubtitle || "Pide directo desde tu celular"}
                     </p>
                   </div>
@@ -2228,8 +2235,8 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   ) : null}
                 </div>
 
-                <p className="flex flex-wrap items-baseline gap-x-1.5 font-mono text-rotulo uppercase tracking-[0.14em] text-[var(--linea)]">
-                  <span className="text-[var(--brasa)]">
+                <p className="flex flex-wrap items-baseline gap-x-1.5 font-mono text-rotulo uppercase tracking-[0.14em] text-[color:var(--sim-texto)]/70">
+                  <span className="text-[color:var(--sim-acento)]">
                     {previewModo === "mesa" ? "Mesa 04" : "Domicilio"}
                   </span>
                   <span aria-hidden>·</span>
@@ -2254,7 +2261,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
               {/* Contenido Simulado de la Carta */}
               <div className="p-3 flex-1 space-y-2.5 bg-black/20 overflow-y-auto">
                 {/* Buscador ficticio */}
-                <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-rotulo text-[var(--linea)] border border-white/10">
+                <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-rotulo text-[color:var(--sim-texto)]/70 border border-white/10">
                   <Search aria-hidden className="mr-1.5 inline size-3" />
                   Buscar plato, bebida, postre…
                 </div>
@@ -2271,11 +2278,11 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   ].map((c) => (
                     <div
                       key={c.nombre}
-                      className="flex items-center gap-2 font-mono text-rotulo uppercase text-[var(--linea)]"
+                      className="flex items-center gap-2 font-mono text-rotulo uppercase text-[color:var(--sim-texto)]/70"
                     >
                       <span aria-hidden>›</span>
                       <span className="shrink-0">
-                        {c.nombre} · <span className="numeral font-bold text-[var(--papel)]">{c.n}</span>
+                        {c.nombre} · <span className="numeral font-bold text-[color:var(--sim-texto)]">{c.n}</span>
                       </span>
                       <span aria-hidden className="h-px flex-1 border-t border-dashed border-[var(--linea-30)]" />
                     </div>
@@ -2306,10 +2313,10 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                       className="rounded-xl border border-white/10 bg-black/40 p-2.5 space-y-1 backdrop-blur-sm"
                     >
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-xs text-[var(--papel)]">{plato.nombre}</span>
-                        <span className="font-mono font-bold text-xs text-[var(--brasa)]">{plato.precio}</span>
+                        <span className="font-bold text-xs text-[color:var(--sim-texto)]">{plato.nombre}</span>
+                        <span className="font-mono font-bold text-xs text-[color:var(--sim-acento)]">{plato.precio}</span>
                       </div>
-                      <p className="text-rotulo text-[var(--linea)] leading-tight">{plato.desc}</p>
+                      <p className="text-rotulo text-[color:var(--sim-texto)]/70 leading-tight">{plato.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -2317,7 +2324,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
               {/* Barra Flotante de Pedido en Celular */}
               <div className="p-2.5 bg-[#171512]/95 border-t border-white/10">
-                <div className="w-full bg-[var(--brasa)] text-[var(--tinta)] py-2 px-3 rounded-xl font-bold font-mono text-xs flex items-center justify-between shadow-lg">
+                <div className="w-full bg-[var(--sim-acento)] text-[color:var(--sim-sobre-acento)] py-2 px-3 rounded-xl font-bold font-mono text-xs flex items-center justify-between shadow-lg">
                   <span>🛒 Ver Pedido (2)</span>
                   <span>$42.000 COP</span>
                 </div>
@@ -2331,7 +2338,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
       {/* ─── Modal de Impresión de Tarjeta QR ─── */}
       {tarjetaImprimir && (
         <Dialog open={!!tarjetaImprimir} onOpenChange={(open) => !open && setTarjetaImprimir(null)}>
-          <DialogContent className="max-w-md p-6 text-center space-y-4 max-h-[90vh] overflow-y-auto bg-[var(--panel-bg)] text-[var(--papel)] border border-[var(--linea-30)]">
+          <DialogContent className="max-w-md p-6 text-center space-y-4 max-h-[90vh] overflow-y-auto bg-[var(--panel-bg)] text-[color:var(--sim-texto)] border border-[var(--linea-30)]">
             <DialogHeader className="no-print">
               <DialogTitle className="text-center font-display font-black text-xl uppercase tracking-tight">
                 Tarjeta QR Imprimible
@@ -2402,7 +2409,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
               </Button>
               <Button
                 onClick={() => ejecutarImpresion(tarjetaImprimir)}
-                className="bg-[var(--brasa)] text-[var(--tinta)] font-bold text-xs gap-1.5 shadow-md hover:bg-[var(--brasa-hover)]"
+                className="bg-[var(--sim-acento)] text-[color:var(--sim-sobre-acento)] font-bold text-xs gap-1.5 shadow-md hover:bg-[var(--brasa-hover)]"
               >
                 <><Printer aria-hidden className="mr-1.5 inline size-4 align-[-3px]" />Imprimir</>
               </Button>

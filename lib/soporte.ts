@@ -10,10 +10,20 @@
  */
 
 /** En formato internacional sin signos, como lo pide `wa.me`. */
-export const WHATSAPP_SOPORTE = "573105742111";
+export const WHATSAPP_SOPORTE = "573239249986";
 
 /** Para mostrar. */
-export const WHATSAPP_SOPORTE_VISIBLE = "+57 310 574 2111";
+export const WHATSAPP_SOPORTE_VISIBLE = "+57 323 924 9986";
+
+/**
+ * El correo de contacto y soporte.
+ *
+ * Vive acá por lo mismo que el teléfono: estaba escrito a mano en la portada y
+ * en el pie, así que cambiarlo era acordarse de dos lugares. No es el de habeas
+ * data —`protecciondatos@platlia.com`—, que es una dirección legal aparte y no
+ * se toca desde acá.
+ */
+export const CORREO_SOPORTE = "contacto@platlia.com";
 
 /**
  * Un enlace de WhatsApp con el mensaje ya escrito.

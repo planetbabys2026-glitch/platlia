@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -98,15 +98,23 @@ export function BarraGuardar({
  * mantener una copia del estado de cada uno sería siete oportunidades de que la
  * copia y el campo se separen.
  *
- * Se limpia solo cuando el servidor confirma. No al enviar: si la acción falla,
- * lo escrito sigue sin guardarse y la barra tiene que seguir diciéndolo.
+ * **Se limpia cuando TERMINA un envío exitoso, no cuando `estado.ok` es true.**
+ * Ese booleano se queda pegado: después del primer guardado vale `true` para
+ * siempre, así que un `useEffect` con `[estadoOk]` no se vuelve a disparar nunca
+ * y del segundo guardado en adelante la barra seguía diciendo "sin guardar" con
+ * todo ya guardado. La transición de `pending` sí ocurre en cada envío.
+ *
+ * No se limpia al enviar sino al terminar: si la acción falla, lo escrito sigue
+ * sin guardarse y la barra tiene que seguir diciéndolo.
  */
-export function useSucio(estadoOk: boolean) {
+export function useSucio(estadoOk: boolean, pendiente: boolean) {
   const [sucio, setSucio] = useState(false);
+  const enviando = useRef(false);
 
   useEffect(() => {
-    if (estadoOk) setSucio(false);
-  }, [estadoOk]);
+    if (enviando.current && !pendiente && estadoOk) setSucio(false);
+    enviando.current = pendiente;
+  }, [pendiente, estadoOk]);
 
   return {
     sucio,
@@ -114,4 +122,33 @@ export function useSucio(estadoOk: boolean) {
      *  de React no salta en un `<input type="range">` mientras se arrastra. */
     marcar: () => setSucio(true),
   };
+}
+
+/**
+ * Lo mismo, para un formulario cuyo estado vive en React y no en los campos.
+ *
+ * Devuelve si lo que hay en pantalla difiere de lo último GUARDADO, y mueve esa
+ * referencia en cada envío exitoso. Comparar contra la instantánea de apertura
+ * —que es lo que hacía— dejaba el botón apagado para siempre después del primer
+ * guardado: había que recargar la página para poder volver a guardar.
+ */
+export function useSucioPorValor(instantanea: string, estadoOk: boolean, pendiente: boolean) {
+  const [guardada, setGuardada] = useState(instantanea);
+  // Lo que se mandó al servidor, capturado al arrancar el envío. No se lee el
+  // valor de pantalla al terminar: si alguien sigue tocando mientras guarda, ese
+  // cambio nuevo no viajó y no puede darse por guardado.
+  const enviada = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (pendiente) {
+      enviada.current = instantanea;
+      return;
+    }
+    if (enviada.current !== null && estadoOk) {
+      setGuardada(enviada.current);
+    }
+    enviada.current = null;
+  }, [pendiente, estadoOk, instantanea]);
+
+  return instantanea !== guardada;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { CashMovementType } from "@/generated/prisma/enums";
 import { abrirCaja, cerrarCaja, registrarMovimiento } from "@/features/caja/actions";
@@ -38,21 +38,49 @@ function ErrorDeAccion({ estado }: { estado: { ok: boolean; error?: string } }) 
 
 export function AbrirCaja() {
   const [estado, accion] = useActionState(abrirCaja, ESTADO_INICIAL);
+  const [base, setBase] = useState("");
+
+  const baseCop = Number(base.replace(/\D/g, "")) || 0;
 
   return (
     <form action={accion} className="space-y-4">
       <ErrorDeAccion estado={estado} />
       <div className="space-y-1.5">
         <Label htmlFor="base">Base del turno</Label>
-        <Input
-          id="base"
-          name="openingFloatCop"
-          inputMode="numeric"
-          defaultValue={0}
-          required
-        />
-        <p className="text-muted-foreground text-xs">
-          Lo que hay en el cajón para dar vuelto al empezar.
+        {/* La base es PLATA y no se veía como plata: un `0` pelado en un campo de
+            texto. El peso adentro del campo y la cifra en la letra de los números
+            —la misma con la que se lee cualquier importe del producto— es lo que
+            hace que quien la teclea sepa de qué está hablando. */}
+        <div className="relative">
+          <span
+            aria-hidden
+            className="numeral pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-foreground"
+          >
+            $
+          </span>
+          <Input
+            id="base"
+            name="openingFloatCop"
+            inputMode="numeric"
+            value={base}
+            onChange={(e) => setBase(e.target.value.replace(/\D/g, ""))}
+            placeholder="0"
+            className="numeral pl-7 text-base"
+            required
+          />
+        </div>
+        {/* Se repite formateado: quien escribe "50000" tiene que poder confirmar
+            de un vistazo que puso cincuenta mil y no cinco mil, que es el error
+            que después aparece como diferencia en el arqueo. */}
+        <p className="text-xs text-muted-foreground">
+          {baseCop > 0 ? (
+            <>
+              Abrís con <span className="numeral font-bold text-foreground">{formatCop(baseCop)}</span>{" "}
+              en el cajón para dar vuelto.
+            </>
+          ) : (
+            "Lo que hay en el cajón para dar vuelto al empezar."
+          )}
         </p>
       </div>
       <Enviar className="w-full">Abrir caja</Enviar>

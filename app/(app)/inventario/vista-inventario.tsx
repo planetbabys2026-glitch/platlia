@@ -138,6 +138,18 @@ export type ProductoTerminadoItem = {
   category: { id: string; name: string };
 };
 
+/**
+ * El botón de acción de la barra de cada pestaña.
+ *
+ * Estaba copiado con las mismas doce clases en cinco lugares. El `h-7 sm:h-8`
+ * escribía la altura al revés —lo chico primero, 28px justo en el teléfono—, que
+ * es el error que el manual nombra; en la práctica lo tapaba la guarda de 44px de
+ * `@layer base`, así que era a la vez código muerto y una pista falsa para el que
+ * viniera a copiarlo.
+ */
+const BOTON_BARRA =
+  "h-9 gap-1.5 rounded-xl bg-brand px-3 text-xs font-medium text-brand-foreground shadow-xs hover:bg-brand/90";
+
 export function VistaInventario({
   summary,
   suppliers,
@@ -315,10 +327,10 @@ export function VistaInventario({
             )}
 
             {tabActiva === "recetas" && (
-              <Button asChild size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
-                <Link href="/administracion/menu">
-                  <Settings2 className="size-3.5 mr-1" />
-                  <span>Gestionar Menú y Platos</span>
+              <Button asChild size="sm" className={BOTON_BARRA}>
+                <Link href="/administracion/carta">
+                  <Settings2 className="mr-1 size-3.5" />
+                  <span>Ir a la carta</span>
                 </Link>
               </Button>
             )}
@@ -553,7 +565,7 @@ function ModalNuevoInsumo({ open, onOpenChange }: { open: boolean; onOpenChange:
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+        <Button size="sm" className={BOTON_BARRA}>
           <Plus className="size-3.5 mr-1" />
           <span>Cargar Insumo / Stock Inicial</span>
         </Button>
@@ -696,7 +708,7 @@ function ModalNuevoProveedor({ open, onOpenChange }: { open: boolean; onOpenChan
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+        <Button size="sm" className={BOTON_BARRA}>
           <Plus className="size-3.5 mr-1" />
           <span>Nuevo Proveedor</span>
         </Button>
@@ -930,7 +942,7 @@ function ModalNuevaFactura({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+        <Button size="sm" className={BOTON_BARRA}>
           <Plus className="size-3.5 mr-1" />
           <span>Cargar Factura de Compra</span>
         </Button>
@@ -1823,7 +1835,7 @@ function ModalNuevoProductoTerminado({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs shadow-xs font-medium h-7 sm:h-8 gap-1.5 rounded-md px-2.5">
+        <Button size="sm" className={BOTON_BARRA}>
           <Plus className="size-3.5 mr-1" />
           <span>Nueva Bebida / Prod. Terminado</span>
         </Button>

@@ -261,6 +261,7 @@ model Business {
   printRoutes   PrintRoute[]
   printJobs     PrintJob[]
   printAgents   PrintAgent[]
+  tokensIa      TokenIa[]
   auditLogs     AuditLog[]
 
   inventoryItems       InventoryItem[]
@@ -496,6 +497,7 @@ model User {
   orderItemsCreated  OrderItem[]         @relation("OrderItemCreatedBy")
   orderItemsCanceled OrderItem[]         @relation("OrderItemCanceledBy")
   orderItemsStarted  OrderItem[]         @relation("OrderItemStartedBy")
+  tokensIaCreados    TokenIa[]           @relation("TokenIaCreatedBy")
   orderItemsReady    OrderItem[]         @relation("OrderItemReadyBy")
   paymentsReceived   OrderPayment[]      @relation("OrderPaymentReceivedBy")
   cashSessionsOpened CashSession[]       @relation("CashSessionOpenedBy")
@@ -814,6 +816,45 @@ model PrintJob {
 /// impresión de nadie. No hay sesión ni cookie —no es un navegador—, así que es
 /// el mismo patrón que el webhook de MercadoPago: la ruta es pública y se
 /// verifica por su cuenta.
+/**
+ * La llave con la que la IA de un negocio lee SU información.
+ *
+ * Cada fila es una conexión: "el ChatGPT de Ana", "el Claude del celular del
+ * administrador". Del token se guarda **solo el hash**, igual que en
+ * `PrintAgent` y `VerificationToken`: una copia de la base no le regala a nadie
+ * la contabilidad de un local.
+ *
+ * SHA-256 y no argon2, por lo mismo que el agente de impresión: son 32 bytes
+ * aleatorios y no una contraseña que alguien repite en otro lado, y el hash se
+ * verifica en cada pregunta que hace el asistente.
+ *
+ * `ultimoUsoEn` no es adorno: es lo único que le permite al dueño ver que una
+ * conexión que creyó apagada sigue viva, o darse cuenta de que la que configuró
+ * nunca funcionó.
+ *
+ * Revocar BORRA la fila. Un hash revocado que se queda en la tabla es una llave
+ * vieja esperando a que alguien se equivoque en la consulta; quién tuvo acceso y
+ * hasta cuándo queda en `AuditLog`, que es donde se revisa eso.
+ */
+model TokenIa {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Cómo lo llama el dueño, para saber cuál apagar.
+  nombre String
+
+  tokenHash String @unique
+
+  createdById String?
+  createdBy   User?   @relation("TokenIaCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  ultimoUsoEn DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId])
+}
+
 model PrintAgent {
   id         String   @id @default(cuid())
   businessId String

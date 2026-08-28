@@ -15,6 +15,7 @@ import {
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { mergeExtraSettings } from "@/features/negocio/extra-settings";
 import { cuentaDelPropietario } from "@/lib/billing/cuenta";
+import { puedeCrearSede } from "@/lib/billing/sedes";
 import { subirImagen } from "@/lib/images/cloudinary";
 import { assertTimeZone } from "@/lib/time";
 // eslint-disable-next-line no-restricted-imports -- Crear sucursal adicional requiere crear la fila de Business inicial
@@ -335,31 +336,29 @@ export const crearSucursalAdicional = defineAction({
      */
     const cuenta = await cuentaDelPropietario(ctx.user.id);
 
-    const cantActual = cuenta?.sedes ?? 0;
     const maxPermitidas = cuenta?.maxBranches ?? 1;
 
-    // Bloquear creación de sedes adicionales en el plan de prueba gratuita de 7 días
-    if (!cuenta || cuenta.status === SubscriptionStatus.PRUEBA) {
-      throw new ErrorDeUsuario(
-        "El plan de prueba gratuita (7 días) no permite crear sedes adicionales. Adquiere o renueva una licencia de pago para agregar más sucursales a tu empresa.",
-      );
-    }
-
     /**
-     * El cupo se compra antes de crear la sede.
+     * Una sola guarda: el cupo.
      *
-     * La condición anterior era `cantActual >= maxPermitidas && maxPermitidas >= 2`:
-     * con el `maxBranches` de fábrica en 1, la segunda parte era falsa y **la
-     * segunda sede salía gratis**. Ahora se pide cupo siempre, y el cupo lo da un
-     * pago (`comprarSedeAdicional`) o el superadministrador para las cadenas.
+     * Había dos, y la primera —un bloqueo tajante sobre `PRUEBA`— cortaba antes
+     * de mirar la segunda. Con eso, el cupo que el superadministrador le asignaba
+     * a una cadena en evaluación se guardaba y no servía para nada: la cuenta
+     * seguía sin poder crear la segunda sede, y como extender días a mano tampoco
+     * saca de PRUEBA, la única salida era pagar por MercadoPago.
+     *
+     * La prueba nace con cupo 1, así que por su cuenta sigue sin poder crear la
+     * segunda; lo que cambió es que un cupo asignado a mano ahora vale.
+     *
+     * La regla vive en `lib/billing/sedes.ts`, pura y con tests: decide si a
+     * alguien se le cobra o no.
      */
-    if (cantActual >= maxPermitidas) {
-      throw new ErrorDeUsuario(
-        maxPermitidas >= 2
-          ? `Tu plan cubre ${maxPermitidas} sedes. Para sumar otra, escribinos y coordinamos la tarifa de cadena.`
-          : "Todavía no tenés una sede adicional habilitada. Compralá desde Licencia y volvé acá para crearla.",
-      );
-    }
+    const veredicto = puedeCrearSede(
+      cuenta && { status: cuenta.status, sedes: cuenta.sedes, maxBranches: maxPermitidas },
+    );
+    if (!veredicto.permitido) throw new ErrorDeUsuario(veredicto.motivo);
+    // A partir de acá `cuenta` existe: sin ella el veredicto sería negativo.
+    if (!cuenta) throw new ErrorDeUsuario("Tu cuenta no tiene una licencia activa.");
 
     // 3. Crear la nueva sucursal independiente
     const slug = await slugSucursalLibre(input.name);

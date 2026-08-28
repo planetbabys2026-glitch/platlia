@@ -3,6 +3,8 @@ import { contarComandasVivas } from "@/features/cocina/queries";
 import { contarDomiciliosActivos } from "@/features/domicilios/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { requireActiveLicense } from "@/lib/auth/dal";
+import { leCorresponde, type TipoAviso } from "@/lib/avisos";
+import { tienePermisoSeccion, type SeccionPermiso } from "@/lib/auth/permisos-roles";
 import { createRedisSubscriber } from "@/lib/redis";
 import { currentBusinessDate } from "@/lib/time";
 
@@ -43,6 +45,18 @@ export async function GET(req: Request) {
     const ctx = await requireActiveLicense();
     const businessId = ctx.business.id;
     const settings = await getSettings(businessId);
+
+    /**
+     * Los permisos se leen UNA vez, al conectar.
+     *
+     * Alcanza: esto decide qué avisos se muestran, no qué pantallas se abren
+     * —de eso se encarga el DAL en cada `page.tsx`—, y un cambio de permisos
+     * llega en la próxima reconexión. Releerlos en cada mensaje sería una
+     * consulta por cada comanda de la noche y por cada pantalla conectada.
+     */
+    const rol = ctx.role;
+    const puedeVer = (seccion: SeccionPermiso) =>
+      tienePermisoSeccion(rol, seccion, settings.rolePermissions);
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -104,7 +118,14 @@ export async function GET(req: Request) {
           subscriber.on("message", (canal, mensaje) => {
             if (canal === canalAvisos) {
               try {
-                enviar({ tipo: "aviso", aviso: JSON.parse(mensaje) });
+                const aviso = JSON.parse(mensaje) as { tipo?: TipoAviso };
+                // Solo a quien puede atenderlo. Antes iba a todo el que estuviera
+                // conectado al negocio, así que el mesero recibía la comanda que
+                // él mismo acababa de mandar y el botón "Ver" lo llevaba a una
+                // pantalla que su rol no tiene.
+                if (aviso?.tipo && leCorresponde(aviso.tipo, puedeVer)) {
+                  enviar({ tipo: "aviso", aviso });
+                }
               } catch {
                 // Mensaje ilegible: el recuento de abajo va igual.
               }

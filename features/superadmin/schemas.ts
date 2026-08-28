@@ -44,6 +44,16 @@ export const suspenderSchema = sobreEmpresa.extend({
 
 export const extenderSchema = sobreEmpresa.extend({
   dias: z.preprocess((v) => Number(v), z.number().int().min(1).max(365)),
+  /**
+   * Sacar la cuenta de la prueba sin cobrarle.
+   *
+   * Extender días no cambia el estado —a propósito: alargar una prueba es
+   * alargar una prueba—, así que una cadena en evaluación quedaba encerrada en
+   * PRUEBA y la única salida era pagar por MercadoPago. Esto es lo que le
+   * permite a soporte convertirla a mano, y por eso pide motivo como todo lo
+   * que se hace sobre un cliente.
+   */
+  activar: z.preprocess((v) => v === "true" || v === true, z.boolean()).default(false),
   motivo,
 });
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import {
   getCuentas,
   getResumenPlataforma,
@@ -37,12 +38,10 @@ export default async function SuperAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-3xl">Consola de Cuentas</h1>
-        <p className="text-muted-foreground text-sm">
-          Gestión inteligente de clientes, licencias y estado operacional de la plataforma.
-        </p>
-      </div>
+      <EncabezadoPantalla
+        titulo="Consola de Cuentas"
+        descripcion="Gestión inteligente de clientes, licencias y estado operacional de la plataforma."
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Indicador
@@ -62,7 +61,7 @@ export default async function SuperAdminPage() {
       {webhooks.length > 0 && (
         <Card className="border-destructive">
           <CardContent className="space-y-3">
-            <h2 className="font-medium text-destructive flex items-center gap-2">
+            <h2 className="rotulo-seccion flex items-center gap-2 text-destructive-soft">
               <span>⚠️ Avisos de MercadoPago que fallaron</span>
             </h2>
             <p className="text-muted-foreground text-xs">

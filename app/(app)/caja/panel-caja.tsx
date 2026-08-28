@@ -142,23 +142,32 @@ export function PanelCaja({
           {!caja ? (
             /* Sin turno abierto */
             <div className="mx-auto max-w-md space-y-6">
-              <div className="space-y-1">
-                <h2 className="rotulo-seccion">Apertura del turno</h2>
-                <p className="text-muted-foreground text-xs">
-                  No hay ningún turno de caja abierto. Abrí la caja para poder operar.
-                </p>
-              </div>
+              {/* Abrir va PRIMERO. Con la caja cerrada es lo único que se puede
+                  hacer, y estaba de tercera: detrás de un rótulo que repetía la
+                  misma frase que el propio formulario y del arqueo del turno
+                  anterior, que es consulta y no acción. */}
+              <Card className="shadow-sm border-brand/40">
+                <CardContent className="space-y-4 pt-5">
+                  <div className="space-y-1.5">
+                    <h2 className="rotulo-seccion">Abrir turno</h2>
+                    <p className="text-sm text-muted-foreground">
+                      No hay ningún turno abierto. Hasta que abras la caja no se puede cobrar.
+                    </p>
+                  </div>
+                  <AbrirCaja />
+                </CardContent>
+              </Card>
 
               {ultimoCierre && (
                 <Card className="shadow-sm">
                   <CardContent className="space-y-2 pt-5">
                     <h3 className="rotulo-seccion">Último cierre</h3>
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-sm text-muted-foreground">
                       Turno {ultimoCierre.code} · cerró {ultimoCierre.closedBy?.name ?? "—"}
                       {ultimoCierre.closedAt &&
                         ` · ${formatDateTimeInTimeZone(ultimoCierre.closedAt, timeZone)}`}
                     </p>
-                    <dl className="space-y-1 text-xs">
+                    <dl className="space-y-1 text-sm">
                       <Fila termino="Esperado en efectivo" valor={ultimoCierre.expectedCashCop ?? 0} />
                       <Fila termino="Contado en cajón" valor={ultimoCierre.countedCashCop ?? 0} />
                       <div className="border-border flex items-baseline justify-between border-t pt-2">
@@ -180,12 +189,6 @@ export function PanelCaja({
                 </Card>
               )}
 
-              <Card className="shadow-sm border-brand/40">
-                <CardContent className="pt-5">
-                  <h3 className="rotulo-seccion mb-4">Abrir turno</h3>
-                  <AbrirCaja />
-                </CardContent>
-              </Card>
             </div>
           ) : (
             /* Turno abierto */
@@ -196,7 +199,7 @@ export function PanelCaja({
                     <Card className="shadow-sm">
                       <CardContent className="space-y-3 pt-5">
                         <h3 className="rotulo-seccion">Arqueo esperado</h3>
-                        <dl className="space-y-1 text-xs">
+                        <dl className="space-y-1 text-sm">
                           <Fila termino="Base inicial del turno" valor={resumen.openingFloatCop} />
                           <Fila termino="Ventas cobradas en efectivo" valor={resumen.efectivoVentasCop} />
                           <Fila termino="Entradas y ajustes" valor={resumen.ingresosCop} />
