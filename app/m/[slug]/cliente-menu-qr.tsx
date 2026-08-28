@@ -29,10 +29,38 @@ import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { acentoSirveComoTexto, mezclarHacia, textoSobre } from "@/lib/contraste";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { formatCop } from "@/lib/money";
+import type { BordesMenuQr, CartaMenuQr, FuenteMenuQr } from "@/features/negocio/extra-settings";
 import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Isotipo } from "@/components/marca/logo";
+import { TRATAMIENTO_DE_FUENTE, VARIABLE_DE_FUENTE } from "./fuentes";
+
+/**
+ * De qué color es el fondo, para saber si el texto va en tinta o en papel.
+ *
+ * El degradado se juzga por su **primer** color: es el que queda arriba, donde
+ * están el nombre y la línea de datos. Antes esta función no existía y el modo
+ * degradado se daba por oscuro siempre, así que un degradado crema dejaba la
+ * cabecera ilegible.
+ *
+ * Con una textura no se puede saber —es una imagen— y se asume oscuro, que es
+ * lo que hace el velo de encima.
+ */
+function fondoEfectivo(settings: {
+  qrMenuBgMode: string;
+  qrMenuBgColor: string;
+  qrMenuBgGradient: string;
+}): string {
+  if (settings.qrMenuBgMode === "SOLID") return settings.qrMenuBgColor || "#171512";
+  if (settings.qrMenuBgMode === "GRADIENT") {
+    const primero = /#[0-9A-Fa-f]{6}/.exec(settings.qrMenuBgGradient || "");
+    return primero ? primero[0] : "#171512";
+  }
+  return "#171512";
+}
 
 type Producto = ProductoConModificadores & {
   id: string;
@@ -97,6 +125,10 @@ type ClienteMenuQrProps = {
     tipSuggestionEnabled: boolean;
     tipSuggestionRateBp: number;
     estimatedPrepTimeText?: string | null;
+    /** Lo que el negocio eligió para su carta. Ver `features/negocio/extra-settings.ts`. */
+    qrMenuFuente?: FuenteMenuQr;
+    qrMenuCarta?: CartaMenuQr;
+    qrMenuBordes?: BordesMenuQr;
   };
   estadoNegocio?: {
     abierto: boolean;
@@ -278,6 +310,12 @@ export function ClienteMenuQr({
 
   const logo = settings.qrMenuLogoUrl || business.logoUrl;
   const titulo = settings.qrMenuHeaderTitle || business.name;
+
+  // Lo que cada negocio eligió para SU carta. Cambian estructura y letra, no
+  // solo color: seis paletas distintas seguían dando la misma pantalla.
+  const bordes = settings.qrMenuBordes ?? "REDONDEADO";
+  const fuenteTitulo = VARIABLE_DE_FUENTE[settings.qrMenuFuente ?? "CONDENSADA"];
+  const tratamientoTitulo = TRATAMIENTO_DE_FUENTE[settings.qrMenuFuente ?? "CONDENSADA"];
   const subtitulo = settings.qrMenuHeaderSubtitle || (esMesa ? `Atención en Mesa ${mesaParam}` : "Menú Digital");
 
   // Estilos de Fondo según configuración del Propietario
@@ -312,17 +350,57 @@ export function ClienteMenuQr({
    */
   const tema = useMemo(() => {
     const acento = settings.qrMenuAccent || "#FF4E1F";
-    const fondo =
-      settings.qrMenuBgMode === "SOLID" ? settings.qrMenuBgColor || "#171512" : "#171512";
+    const fondo = fondoEfectivo(settings);
+
     // Un acento oscuro sirve para rellenar un botón pero desaparece escrito
-    // sobre un fondo oscuro: ahí se aclara antes de usarlo como texto.
+    // sobre un fondo oscuro: ahí se aclara antes de usarlo como texto. Sobre uno
+    // claro pasa al revés, y `mezclarHacia` recibe el destino que corresponda.
+    const claro = textoSobre(fondo) === "#171512";
     const acentoTexto = acentoSirveComoTexto(acento, fondo)
       ? acento
-      : mezclarHacia(acento, "papel", 0.55);
+      : mezclarHacia(acento, claro ? "tinta" : "papel", 0.55);
+
+    /**
+     * **El texto se voltea con el fondo.**
+     *
+     * Los tokens de `globals.css` son papel con alfa, o sea que dan por sentado
+     * un fondo oscuro: sobre una carta color crema, el nombre del restaurante y
+     * todos los precios quedaban invisibles. Acá se calcula cuál de las dos
+     * tintas de la marca contrasta y se derivan las seis variables de esa.
+     *
+     * Las superficies no son el mismo negro con alfa en los dos casos: sobre un
+     * fondo oscuro una tarjeta se levanta oscureciendo, y sobre uno claro se
+     * levanta ACLARANDO. Usar el velo negro en los dos daba tarjetas sucias
+     * sobre el crema, que es lo que hace que un fondo claro se vea barato.
+     */
+    const base = claro ? "var(--tinta)" : "var(--papel)";
+    const superficie = claro ? "#fff" : "#000";
+
     return {
       "--qr-acento": acento,
       "--qr-acento-texto": acentoTexto,
       "--qr-sobre-acento": textoSobre(acento),
+      "--qr-texto": `color-mix(in oklch, ${base} 96%, transparent)`,
+      "--qr-texto-2": `color-mix(in oklch, ${base} ${claro ? 74 : 80}%, transparent)`,
+      "--qr-texto-3": `color-mix(in oklch, ${base} ${claro ? 58 : 64}%, transparent)`,
+      "--qr-superficie": `color-mix(in oklch, ${superficie} ${claro ? 55 : 34}%, transparent)`,
+      "--qr-superficie-2": `color-mix(in oklch, ${superficie} ${claro ? 78 : 55}%, transparent)`,
+      "--qr-borde": `color-mix(in oklch, ${base} ${claro ? 14 : 16}%, transparent)`,
+      // La capa que se pinta encima del fondo: oscurece o aclara según haga falta.
+      "--qr-velo": `color-mix(in oklch, ${superficie} ${claro ? 22 : 30}%, transparent)`,
+      /**
+       * Los tokens de la aplicación, reapuntados a los de esta pantalla.
+       *
+       * `SeccionPlegable` y el selector de propina son componentes compartidos y
+       * escriben con `text-muted-foreground` y `--linea-30`, que están pensados
+       * para el fondo oscuro fijo del producto. Sobre una carta color crema eso
+       * es beige sobre crema: el rótulo de cada categoría desaparecía. Mapearlos
+       * acá los adapta a los tres modos de fondo sin tocar los componentes.
+       */
+      "--muted-foreground": `color-mix(in oklch, ${base} ${claro ? 58 : 64}%, transparent)`,
+      "--foreground": `color-mix(in oklch, ${base} 96%, transparent)`,
+      "--linea-30": `color-mix(in oklch, ${base} 30%, transparent)`,
+      "--linea-16": `color-mix(in oklch, ${base} 16%, transparent)`,
     } as React.CSSProperties;
   }, [settings]);
 
@@ -604,13 +682,14 @@ export function ClienteMenuQr({
                     <Card
                       key={producto.id}
                       className={cn(
-                        "bg-white/5 backdrop-blur-md border-white/10 text-[color:var(--qr-texto)] overflow-hidden transition-all duration-300 hover:border-[var(--qr-acento)]/60 hover:bg-white/[0.08] shadow-md hover:shadow-xl hover:scale-[1.01] rounded-2xl group",
+                        "bg-[color:var(--qr-superficie)] backdrop-blur-md border-[var(--qr-borde)] text-[color:var(--qr-texto)] overflow-hidden transition-all duration-300 hover:border-[var(--qr-acento)]/60 shadow-md hover:shadow-xl group",
+                        bordes === "RECTO" ? "rounded-none" : "rounded-2xl",
                         !sePuedePedir && "opacity-50 grayscale",
                       )}
                     >
                       <CardContent className="p-3.5 flex gap-3.5 items-center">
                         {foto ? (
-                          <div className="relative overflow-hidden rounded-2xl size-24 shrink-0 bg-[color:var(--qr-superficie-2)] border border-white/10 shadow-inner">
+                          <div className={cn("relative overflow-hidden size-24 shrink-0 bg-[color:var(--qr-superficie-2)] border border-[var(--qr-borde)] shadow-inner", bordes === "RECTO" ? "rounded-none" : "rounded-2xl")}>
                             <img
                               src={foto}
                               alt={producto.name}
@@ -717,44 +796,89 @@ export function ClienteMenuQr({
       <div className="mx-auto max-w-md min-h-screen flex flex-col relative pb-40 shadow-2xl border-x border-white/10">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 bg-black/30 backdrop-blur-sm"
+          className="pointer-events-none absolute inset-0 -z-10 backdrop-blur-sm"
+          style={{ background: "var(--qr-velo)" }}
         />
         
         {/* ─────────────────────────────────────────────────────────────
             HEADER / BRANDING DEL RESTAURANTE
             ───────────────────────────────────────────────────────────── */}
-        <header className="p-6 text-center space-y-3 relative border-b border-white/10 bg-gradient-to-b from-black/50 to-transparent">
-          {logo ? (
-            <img
-              src={logo}
-              alt={titulo}
-              className="size-20 mx-auto rounded-full object-cover border-2 border-[var(--qr-acento)]/60 shadow-xl"
-            />
-          ) : (
-            <div className="size-16 mx-auto rounded-full bg-[var(--qr-acento)]/20 border border-[var(--qr-acento)]/40 flex items-center justify-center text-[color:var(--qr-acento-texto)] dark:text-[color:var(--qr-texto)] text-2xl font-black">
-              {business.name.slice(0, 2).toUpperCase()}
-            </div>
-          )}
+        {/* ─── La cabecera es una TIRILLA, no una ficha de directorio ───
+            Lo que había era el esqueleto de cualquier aplicación de delivery:
+            logo redondo centrado, nombre debajo, y una fila de cuatro píldoras
+            iguales. Nada de eso sale del mundo de un restaurante; sale de la
+            tienda de aplicaciones.
 
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-[color:var(--qr-texto)]">{titulo}</h1>
-            <p className="text-xs font-medium text-[color:var(--qr-texto-2)] mt-0.5">{subtitulo}</p>
+            Una comanda se encabeza distinto: el nombre del local grande y a la
+            izquierda —el texto centrado es la marca del molde—, el logo al lado y
+            no como medalla, una línea de datos, y la perforación. El borde
+            dentado del pie es el mismo del isotipo, y funciona sobre CUALQUIER
+            fondo porque es una silueta y no un color: que es justo lo que hace
+            falta acá, donde la paleta la elige el negocio y no nosotros. */}
+        <header className="relative space-y-4 px-5 pt-6 pb-5">
+          {/* El nombre a la izquierda y la marca al otro extremo, como un
+              membrete: centrada contra el bloque entero de nombre y bajada, no
+              contra una sola línea. Puesta antes del texto competía con el
+              nombre por el arranque del renglón, que es el lugar donde empieza a
+              leer cualquiera. */}
+          <div className="flex items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <h1
+                className={cn(
+                  "text-[clamp(1.65rem,7vw,2.25rem)] font-black leading-[0.95] text-[color:var(--qr-texto)]",
+                  tratamientoTitulo,
+                )}
+                style={{ fontFamily: fuenteTitulo }}
+              >
+                {titulo}
+              </h1>
+              {subtitulo ? (
+                <p className="mt-1 text-sm text-[color:var(--qr-texto-2)] text-pretty">{subtitulo}</p>
+              ) : null}
+            </div>
+
+            {logo ? (
+              <img
+                src={logo}
+                alt=""
+                className={cn(
+                  "size-14 shrink-0 self-center object-cover border border-[var(--qr-borde)]",
+                  bordes === "RECTO" ? "rounded-none" : "rounded-xl",
+                )}
+              />
+            ) : null}
           </div>
+
+          {/* A DÓNDE VA lo que se pida: es el dato que confirma que se escaneó el
+              código correcto, y estaba perdido como la segunda de cuatro píldoras
+              idénticas. Acá es el renglón que se lee después del nombre. */}
+          <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-rotulo uppercase tracking-[0.16em] text-[color:var(--qr-texto-3)]">
+            <span className="text-[color:var(--qr-acento-texto)]">
+              {esMesa ? `Mesa ${mesaParam}` : "Domicilio"}
+            </span>
+            <span aria-hidden>·</span>
+            <span>{settings.estimatedPrepTimeText || "20-30 min"}</span>
+            {estadoNegocio?.abierto ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>Abierto</span>
+              </>
+            ) : null}
+          </p>
 
           {/* Avisos profesionales de Restaurante Cerrado o Domicilios Pausados */}
           {estadoNegocio && !estadoNegocio.abierto && (
             <div
               role="alert"
-              className="mx-auto max-w-sm rounded-xl border border-destructive/50 bg-destructive/20 p-3.5 text-center space-y-1 text-white shadow-lg animate-in fade-in"
+              className="mx-auto max-w-sm rounded-xl border border-destructive/50 bg-destructive/20 p-3.5 text-center space-y-1 text-[color:var(--qr-texto)] shadow-lg animate-in fade-in"
             >
-              <div className="flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-rose-300">
-                <span>🛑</span>
-                <span>Establecimiento Cerrado</span>
+              <div className="flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-destructive-soft">
+                <span>Cerrado ahora</span>
               </div>
-              <p className="text-xs text-white/90 font-semibold leading-snug">
+              <p className="text-sm text-[color:var(--qr-texto)] font-semibold leading-snug">
                 {estadoNegocio.razon || "En este momento no estamos recibiendo pedidos."}
               </p>
-              <p className="text-[11px] text-white/70 font-mono">
+              <p className="text-rotulo text-[color:var(--qr-texto-3)] font-mono">
                 Horario de atención: {estadoNegocio.horaApertura} - {estadoNegocio.horaCierre}
               </p>
             </div>
@@ -763,13 +887,13 @@ export function ClienteMenuQr({
           {!esMesa && (settings.deliveryPaused || settings.deliveryEnabled === false) && (
             <div
               role="alert"
-              className="mx-auto max-w-sm rounded-xl border border-amber-500/50 bg-amber-500/15 p-3.5 text-center space-y-1 text-amber-100 shadow-lg animate-in fade-in"
+              className="mx-auto max-w-sm rounded-xl border border-warning/50 bg-warning/15 p-3.5 text-center space-y-1 text-[color:var(--qr-texto)] shadow-lg animate-in fade-in"
             >
-              <div className="flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-amber-400">
+              <div className="flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-warning-soft">
                 <Bike className="size-4" />
                 <span>Domicilios Pausados</span>
               </div>
-              <p className="text-xs text-amber-200/90 font-medium leading-snug">
+              <p className="text-sm text-[color:var(--qr-texto-2)] font-medium leading-snug">
                 Los pedidos a domicilio se encuentran pausados temporalmente por alta demanda en el establecimiento.
               </p>
             </div>
@@ -803,41 +927,39 @@ export function ClienteMenuQr({
             </p>
           )}
 
-          <div className="flex items-center justify-center gap-2 pt-1.5 flex-wrap">
-            {/* Estado del Establecimiento */}
-            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-extrabold px-3 py-1 text-xs gap-1.5 shadow-sm">
-              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Abierto</span>
-            </Badge>
-
-            {esMesa ? (
-              <Badge variant="default" className="bg-[var(--qr-acento)] text-[color:var(--qr-sobre-acento)] font-extrabold px-3.5 py-1 text-xs shadow-md gap-1">
-                <span>🪑</span>
-                <span>Mesa {mesaParam}</span>
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="border-[var(--qr-acento)]/50 bg-black/40 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs gap-1">
-                <span>🛵</span>
-                <span>Domicilio</span>
-              </Badge>
+          <button
+            type="button"
+            onClick={() => setModalConsultaAbierto(true)}
+            className={cn(
+              "inline-flex items-center gap-1.5 border border-[var(--qr-borde)] bg-[color:var(--qr-superficie)] px-3 py-2 text-sm font-semibold text-[color:var(--qr-texto-2)] transition-colors hover:text-[color:var(--qr-texto)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--qr-acento)]",
+              bordes === "RECTO" ? "rounded-none" : "rounded-xl",
             )}
-
-            {/* Chip de Tiempo Estimado de Entrega */}
-            <Badge variant="outline" className="border-white/20 bg-black/50 text-[color:var(--qr-texto)] font-bold px-3 py-1 text-xs gap-1.5 shadow-sm backdrop-blur-md">
-              <Clock className="size-3 text-[color:var(--qr-acento-texto)]" />
-              <span>{settings.estimatedPrepTimeText || "20-30 min"}</span>
-            </Badge>
-
-            <button
-              type="button"
-              onClick={() => setModalConsultaAbierto(true)}
-              className="bg-white/10 hover:bg-white/20 text-[color:var(--qr-texto)] font-bold text-xs px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
-            >
-              <Search className="size-3.5 text-[color:var(--qr-acento-texto)]" />
-              <span>Rastrear Pedido</span>
-            </button>
-          </div>
+          >
+            <Search className="size-4" />
+            Rastrear mi pedido
+          </button>
         </header>
+
+        {/* La perforación: el borde dentado del isotipo, que es lo que separa la
+            cabecera de la carta en una tirilla de verdad. Es una silueta, así que
+            se ve igual de bien sobre el fondo que elija cualquier negocio. */}
+        <div aria-hidden className="relative h-3">
+          <div
+            className="absolute inset-x-0 top-0 h-3"
+            style={{
+              background: "var(--qr-superficie)",
+              maskImage:
+                "radial-gradient(circle at 6px 12px, transparent 5px, black 5.5px)",
+              maskSize: "12px 12px",
+              maskRepeat: "repeat-x",
+              WebkitMaskImage:
+                "radial-gradient(circle at 6px 12px, transparent 5px, black 5.5px)",
+              WebkitMaskSize: "12px 12px",
+              WebkitMaskRepeat: "repeat-x",
+            }}
+          />
+        </div>
 
         {/* ─────────────────────────────────────────────────────────────
             RASTREADOR DE PEDIDO EN TIEMPO REAL (REDIS SSE STREAM)
@@ -881,8 +1003,8 @@ export function ClienteMenuQr({
                     ["EN_PREPARACION", "LISTO", "EN_CAMINO", "ENTREGADO"].includes(
                       pedidoActivoTrack.deliveryStatus,
                     )
-                      ? "bg-orange-500/20 text-orange-300 border-orange-500/50 shadow-sm"
-                      : "bg-white/5 text-[color:var(--qr-texto-3)] border-white/10 opacity-50",
+                      ? "bg-[var(--qr-acento)]/20 text-[color:var(--qr-acento-texto)] border-[var(--qr-acento)]/50 shadow-sm"
+                      : "bg-[color:var(--qr-superficie)] text-[color:var(--qr-texto-3)] border-[var(--qr-borde)] opacity-50",
                   )}
                 >
                   <Utensils className="size-4" />
@@ -895,7 +1017,7 @@ export function ClienteMenuQr({
                     "p-2 rounded-xl border flex flex-col items-center gap-1 transition-all",
                     ["EN_CAMINO", "ENTREGADO"].includes(pedidoActivoTrack.deliveryStatus)
                       ? "bg-info/25 text-info-soft border-info/60 shadow-sm"
-                      : "bg-white/5 text-[color:var(--qr-texto-3)] border-white/10 opacity-50",
+                      : "bg-[color:var(--qr-superficie)] text-[color:var(--qr-texto-3)] border-[var(--qr-borde)] opacity-50",
                   )}
                 >
                   <Bike className="size-4" />
@@ -908,7 +1030,7 @@ export function ClienteMenuQr({
                     "p-2 rounded-xl border flex flex-col items-center gap-1 transition-all",
                     pedidoActivoTrack.deliveryStatus === "ENTREGADO"
                       ? "bg-[var(--qr-acento)]/20 text-success-soft border-[var(--qr-acento)]/50 shadow-sm"
-                      : "bg-white/5 text-[color:var(--qr-texto-3)] border-white/10 opacity-50",
+                      : "bg-[color:var(--qr-superficie)] text-[color:var(--qr-texto-3)] border-[var(--qr-borde)] opacity-50",
                   )}
                 >
                   <CheckCircle2 className="size-4" />
@@ -1051,7 +1173,7 @@ export function ClienteMenuQr({
             {/* ─────────────────────────────────────────────────────────────
                 BARRA DE BÚSQUEDA Y CATEGORÍAS
                 ───────────────────────────────────────────────────────────── */}
-            <div className="p-4 space-y-3 sticky top-0 bg-black/70 backdrop-blur-md z-20 border-b border-white/10">
+            <div className="sticky top-0 z-20 space-y-3 border-b border-[var(--qr-borde)] bg-[color:var(--qr-superficie-2)] p-4 backdrop-blur-md">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 size-4 text-[color:var(--qr-texto-2)]" />
                 <Input
@@ -1362,7 +1484,7 @@ export function ClienteMenuQr({
                         ? "Domicilios cerrados por ahora"
                         : cargando
                           ? "Enviando a la cocina…"
-                          : "🚀 Confirmar y Enviar Pedido"}
+                          : "Confirmar y enviar pedido"}
                     </Button>
                   </div>
                 </div>
@@ -1370,6 +1492,23 @@ export function ClienteMenuQr({
             )}
           </>
         )}
+
+        {/* ─── El pie de la tirilla ───
+            Una tirilla térmica termina con la línea del sistema que la imprimió,
+            y ese es el lugar honesto para la atribución: al final, después del
+            corte, en el sello monoespaciado, sin competir con nada. Va con el
+            isotipo —la misma silueta dentada de la perforación de arriba—, así
+            que la pantalla abre y cierra con el mismo gesto. */}
+        <footer className="mt-10 flex flex-col items-center gap-2.5 px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+          <span aria-hidden className="block h-px w-full max-w-xs border-t border-dashed border-[var(--qr-borde)]" />
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 font-mono text-rotulo uppercase tracking-[0.18em] text-[color:var(--qr-texto-3)] transition-colors hover:text-[color:var(--qr-texto-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--qr-acento)]"
+          >
+            <Isotipo size="sm" className="h-4 w-auto opacity-70" />
+            Diseñado y creado por Platlia
+          </Link>
+        </footer>
       </div>
 
       <SelectorModificadores

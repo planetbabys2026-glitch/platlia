@@ -177,7 +177,7 @@ export function FormularioImpresoras({
                 );
               }}
               className={cn(
-                "rounded-lg px-3 py-2 text-xs font-semibold transition-all",
+                "rounded-xl px-3 py-2 text-xs font-semibold transition-all",
                 destino === op.id
                   ? "bg-brand text-brand-foreground"
                   : "bg-muted/70 text-muted-foreground hover:bg-muted",
@@ -205,7 +205,7 @@ export function FormularioImpresoras({
         </div>
 
         {impresoras.length === 0 && !editando && (
-          <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+          <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
             Todavía no hay ninguna. Sin impresoras, nada se encola: el sistema sigue
             funcionando igual que hasta ahora.
           </p>
@@ -215,7 +215,7 @@ export function FormularioImpresoras({
           {impresoras.map((imp) => (
             <li
               key={imp.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-xs"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-xs"
             >
               <div className="space-y-0.5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -298,7 +298,7 @@ export function FormularioImpresoras({
                   id="imp-rol"
                   name="rol"
                   defaultValue={editando.rol}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs"
+                  className="h-9 w-full rounded-xl border border-input bg-background px-3 text-xs"
                 >
                   <option value="RECIBO">Recibos del cliente</option>
                   <option value="COMANDA">Comandas de cocina</option>
@@ -318,7 +318,7 @@ export function FormularioImpresoras({
                   id="imp-width"
                   name="width"
                   defaultValue={editando.width}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs"
+                  className="h-9 w-full rounded-xl border border-input bg-background px-3 text-xs"
                 >
                   <option value="MM80">80 mm (48 caracteres)</option>
                   <option value="MM55">55 mm (32 caracteres)</option>
@@ -367,7 +367,7 @@ export function FormularioImpresoras({
                 <select
                   value={mapa[estacion] ?? ""}
                   onChange={(e) => setMapa((m) => ({ ...m, [estacion]: e.target.value }))}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-xs"
+                  className="h-9 rounded-xl border border-input bg-background px-3 text-xs"
                 >
                   <option value="">Sin asignar</option>
                   {impresorasDeComanda.map((i) => (
@@ -434,7 +434,7 @@ export function FormularioImpresoras({
                       key={d.so}
                       href={`/api/impresion/descargar?so=${d.so}`}
                       className={cn(
-                        "rounded-lg px-3 py-2 text-xs font-bold transition-all",
+                        "rounded-xl px-3 py-2 text-xs font-bold transition-all",
                         d.so === soDetectado
                           ? "bg-brand text-brand-foreground"
                           : "bg-muted text-muted-foreground hover:text-foreground",
@@ -453,7 +453,7 @@ export function FormularioImpresoras({
           ) : (
             <p
               role="alert"
-              className="rounded-lg border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
+              className="rounded-xl border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
             >
               <span className="font-bold">El programa no está publicado en este servidor.</span>{" "}
               Se compila con <code className="font-mono">pnpm agente:build</code> y viaja con el
@@ -470,7 +470,7 @@ export function FormularioImpresoras({
             return (
               <li
                 key={agente.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-xs"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-xs"
               >
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
@@ -608,7 +608,7 @@ export function FormularioImpresoras({
                           key={d.so}
                           href={`/api/impresion/descargar?so=${d.so}&codigo=${encodeURIComponent(codigoNuevo.codigo)}`}
                           className={cn(
-                            "rounded-lg px-3 py-2 text-xs font-bold transition-all",
+                            "rounded-xl px-3 py-2 text-xs font-bold transition-all",
                             d.so === soDetectado
                               ? "bg-brand text-brand-foreground"
                               : "bg-muted text-muted-foreground hover:text-foreground",
@@ -623,7 +623,7 @@ export function FormularioImpresoras({
                     Si el navegador le cambia el nombre al archivo, el programa va a pedir
                     este código al abrirse. Vence en una hora.
                   </p>
-                  <code className="block rounded-lg bg-[var(--panel-3)] p-2 text-center font-mono text-base font-bold tracking-widest text-foreground">
+                  <code className="block rounded-xl bg-[var(--panel-3)] p-2 text-center font-mono text-base font-bold tracking-widest text-foreground">
                     {codigoNuevo.codigo}
                   </code>
                   <Button
@@ -671,7 +671,7 @@ export function FormularioImpresoras({
               </p>
             </div>
 
-            <pre className="overflow-x-auto rounded-lg bg-[var(--panel-3)] p-3 font-mono text-xs text-foreground">
+            <pre className="overflow-x-auto rounded-xl bg-[var(--panel-3)] p-3 font-mono text-xs text-foreground">
               {manual.archivo}
             </pre>
 
@@ -682,7 +682,7 @@ export function FormularioImpresoras({
               <a
                 download="agente.json"
                 href={`data:application/json;charset=utf-8,${encodeURIComponent(manual.archivo)}`}
-                className="rounded-lg bg-brand px-3 py-2 text-xs font-bold text-brand-foreground"
+                className="rounded-xl bg-brand px-3 py-2 text-xs font-bold text-brand-foreground"
               >
                 Bajar agente.json
               </a>
@@ -701,7 +701,7 @@ export function FormularioImpresoras({
 
             <p
               role="alert"
-              className="rounded-lg border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
+              className="rounded-xl border border-warning/50 bg-warning/10 p-2.5 text-xs text-warning-soft"
             >
               Adentro va la llave de la cola de impresión de este local: no lo mandes por chat ni lo
               dejes en Descargas. <span className="font-bold">Se muestra una sola vez</span> — de
@@ -723,7 +723,7 @@ export function FormularioImpresoras({
         {fallidos.length > 0 && (
           <ul className="space-y-1 pt-1">
             {fallidos.map((f) => (
-              <li key={f.id} className="rounded-lg border border-destructive/30 bg-destructive/5 p-2">
+              <li key={f.id} className="rounded-xl border border-destructive/30 bg-destructive/5 p-2">
                 <span className="font-semibold text-destructive-soft">
                   {f.tipo} · {f.printer.name}
                 </span>

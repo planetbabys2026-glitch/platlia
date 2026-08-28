@@ -16,6 +16,7 @@ import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { preciosVigentes } from "@/lib/billing/lista";
 import { tenantDb } from "@/lib/db/tenant";
 import { env } from "@/lib/env";
+import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { PanelConfiguracion } from "./panel-configuracion";
 
 export const metadata: Metadata = { title: "Configuración" };
@@ -105,12 +106,13 @@ export default async function ConfiguracionPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="font-display font-black uppercase tracking-tight text-foreground leading-[0.95] text-[clamp(1.875rem,3vw,2.5rem)]">Configuración</h1>
-        <p className="text-muted-foreground text-sm">
-          Todo lo que acá se cambia vale solo para este negocio.
-        </p>
-      </div>
+      {/* El `h1` estaba copiado a mano con su propio `clamp`, así que era la única
+          pantalla del producto sin la guía punteada que cierra el encabezado en
+          todas las demás. */}
+      <EncabezadoPantalla
+        titulo="Configuración"
+        descripcion="Todo lo que acá se cambia vale solo para este negocio."
+      />
 
       <PanelConfiguracion
         negocio={negocio}
@@ -122,6 +124,9 @@ export default async function ConfiguracionPage() {
           scheduleStatus: extra.scheduleStatus,
           deliveryPaused: extra.deliveryPaused,
           estimatedPrepTimeText: extra.estimatedPrepTimeText,
+          qrMenuFuente: extra.qrMenuFuente,
+          qrMenuCarta: extra.qrMenuCarta,
+          qrMenuBordes: extra.qrMenuBordes,
           faltantesParaFacturar: faltantesParaFacturar(settings, plataformaFacturaConfigurada()),
         }}
         facturacion={facturacion}

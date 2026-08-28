@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fraunces, spaceMono } from "./fuentes";
 import { notFound } from "next/navigation";
 import { getSettings } from "@/features/negocio/queries";
 import { evaluarEstadoNegocio } from "@/features/negocio/horarios";
@@ -179,6 +180,10 @@ export default async function MenuQrPublicPage({
   });
 
   return (
+    /* Las variables de las dos letras elegibles que no viven en la aplicación.
+       Se declaran en esta ruta y no en el layout raíz: son un ajuste del
+       escaparate de cada local y no tienen por qué pesar en el turno de trabajo. */
+    <div className={`${fraunces.variable} ${spaceMono.variable} contents`}>
     <ClienteMenuQr
       business={business}
       settings={{
@@ -201,6 +206,9 @@ export default async function MenuQrPublicPage({
         tipSuggestionEnabled: settings.tipSuggestionEnabled,
         tipSuggestionRateBp: settings.tipSuggestionRateBp,
         estimatedPrepTimeText: extra.estimatedPrepTimeText,
+        qrMenuFuente: extra.qrMenuFuente,
+        qrMenuCarta: extra.qrMenuCarta,
+        qrMenuBordes: extra.qrMenuBordes,
       }}
       estadoNegocio={estadoNegocio}
       categorias={categorias}
@@ -213,5 +221,6 @@ export default async function MenuQrPublicPage({
       mesaInvalida={Boolean(tableId) && !mesaResuelta}
       tipoParam={tipo}
     />
+    </div>
   );
 }

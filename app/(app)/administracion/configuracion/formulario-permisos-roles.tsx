@@ -1,13 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
 import {
   BarChart3,
   Bike,
   BookOpen,
   Boxes,
   Calculator,
+  Check,
   CheckCircle2,
   ChefHat,
   CreditCard,
@@ -23,6 +23,7 @@ import { guardarPermisosRoles } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BarraGuardar } from "./guardar";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import {
   INFO_ROLES,
@@ -48,15 +49,6 @@ const ICONOS_SECCION: Record<SeccionPermiso, React.ElementType> = {
   equipo: Users,
   configuracion: Settings,
 };
-
-function Enviar() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending} className="font-bold">
-      {pending ? "Guardando permisos…" : "Guardar permisos de roles"}
-    </Button>
-  );
-}
 
 export function FormularioPermisosRoles({
   rolePermissionsRaw,
@@ -92,6 +84,9 @@ export function FormularioPermisosRoles({
     return resultado;
   });
 
+  // El mismo objeto con el que arrancó la pantalla, serializado una sola vez.
+  const [jsonInicial] = useState(() => JSON.stringify(permisosPorRol));
+
   const togglePermiso = (seccion: SeccionPermiso) => {
     setPermisosPorRol((prev) => ({
       ...prev,
@@ -125,12 +120,30 @@ export function FormularioPermisosRoles({
   // Preparar JSON serializado para enviar
   const jsonFinal = JSON.stringify(permisosPorRol);
 
+  /**
+   * Se compara contra lo que había guardado al abrir, no contra un booleano que
+   * se prende al primer clic: quien apaga una casilla y la vuelve a prender no
+   * dejó ningún cambio, y la barra no tiene por qué decirle que sí. Un "sin
+   * guardar" que aparece cuando no hay nada que guardar se vuelve ruido y deja
+   * de leerse.
+   */
+  const sucio = jsonFinal !== jsonInicial && !estado.ok;
+
   const categorias = ["Operación", "Gestión", "Administración"] as const;
   const permisosActuales = permisosPorRol[rolActivo];
   const defaultsRol = PERMISOS_POR_DEFECTO[rolActivo];
 
   return (
-    <div className="space-y-6">
+    /**
+     * El formulario envuelve la pantalla entera y no solo el pie.
+     *
+     * Las casillas SON el formulario —aunque su estado lo lleve React y viaje en
+     * un input oculto—, y además es lo que le da recorrido a la barra pegajosa:
+     * encerrada en un pie de tres renglones al final de la página, `sticky` no
+     * tiene de dónde despegarse y la barra no aparecía nunca. Los cuatro botones
+     * de arriba son `type="button"`, así que ninguno envía sin querer.
+     */
+    <form action={accion} className="space-y-6">
       <div className="space-y-1">
         <h2 className="text-base font-bold text-foreground flex items-center gap-2">
           <ShieldCheck className="size-5 text-brand" />
@@ -252,11 +265,30 @@ export function FormularioPermisosRoles({
                   const esPersonalizado = estaActivo !== esDefault;
 
                   return (
-                    <div
+                    /**
+                     * Un `<button role="switch">`, no un `<div onClick>`.
+                     *
+                     * Era un div con `onClick` y adentro un `<input type=checkbox>`
+                     * con `onChange={() => {}}`: la casilla no hacía nada y la fila
+                     * no se podía tocar con el teclado —en la única pantalla que
+                     * decide quién entra a dónde—. Encima la casilla real se
+                     * desincronizaba al guardar: React resetea los campos del
+                     * formulario al terminar la acción, así que la fila quedaba
+                     * pintada como activa con el cuadrito en apagado.
+                     *
+                     * El cuadro de abajo es puro dibujo. El estado lo dice
+                     * `aria-checked`, que es lo que además lo hace legible para un
+                     * lector de pantalla.
+                     */
+                    <button
                       key={seccion.id}
+                      type="button"
+                      role="switch"
+                      aria-checked={estaActivo}
                       onClick={() => togglePermiso(seccion.id)}
                       className={cn(
-                        "group flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer select-none",
+                        "group flex w-full items-start gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer select-none",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tinta)]",
                         estaActivo
                           ? "bg-card border-brand/40 shadow-xs hover:border-brand"
                           : "bg-[var(--panel-2)]/60 border-border/60 opacity-65 hover:opacity-100 hover:border-border"
@@ -287,20 +319,24 @@ export function FormularioPermisosRoles({
                             </Badge>
                           )}
                         </div>
-                        <p className="text-rotulo text-muted-foreground line-clamp-2 leading-relaxed">
+                        <span className="block text-rotulo text-muted-foreground line-clamp-2 leading-relaxed">
                           {seccion.descripcion}
-                        </p>
+                        </span>
                       </div>
 
-                      <div className="pt-0.5 shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={estaActivo}
-                          onChange={() => {}} // controlado por onClick del contenedor
-                          className="size-4 rounded accent-[var(--brasa)] cursor-pointer"
-                        />
-                      </div>
-                    </div>
+                      <span aria-hidden className="pt-0.5 shrink-0">
+                        <span
+                          className={cn(
+                            "flex size-4 items-center justify-center rounded-[4px] border transition-colors",
+                            estaActivo
+                              ? "border-brand bg-brand text-brand-foreground"
+                              : "border-[var(--linea-30)] bg-[var(--input-bg)]",
+                          )}
+                        >
+                          {estaActivo && <Check className="size-3" strokeWidth={3.5} />}
+                        </span>
+                      </span>
+                    </button>
                   );
                 })}
               </div>
@@ -309,32 +345,24 @@ export function FormularioPermisosRoles({
         })}
       </div>
 
-      {/* Formulario de Envío */}
-      <form action={accion} className="space-y-4 pt-3 border-t border-border/80">
-        <input type="hidden" name="rolePermissions" value={jsonFinal} />
+      <input type="hidden" name="rolePermissions" value={jsonFinal} />
 
-        {estado.ok && (
-          <Alert className="border-success/40 bg-success/10 text-success-soft rounded-2xl">
-            <CheckCircle2 className="size-4" />
-            <AlertDescription className="text-xs font-semibold">
-              Permisos de roles guardados correctamente. El menú y las vistas de cada empleado se han actualizado.
-            </AlertDescription>
-          </Alert>
-        )}
+      {estado.ok && !sucio && (
+        <Alert className="rounded-2xl border-success/40 bg-success/10 text-success-soft">
+          <CheckCircle2 className="size-4" />
+          <AlertDescription className="text-sm font-semibold">
+            Permisos guardados. El menú y las vistas de cada empleado ya cambiaron.
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {!estado.ok && estado.error && (
-          <Alert variant="destructive" role="alert" className="rounded-2xl text-xs">
-            <AlertDescription>{estado.error}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-rotulo text-muted-foreground">
-            Los cambios se aplican de inmediato en la sesión de cada usuario.
-          </p>
-          <Enviar />
-        </div>
-      </form>
-    </div>
+      {/* El texto que había acá decía "los cambios se aplican de inmediato" al
+          lado de un formulario sin guardar: era la tercera confirmación falsa de
+          la pantalla, después del contador del rol y de la insignia
+          "Personalizado". Ahora el estado lo dice la barra, y dice la verdad. */}
+      <BarraGuardar sucio={sucio} estado={estado}>
+        Guardar permisos
+      </BarraGuardar>
+    </form>
   );
 }

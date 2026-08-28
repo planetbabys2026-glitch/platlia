@@ -1263,6 +1263,53 @@ está separada de `estado` porque copiar una estructura con el mutex adentro es 
 que ya no protege nada, y el CSS va **concatenado** y no dentro del `Sprintf`, porque su
 `width: 100%` se lee como un verbo de formato desconocido.
 
+### Configuración: un formulario que parece guardado y no lo está no es un formulario
+
+Las ocho pantallas de Configuración son formularios largos —el del menú QR mide seiscientas
+líneas— con el botón de guardar al final. Se tocaba algo, se veía cambiar, se salía, y no se había
+guardado nada.
+
+**En Permisos de roles era peor**: al marcar una casilla el contador del rol pasaba de 3/12 a 4/12,
+aparecía la insignia "Personalizado" y el pie decía *"los cambios se aplican de inmediato en la
+sesión de cada usuario"*. Tres confirmaciones para algo que no había pasado, en la única pantalla
+del producto que decide quién entra a dónde: alguien le quita Configuración a un cajero, ve la
+casilla apagarse, se va, y el cajero sigue entrando.
+
+`BarraGuardar` (`app/(app)/administracion/configuracion/guardar.tsx`) es la respuesta y **está
+siempre**, no solo cuando hay cambios: el defecto era que el botón quedaba fuera de pantalla, y una
+barra que aparece y desaparece deja el mismo problema la mitad del tiempo. Dice `SIN CAMBIOS` con el
+botón apagado, `SIN GUARDAR · SE PIERDE AL SALIR` en ámbar, o `GUARDADO`. El resultado se pinta ahí
+y no arriba del formulario, que es donde estaba: con el botón abajo y la confirmación arriba, uno
+guardaba y no veía nada.
+
+Tres cosas que costaron una vuelta cada una:
+
+1. **`<Card>` de shadcn trae `overflow-hidden`, y eso anula `position: sticky`** en todo
+   descendiente: un ancestro con overflow oculto se vuelve el contenedor de desplazamiento y, como no
+   scrollea, la barra no tiene de dónde despegarse. Las tarjetas de Configuración llevan
+   `overflow-visible`.
+2. **El `<form>` tiene que envolver la pantalla entera, no solo el pie.** Encerrado en tres renglones
+   al final de la página, `sticky` no tiene recorrido y la barra no aparecía nunca.
+3. **El estado sucio de Permisos se compara contra lo guardado**, no contra un booleano que se
+   prende al primer clic: quien apaga una casilla y la vuelve a prender no dejó ningún cambio. Un
+   "sin guardar" que aparece cuando no hay nada que guardar se vuelve ruido y deja de leerse.
+
+**Las filas de permisos son `<button role="switch">`, no `<div onClick>`.** Eran divs con `onClick`
+y adentro un `<input type=checkbox>` con `onChange={() => {}}`: no se podía cambiar **ningún permiso
+con el teclado**, y la casilla real se desincronizaba al guardar —React resetea los campos del
+formulario al terminar la acción, así que la fila quedaba pintada como activa con el cuadrito
+apagado—. El cuadro es puro dibujo y el estado lo dice `aria-checked`.
+
+**Nada de emoji en la interfaz.** Había 42 en estas pantallas —pestañas, botones, títulos— y no
+aparecen en ningún otro módulo del producto: era el ruido más visible. Quedan los de los presets de
+tema, los del simulador del teléfono (que es contenido de muestra) y el de la tarjeta QR impresa, que
+es lo que el comensal lee en el papel.
+
+Y había **quince tratamientos de encabezado** en un solo módulo, ocho de ellos el `font-semibold
+text-lg` de shadcn que este manual manda rechazar. Uno solo, `EncabezadoPanel`, con la bajada en
+`text-sm` —EL cuerpo— y no en `text-xs`, que es el tamaño del dato denso y por el que Configuración
+se leía apretada al lado del resto.
+
 ### El loader es el isotipo imprimiéndose
 
 Uno solo, en `components/marca/loader.tsx`, y es una **comanda saliendo de la impresora**: la hoja
@@ -1298,6 +1345,84 @@ desenfocar, deja adivinar la forma de lo que viene, y es la red si el navegador 
 acento; a 20px es un rectángulo beige. Por eso **no va dentro de los botones** —ahí el texto ya dice
 qué está pasando y alcanza con el spinner de siempre—, y el ciclo de 2400ms tampoco llegaría a
 completarse en una acción de 400ms.
+
+### La carta del comensal es la otra cara de la comanda
+
+`app/m/[slug]` era el esqueleto de cualquier aplicación de delivery: logo redondo centrado, nombre
+debajo, una fila de cuatro píldoras iguales, buscador y rejilla de tarjetas. Nada de eso sale del
+mundo de un restaurante; sale de la tienda de aplicaciones. Y era la **única pantalla que ve un
+cliente de verdad** sin una sola señal de lo que el producto es por dentro.
+
+Ahora se encabeza como una tirilla: el nombre grande y **a la izquierda** —el texto centrado es la
+marca del molde—, el logo al lado y no como medalla, una línea de datos en mono, y la **perforación
+dentada** del isotipo cerrando la cabecera. El pie la cierra con el mismo gesto y ahí va la
+atribución, que es donde una tirilla térmica pone el sistema que la imprimió.
+
+**La perforación es una silueta, no un color, y eso es lo que la hace posible acá**: en esta pantalla
+la paleta la elige el negocio, así que cualquier decisión cromática nuestra sería una imposición. La
+estructura y la letra son el margen que sí tenemos.
+
+Y el metáforo es vernáculo de restaurante, no marca nuestra: toda cocina tiene tirillas, así que un
+borde dentado se lee "restaurante" y no "proveedor". Por eso puede vivir en el escaparate de otro.
+
+**A dónde va el pedido es el titular, no una insignia.** `Mesa 4` es el dato que confirma que se
+escaneó el código correcto y estaba perdido como la segunda de cuatro píldoras idénticas.
+
+### La carta se voltea sola cuando el fondo es claro
+
+Los tokens `--qr-*` de `globals.css` son **papel con alfa**, o sea que daban por sentado un fondo
+oscuro. Los seis temas eran oscuros, así que nadie lo notó: el día que un local elegía un crema —una
+panadería, un brunch, una heladería— el nombre del restaurante y todos los precios quedaban
+invisibles.
+
+Ahora la pantalla calcula con `textoSobre()` cuál de las dos tintas de la marca contrasta contra el
+fondo y **deriva las seis variables de esa**. Tres cosas que no son obvias:
+
+1. **El degradado se juzga por su PRIMER color** (`fondoEfectivo`), que es el que queda arriba, donde
+   están el nombre y la línea de datos. Antes el modo degradado se daba por oscuro siempre.
+2. **Las superficies no son el mismo velo en los dos casos.** Sobre un fondo oscuro una tarjeta se
+   levanta oscureciendo; sobre uno claro se levanta **aclarando**. Usar el velo negro en los dos daba
+   tarjetas sucias sobre el crema, que es lo que hace que un fondo claro se vea barato.
+3. **Los tokens de la APLICACIÓN se reapuntan acá dentro.** `SeccionPlegable` y el selector de propina
+   son compartidos y escriben con `text-muted-foreground` y `--linea-30`, pensados para el fondo
+   oscuro fijo del producto: sobre crema eso es beige sobre crema y el rótulo de cada categoría
+   desaparecía. Mapear `--muted-foreground`, `--foreground`, `--linea-30` y `--linea-16` en el `style`
+   del contenedor los adapta a los tres modos sin tocar los componentes.
+
+Hay tres temas claros de fábrica —Papel & Horno, Menta Fría, Lino Crudo— y cualquier color propio
+también funciona: no hay que configurar nada más, la carta se da cuenta.
+
+### Lo que el negocio puede cambiar de su carta
+
+Había seis temas de color y la pantalla seguía viéndose igual que la de todos, porque **lo que hace
+genérica a una pantalla no es la paleta sino la estructura y la letra**. Se agregaron tres ajustes
+que sí cambian eso, y las cuatro letras son deliberadamente distintas entre sí: si dos opciones se
+parecen, elegir no cambia nada.
+
+| Ajuste | Opciones |
+|---|---|
+| `qrMenuFuente` | Condensada · Limpia · Serif · Máquina |
+| `qrMenuCarta` | Lista · Rejilla |
+| `qrMenuBordes` | Redondeados · Rectos |
+
+Van en `_extra` —el escape dentro del JSON de `rolePermissions`, el mismo de los horarios—, así que
+**no hicieron falta ni migración ni columnas**. Se validan con `z.enum`: estos valores eligen una
+familia tipográfica y unas clases, así que lo que no esté en la lista no puede llegar a una página
+pública.
+
+**Cada opción lleva una pista de para qué local es**, no solo su nombre: "Serif" no le dice nada a
+quien tiene un bar, "Mantel largo, trattoria" sí. Elegir la letra de tu carta no debería exigir saber
+tipografía.
+
+Las dos letras que no viven en la aplicación —Fraunces y Space Mono— se cargan **solo en esta ruta**
+con `next/font`: son el escaparate de un local y no tienen por qué pesar en el turno de trabajo, y al
+descargarse en compilación se sirven desde nuestro dominio (en la calle, con datos flojos, un pedido
+a Google Fonts es un segundo de texto invisible).
+
+**En un formulario con controles propios, el estado sucio se calcula comparando, no escuchando.** El
+de la carta QR mueve casi todo con `<button>` —temas, acentos, modo de fondo— y el `onChange` del
+formulario nunca se entera: atado a ese evento, elegir un tema dejaba el botón de guardar apagado y
+el cambio no se podía guardar. Se compara una instantánea del estado contra la del momento de abrir.
 
 ### El menú QR es la excepción
 

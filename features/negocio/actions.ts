@@ -237,6 +237,9 @@ export const guardarQrMenuSettings = defineAction({
 
     const newRolePermissions = mergeExtraSettings(prevSettings?.rolePermissions, {
       estimatedPrepTimeText: input.estimatedPrepTimeText || "20-30 min",
+      qrMenuFuente: input.qrMenuFuente,
+      qrMenuCarta: input.qrMenuCarta,
+      qrMenuBordes: input.qrMenuBordes,
     });
 
     await db.businessSettings.updateMany({
@@ -256,6 +259,8 @@ export const guardarQrMenuSettings = defineAction({
     });
 
     revalidatePath("/administracion/configuracion");
+    // La carta pública tiene que reflejar el cambio al instante.
+    revalidatePath(`/m/${ctx.business.slug}`);
   },
 });
 

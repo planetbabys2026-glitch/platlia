@@ -133,6 +133,12 @@ export const qrMenuSchema = z.object({
     .regex(/^#[0-9A-Fa-f]{6}$/, "El acento tiene que ser un color en formato #RRGGBB")
     .default("#FF4E1F"),
   estimatedPrepTimeText: textoOpcional(60),
+  // La personalización que cambia estructura y letra, no solo color. Enum y no
+  // texto libre: estos valores eligen una familia tipográfica y unas clases, así
+  // que lo que no esté en la lista no puede llegar a la pantalla pública.
+  qrMenuFuente: z.enum(["CONDENSADA", "LIMPIA", "SERIF", "MAQUINA"]).default("CONDENSADA"),
+  qrMenuCarta: z.enum(["LISTA", "REJILLA"]).default("LISTA"),
+  qrMenuBordes: z.enum(["REDONDEADO", "RECTO"]).default("REDONDEADO"),
 });
 
 export const crearSucursalSchema = z.object({

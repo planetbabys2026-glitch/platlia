@@ -1,3 +1,21 @@
+/**
+ * La letra de los títulos del menú QR.
+ *
+ * Hasta acá un negocio solo podía cambiar el COLOR de su carta —seis temas— y
+ * seguía viéndose igual que la de todos, porque lo que hace genérica a una
+ * pantalla no es la paleta sino la estructura y la letra. Estas cuatro son
+ * deliberadamente distintas entre sí: si dos opciones se parecen, elegir no
+ * cambia nada.
+ */
+export type FuenteMenuQr = "CONDENSADA" | "LIMPIA" | "SERIF" | "MAQUINA";
+
+/** Cómo se ven los platos. Un bar con cuarenta tragos y sin fotos no quiere lo
+ *  mismo que un restaurante que fotografió cada plato. */
+export type CartaMenuQr = "LISTA" | "REJILLA";
+
+/** El carácter de los bordes. Cambia el tono de la pantalla entera. */
+export type BordesMenuQr = "REDONDEADO" | "RECTO";
+
 export type ExtraSettings = {
   scheduleEnabled: boolean;
   scheduleOpeningTime: string;
@@ -5,6 +23,9 @@ export type ExtraSettings = {
   scheduleStatus: "AUTOMATICO" | "ABIERTO" | "CERRADO";
   deliveryPaused: boolean;
   estimatedPrepTimeText: string;
+  qrMenuFuente: FuenteMenuQr;
+  qrMenuCarta: CartaMenuQr;
+  qrMenuBordes: BordesMenuQr;
 };
 
 export const DEFAULT_EXTRA_SETTINGS: ExtraSettings = {
@@ -14,7 +35,18 @@ export const DEFAULT_EXTRA_SETTINGS: ExtraSettings = {
   scheduleStatus: "AUTOMATICO",
   deliveryPaused: false,
   estimatedPrepTimeText: "20-30 min",
+  qrMenuFuente: "CONDENSADA",
+  qrMenuCarta: "LISTA",
+  qrMenuBordes: "REDONDEADO",
 };
+
+/** Un valor guardado que ya no está en la lista vuelve al de fábrica en vez de
+ *  llegar crudo a la pantalla. */
+function unaDe<T extends string>(valor: unknown, validos: readonly T[], porDefecto: T): T {
+  return typeof valor === "string" && (validos as readonly string[]).includes(valor)
+    ? (valor as T)
+    : porDefecto;
+}
 
 export function parseExtraSettings(rawPermissionsJson?: string | null): ExtraSettings {
   if (!rawPermissionsJson) return DEFAULT_EXTRA_SETTINGS;
@@ -30,6 +62,9 @@ export function parseExtraSettings(rawPermissionsJson?: string | null): ExtraSet
           : "AUTOMATICO",
         deliveryPaused: Boolean(parsed._extra.deliveryPaused),
         estimatedPrepTimeText: typeof parsed._extra.estimatedPrepTimeText === "string" ? parsed._extra.estimatedPrepTimeText : "20-30 min",
+        qrMenuFuente: unaDe(parsed._extra.qrMenuFuente, ["CONDENSADA", "LIMPIA", "SERIF", "MAQUINA"], "CONDENSADA"),
+        qrMenuCarta: unaDe(parsed._extra.qrMenuCarta, ["LISTA", "REJILLA"], "LISTA"),
+        qrMenuBordes: unaDe(parsed._extra.qrMenuBordes, ["REDONDEADO", "RECTO"], "REDONDEADO"),
       };
     }
   } catch {

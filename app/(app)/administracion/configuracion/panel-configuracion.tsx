@@ -2,6 +2,7 @@
 
 import { useVistaEnUrl } from "@/lib/vista-en-url";
 import { Card, CardContent } from "@/components/ui/card";
+
 import {
   FormularioDatos,
   FormularioFactus,
@@ -19,6 +20,31 @@ import {
 
 import type { ReceiptWidth } from "@/generated/prisma/enums";
 import type { ListaDePrecios } from "@/lib/billing/precios";
+import type { BordesMenuQr, CartaMenuQr, FuenteMenuQr } from "@/features/negocio/extra-settings";
+
+/**
+ * El encabezado de un panel de Configuración.
+ *
+ * Había ocho copiados a mano como `<h2 className="font-semibold text-lg">` —el
+ * tratamiento por defecto de shadcn, que es justo el que el manual manda
+ * rechazar— y otros siete tratamientos distintos repartidos entre los
+ * formularios: quince maneras de escribir un título en un solo módulo. A la
+ * vista no se distinguen de a uno; juntos son lo que se lee como desprolijo.
+ *
+ * La bajada va en `text-sm`, que es EL cuerpo del sistema. Estaba en `text-xs`
+ * —13px, el tamaño del dato denso— igual que otras 140 apariciones de esta
+ * pantalla, y por eso Configuración se leía apretada al lado del resto.
+ */
+function EncabezadoPanel({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <h2 className="font-display text-lg font-black uppercase tracking-tight text-foreground">
+        {titulo}
+      </h2>
+      <p className="text-sm text-muted-foreground text-pretty">{children}</p>
+    </div>
+  );
+}
 
 type PanelConfiguracionProps = {
   negocio: {
@@ -67,6 +93,9 @@ type PanelConfiguracionProps = {
     qrMenuHeaderSubtitle: string | null;
     qrMenuAccent: string;
     estimatedPrepTimeText: string | null;
+    qrMenuFuente?: FuenteMenuQr;
+    qrMenuCarta?: CartaMenuQr;
+    qrMenuBordes?: BordesMenuQr;
     facturacionElectronicaHabilitada: boolean;
     paquetesDocumentosDisponibles: number;
     documentosEmitidosConsumidos: number;
@@ -141,28 +170,22 @@ export function PanelConfiguracion({
           `h2` con el nombre de la sección, así que no hace falta reponer nada
           para saber dónde está uno parado. */}
       {tabActiva === "datos" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Datos del negocio</h2>
-              <p className="text-muted-foreground text-xs">
-                Información legal y de contacto que aparece en los tiquetes e impresiones.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Datos del negocio">
+              Información legal y de contacto que aparece en los tiquetes e impresiones.
+            </EncabezadoPanel>
             <FormularioDatos negocio={negocio} />
           </CardContent>
         </Card>
       )}
 
       {tabActiva === "modulos" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Módulos del sistema</h2>
-              <p className="text-muted-foreground text-xs">
-                Activá o desactivá los módulos según la operación de tu establecimiento.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Módulos del sistema">
+              Activá o desactivá los módulos según la operación de tu establecimiento.
+            </EncabezadoPanel>
             <FormularioModulos
               mesasHabilitado={mesasHabilitado}
               deliveryEnabled={settings.deliveryEnabled}
@@ -177,7 +200,7 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "permisos" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
             <FormularioPermisosRoles rolePermissionsRaw={settings.rolePermissions} />
           </CardContent>
@@ -185,14 +208,11 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "turnero" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Turnero del Salón</h2>
-              <p className="text-muted-foreground text-xs">
-                Personalizá la pantalla del televisor: imágenes de fondo, canal de YouTube y ubicación del recuadro.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Turnero del Salón">
+              Personalizá la pantalla del televisor: imágenes de fondo, canal de YouTube y ubicación del recuadro.
+            </EncabezadoPanel>
             <FormularioTurnero
               settings={{
                 turneroMediaMode: settings.turneroMediaMode,
@@ -207,14 +227,11 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "qr" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Menú Digital QR y Tarjetas de Mesas</h2>
-              <p className="text-muted-foreground text-xs">
-                Personalizá el diseño del menú público para clientes y generá códigos QR para tus mesas o pedidos a domicilio.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Menú Digital QR y Tarjetas de Mesas">
+              Personalizá el diseño del menú público para clientes y generá códigos QR para tus mesas o pedidos a domicilio.
+            </EncabezadoPanel>
             <FormularioQrMenu
               settings={{
                 qrMenuEnabled: settings.qrMenuEnabled,
@@ -227,6 +244,9 @@ export function PanelConfiguracion({
                 qrMenuHeaderSubtitle: settings.qrMenuHeaderSubtitle,
                 qrMenuAccent: settings.qrMenuAccent,
                 estimatedPrepTimeText: settings.estimatedPrepTimeText,
+                qrMenuFuente: settings.qrMenuFuente,
+                qrMenuCarta: settings.qrMenuCarta,
+                qrMenuBordes: settings.qrMenuBordes,
                 slug,
                 mesas,
                 deliveryEnabled: settings.deliveryEnabled,
@@ -237,14 +257,11 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "operacion" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Parámetros Operativos y Recibos</h2>
-              <p className="text-muted-foreground text-xs">
-                Configuración de jornada de negocio, horarios de atención, propina sugerida, redondeo en efectivo y recibos.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Parámetros Operativos y Recibos">
+              Configuración de jornada de negocio, horarios de atención, propina sugerida, redondeo en efectivo y recibos.
+            </EncabezadoPanel>
             <FormularioOperacion
               operacion={{
                 timeZone: settings.timeZone,
@@ -269,15 +286,11 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "impresoras" && impresion && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Impresión térmica</h2>
-              <p className="text-muted-foreground text-xs">
-                Comandas y recibos directo a las impresoras del local, sin abrir una
-                pestaña ni tocar el diálogo del navegador.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Impresión térmica">
+              Comandas y recibos directo a las impresoras del local, sin abrir una pestaña ni tocar el diálogo del navegador.
+            </EncabezadoPanel>
             <FormularioImpresoras
               {...impresion}
               comandaDestino={settings.comandaDestino}
@@ -288,15 +301,11 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "factus" && (
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Facturación Electrónica DIAN (Factus API)</h2>
-              <p className="text-muted-foreground text-xs">
-                Estado del módulo y del paquete de documentos. La configuración la carga el equipo
-                de Platlia.
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Facturación Electrónica DIAN (Factus API)">
+              Estado del módulo y del paquete de documentos. La configuración la carga el equipo de Platlia.
+            </EncabezadoPanel>
             <FormularioFactus
               settings={{
                 facturacionElectronicaHabilitada: settings.facturacionElectronicaHabilitada,
@@ -312,14 +321,11 @@ export function PanelConfiguracion({
       )}
 
       {tabActiva === "licencia" && esPropietario && facturacion && (
-        <Card className="border-brand/40 shadow-sm">
+        <Card className="border-brand/40 shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <div>
-              <h2 className="font-semibold text-lg">Licencia y Sucursales</h2>
-              <p className="text-muted-foreground text-xs">
-                Mapeo de tu plan activo, pago de licencias con MercadoPago y solicitud de nuevas sedes (Exclusivo Propietario).
-              </p>
-            </div>
+            <EncabezadoPanel titulo="Licencia y Sucursales">
+              Mapeo de tu plan activo, pago de licencias con MercadoPago y solicitud de nuevas sedes (Exclusivo Propietario).
+            </EncabezadoPanel>
             <FormularioLicencia
               suscripcion={facturacion.suscripcion}
               timeZone={settings.timeZone}

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { useFormStatus } from "react-dom";
+
 import Link from "next/link";
 import { ReceiptWidth } from "@/generated/prisma/enums";
 import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Building2, CreditCard, Printer, Search, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +28,75 @@ import { formatCop } from "@/lib/money";
 import { formatDayInTimeZone } from "@/lib/time";
 import { acentoSirveComoTexto } from "@/lib/contraste";
 import { cn } from "@/lib/utils";
+import { BarraGuardar, useSucio } from "./guardar";
+import type { BordesMenuQr, CartaMenuQr, FuenteMenuQr } from "@/features/negocio/extra-settings";
+
+/** Con qué letra se dibuja el título dentro del simulador. */
+const FAMILIA_PREVIEW: Record<FuenteMenuQr, string> = {
+  CONDENSADA: "var(--font-display)",
+  LIMPIA: "var(--font-sans)",
+  SERIF: "Fraunces, Georgia, serif",
+  MAQUINA: "'Space Mono', ui-monospace, monospace",
+};
+
+const TRATAMIENTO_PREVIEW: Record<FuenteMenuQr, string> = {
+  CONDENSADA: "uppercase tracking-tight",
+  LIMPIA: "tracking-tight",
+  SERIF: "tracking-[-0.01em]",
+  MAQUINA: "uppercase tracking-[0.02em]",
+};
+
+/**
+ * Un grupo de opciones de estilo para la carta pública.
+ *
+ * Cada opción lleva una PISTA de para qué tipo de local es, no solo su nombre:
+ * "Serif" no le dice nada a quien tiene un bar, "Mantel largo, trattoria" sí.
+ * Elegir la letra de tu carta no debería exigir saber tipografía.
+ */
+function GrupoDeEstilo({
+  titulo,
+  valor,
+  onCambio,
+  opciones,
+}: {
+  titulo: string;
+  valor: string;
+  onCambio: (v: string) => void;
+  opciones: { id: string; nombre: string; pista: string }[];
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="mb-2 font-mono text-rotulo uppercase tracking-[0.14em] text-muted-foreground">
+        {titulo}
+      </legend>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {opciones.map((o) => {
+          const activa = valor === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              aria-pressed={activa}
+              onClick={() => onCambio(o.id)}
+              className={cn(
+                "rounded-xl border p-3 text-left transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                activa
+                  ? "border-brand bg-brand/10"
+                  : "border-[var(--linea-16)] bg-[var(--panel-2)] hover:border-[var(--linea-30)]",
+              )}
+            >
+              <span className={cn("block text-sm font-bold", activa ? "text-brand" : "text-foreground")}>
+                {o.nombre}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{o.pista}</span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
 /** Las zonas que un negocio colombiano puede necesitar de verdad. */
 const ZONAS = [
@@ -40,15 +109,6 @@ const ZONAS = [
   "America/Santiago",
   "America/Argentina/Buenos_Aires",
 ];
-
-function Enviar({ children }: { children: React.ReactNode }) {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? "Guardando…" : children}
-    </Button>
-  );
-}
 
 function Resultado({ estado }: { estado: { ok: boolean; error?: string } }) {
   if (!estado.ok && estado.error) {
@@ -101,7 +161,7 @@ function Casilla({
           type="checkbox"
           name={name}
           defaultChecked={defaultChecked}
-          className="accent-primary mt-0.5 size-4"
+          className="accent-brand mt-0.5 size-4"
         />
         <span>{label}</span>
       </label>
@@ -121,9 +181,10 @@ export type DatosNegocio = {
 
 export function FormularioDatos({ negocio }: { negocio: DatosNegocio }) {
   const [estado, accion] = useActionState(guardarDatosNegocio, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok);
 
   return (
-    <form action={accion} className="space-y-4">
+    <form action={accion} onChange={marcar} onInput={marcar} className="space-y-4">
       <Resultado estado={estado} />
       <Campo label="Nombre" name="name" defaultValue={negocio.name} required />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -140,7 +201,7 @@ export function FormularioDatos({ negocio }: { negocio: DatosNegocio }) {
         <Campo label="Teléfono" name="phone" defaultValue={negocio.phone ?? ""} />
         <Campo label="Correo" name="email" type="email" defaultValue={negocio.email ?? ""} />
       </div>
-      <Enviar>Guardar datos</Enviar>
+      <BarraGuardar sucio={sucio} estado={estado}>Guardar datos</BarraGuardar>
     </form>
   );
 }
@@ -171,9 +232,10 @@ function comoHora(minutos: number): string {
 
 export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
   const [estado, accion] = useActionState(guardarOperacion, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok);
 
   return (
-    <form action={accion} className="space-y-5">
+    <form action={accion} onChange={marcar} onInput={marcar} className="space-y-5">
       <Resultado estado={estado} />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -183,7 +245,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
             id="timeZone"
             name="timeZone"
             defaultValue={operacion.timeZone}
-            className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+            className="h-11 tableta:h-10 w-full rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
           >
             {ZONAS.map((zona) => (
               <option key={zona} value={zona}>
@@ -219,7 +281,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
               id="scheduleStatus"
               name="scheduleStatus"
               defaultValue={operacion.scheduleStatus || "AUTOMATICO"}
-              className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+              className="h-11 tableta:h-10 w-full rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
             >
               <option value="AUTOMATICO">Automático (Seguir horario configurado)</option>
               <option value="ABIERTO">Abierto (Forzar recepción de pedidos)</option>
@@ -306,7 +368,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
           id="receiptWidth"
           name="receiptWidth"
           defaultValue={operacion.receiptWidth}
-          className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+          className="h-11 tableta:h-10 w-full rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
         >
           <option value={ReceiptWidth.MM80}>80 mm</option>
           <option value={ReceiptWidth.MM55}>55 mm</option>
@@ -326,7 +388,7 @@ export function FormularioOperacion({ operacion }: { operacion: Operacion }) {
         ayuda="Va al final, después del total."
       />
 
-      <Enviar>Guardar configuración</Enviar>
+      <BarraGuardar sucio={sucio} estado={estado}>Guardar configuración</BarraGuardar>
     </form>
   );
 }
@@ -349,11 +411,12 @@ export function FormularioModulos({
   permitirVentaSinStock: boolean;
 }) {
   const [estado, accion] = useActionState(guardarModulos, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok);
   const [invChecked, setInvChecked] = useState(inventoryEnabled);
   const [delivChecked, setDelivChecked] = useState(deliveryEnabled);
 
   return (
-    <form action={accion} className="space-y-4">
+    <form action={accion} onChange={marcar} onInput={marcar} className="space-y-4">
       <Resultado estado={estado} />
 
       <Casilla
@@ -367,14 +430,14 @@ export function FormularioModulos({
         }
       />
 
-      <div className="space-y-3 rounded-lg border border-[var(--linea-20)] bg-[var(--tarjeta-fondo)] p-3">
+      <div className="space-y-3 rounded-xl border border-[var(--linea-20)] bg-[var(--tarjeta-fondo)] p-3">
         <label className="flex items-start gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
             name="deliveryEnabled"
             checked={delivChecked}
             onChange={(e) => setDelivChecked(e.target.checked)}
-            className="accent-primary mt-0.5 size-4 cursor-pointer"
+            className="accent-brand mt-0.5 size-4 cursor-pointer"
           />
           <div className="space-y-0.5">
             <span className="font-semibold text-sm block">Este negocio reparte a domicilio</span>
@@ -458,7 +521,7 @@ export function FormularioModulos({
         ayuda="Permite definir recetas/ingredientes por producto para descontar insumos automáticamente por cada venta."
       />
 
-      <Enviar>Guardar módulos</Enviar>
+      <BarraGuardar sucio={sucio} estado={estado}>Guardar módulos</BarraGuardar>
     </form>
   );
 }
@@ -473,6 +536,7 @@ export type TurneroSettingsProps = {
 
 export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps }) {
   const [estado, accion] = useActionState(guardarTurneroSettings, ESTADO_INICIAL);
+  const { sucio, marcar } = useSucio(estado.ok);
   const [modo, setModo] = useState(settings.turneroMediaMode);
   const [images, setImages] = useState(settings.turneroImages ?? "");
   const [interval, setIntervalVal] = useState(settings.turneroImageIntervalSeconds ?? 10);
@@ -511,7 +575,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
               onClick={copiarUrl}
               className="text-xs h-8"
             >
-              {copiado ? "✓ ¡Copiado!" : "Copiar Enlace"}
+              {copiado ? "Copiado" : "Copiar enlace"}
             </Button>
             <Button
               asChild
@@ -527,7 +591,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
         </div>
       </div>
 
-      <form action={accion} className="space-y-4">
+      <form action={accion} onChange={marcar} onInput={marcar} className="space-y-4">
         <Resultado estado={estado} />
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -538,7 +602,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
               name="turneroMediaMode"
               value={modo}
               onChange={(e) => setModo(e.target.value)}
-              className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+              className="h-11 tableta:h-10 w-full rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
             >
               <option value="NONE">Sin multimedia (Fondo Oscuro Estándar)</option>
               <option value="IMAGES">Carrusel de Imágenes Publicitarias</option>
@@ -552,7 +616,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
               id="turneroBadgePosition"
               name="turneroBadgePosition"
               defaultValue={settings.turneroBadgePosition}
-              className="h-11 tableta:h-10 w-full rounded-lg border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
+              className="h-11 tableta:h-10 w-full rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm focus-visible:border-[var(--papel-60)] focus-visible:bg-[var(--input-bg-focus)] focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:outline-none"
             >
               <option value="TOP_RIGHT">Esquina Superior Derecha</option>
               <option value="TOP_LEFT">Esquina Superior Izquierda</option>
@@ -582,7 +646,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
                 value={images}
                 onChange={(e) => setImages(e.target.value)}
                 placeholder="https://ejemplo.com/promo1.jpg&#10;https://ejemplo.com/promo2.jpg"
-                className="border-input bg-card focus-visible:ring-ring w-full rounded-lg border p-3 text-sm focus-visible:ring-3 focus-visible:outline-none font-mono text-xs"
+                className="border-input bg-card focus-visible:ring-ring w-full rounded-xl border p-3 text-sm focus-visible:ring-3 focus-visible:outline-none font-mono text-xs"
               />
               <p className="text-muted-foreground text-xs">
                 Ingresá enlaces directos de imágenes promocionales para proyectar en el salón.
@@ -625,7 +689,7 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
           </div>
         )}
 
-        <Enviar>Guardar configuración de turnero</Enviar>
+        <BarraGuardar sucio={sucio} estado={estado}>Guardar turnero</BarraGuardar>
       </form>
     </div>
   );
@@ -754,14 +818,14 @@ export function FormularioLicencia({
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <Button asChild size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90 text-xs font-semibold">
             <Link href="/facturacion">
-              💳 Pagar / Adelantar Meses con Descuento
+              <><CreditCard aria-hidden className="mr-2 inline size-4 align-[-3px]" />Pagar o adelantar meses</>
             </Link>
           </Button>
 
           <Dialog open={openModal} onOpenChange={setOpenModal}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="text-xs font-semibold">
-                🏢 Pedir Sede Adicional
+                <><Building2 aria-hidden className="mr-2 inline size-4 align-[-3px]" />Pedir sede adicional</>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
@@ -771,7 +835,7 @@ export function FormularioLicencia({
 
               {suscripcion?.status === "PRUEBA" ? (
                 <div className="p-4 rounded-xl bg-warning/10 border border-warning/30 text-warning-soft text-xs space-y-2">
-                  <span className="font-bold block">⚠️ Plan de Prueba Gratuita (7 Días)</span>
+                  <span className="font-bold block">Plan de prueba gratuita · 7 días</span>
                   <p className="leading-relaxed">
                     Las sedes adicionales únicamente pueden crearse tras adquirir una licencia de pago activa.
                     Realiza el pago de tu licencia para desbloquear la adición de múltiples sucursales con prorrateo.
@@ -787,7 +851,7 @@ export function FormularioLicencia({
                       id="cantidadSedes"
                       name="cantidadSedes"
                       defaultValue="2"
-                      className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
+                      className="w-full h-9 rounded-xl border border-input px-3 text-xs bg-background"
                     >
                       <option value="2">
                         2 Sucursales ({cop(mensualDe(tarifaDos))} COP / mes)
@@ -802,7 +866,7 @@ export function FormularioLicencia({
                       id="periodoMeses"
                       name="periodoMeses"
                       defaultValue="1"
-                      className="w-full h-9 rounded-md border border-input px-3 text-xs bg-background"
+                      className="w-full h-9 rounded-xl border border-input px-3 text-xs bg-background"
                     >
                       <option value="1">
                         Mensual ({cop(mensualDe(tarifaUna))} / 1 sede &middot;{" "}
@@ -844,7 +908,7 @@ export function FormularioLicencia({
         <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">Planes Oficiales de Licencia Platlia</h4>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="p-3 rounded-lg border border-border bg-card">
+          <div className="p-3 rounded-xl border border-border bg-card">
             <span className="font-bold text-foreground block">1 Sucursal</span>
             <span className="text-base font-extrabold text-success-soft block numeral">
               {cop(mensualDe(tarifaUna))} COP / mes
@@ -852,7 +916,7 @@ export function FormularioLicencia({
             <span className="text-rotulo text-muted-foreground">Todos los módulos incluidos (Salón, POS, Cocina, Caja, Inventario, Recetas e Informes).</span>
           </div>
 
-          <div className="p-3 rounded-lg border border-border bg-card">
+          <div className="p-3 rounded-xl border border-border bg-card">
             <span className="font-bold text-foreground block">2 Sucursales</span>
             <span className="text-base font-extrabold text-success-soft block numeral">
               {cop(mensualDe(tarifaDos))} COP / mes
@@ -869,8 +933,8 @@ export function FormularioLicencia({
             y doce se pagan diez. Un porcentaje sobre pesos enteros deja centavos
             que hay que redondear en algún lado, y "un mes de regalo" se explica
             sin calculadora. */}
-        <div className="p-3 rounded-lg border border-brand/30 bg-brand/5 text-xs space-y-1">
-          <span className="font-bold text-brand block">✨ Descuentos por Pago Anticipado</span>
+        <div className="p-3 rounded-xl border border-brand/30 bg-brand/5 text-xs space-y-1">
+          <span className="font-bold text-brand block">Descuentos por pago anticipado</span>
           <p className="text-muted-foreground">
             • <strong>6 Meses (Semestral):</strong> pagás{" "}
             <span className="numeral">{6 - (mesesGratisDe(6) ?? 0)}</span> y usás{" "}
@@ -899,12 +963,20 @@ export type QrMenuSettingsProps = {
   qrMenuHeaderSubtitle: string | null;
   qrMenuAccent: string;
   estimatedPrepTimeText?: string | null;
+  qrMenuFuente?: FuenteMenuQr;
+  qrMenuCarta?: CartaMenuQr;
+  qrMenuBordes?: BordesMenuQr;
   slug: string;
   mesas: { id: string; name: string }[];
   deliveryEnabled?: boolean;
 };
 
 // ─── Temas de Marca Listos en 1 Clic (Dark Kitchen-Fire & Gastronómicos) ───
+//
+// Los tres últimos son CLAROS: hasta acá las seis opciones eran oscuras, así que
+// un local que quería una carta luminosa —una panadería, un brunch, una heladería—
+// no tenía ninguna. La carta detecta sola que el fondo es claro y voltea el texto
+// a tinta, así que basta con elegir el tema.
 const BRAND_THEMES = [
   {
     id: "dark-kitchen",
@@ -978,6 +1050,42 @@ const BRAND_THEMES = [
     subtitle: "Explora nuestros platos y bebidas exclusivas",
     accent: "#38BDF8",
   },
+  {
+    id: "papel-horno",
+    name: "Papel & Horno",
+    tag: "Panadería / Brunch",
+    icon: "🥐",
+    mode: "SOLID",
+    bgColor: "#F2EBDD",
+    bgGradient: "linear-gradient(135deg, #F6F1E6 0%, #E8DCC6 100%)",
+    title: "Nuestra carta",
+    subtitle: "Horneado cada mañana",
+    accent: "#B4531F",
+  },
+  {
+    id: "menta-fria",
+    name: "Menta Fría",
+    tag: "Heladería / Postres",
+    icon: "🍨",
+    mode: "SOLID",
+    bgColor: "#EFF5F1",
+    bgGradient: "linear-gradient(135deg, #F4F9F5 0%, #DCEAE1 100%)",
+    title: "Menú",
+    subtitle: "Hecho en casa, servido frío",
+    accent: "#1F6F4A",
+  },
+  {
+    id: "lino-crudo",
+    name: "Lino Crudo",
+    tag: "Café de especialidad",
+    icon: "☁️",
+    mode: "SOLID",
+    bgColor: "#F4F2EE",
+    bgGradient: "linear-gradient(135deg, #FAF8F4 0%, #E6E1D8 100%)",
+    title: "Carta",
+    subtitle: "Tostado de origen · Pedidos al instante",
+    accent: "#2E2A26",
+  }
 ];
 
 // ─── Paleta de Colores Sólidos Gastronómicos ───
@@ -1078,6 +1186,32 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
   const [estimatedPrepTimeText, setEstimatedPrepTimeText] = useState(
     settings.estimatedPrepTimeText || "20-30 min",
   );
+  const [fuente, setFuente] = useState(settings.qrMenuFuente ?? "CONDENSADA");
+  const [carta, setCarta] = useState(settings.qrMenuCarta ?? "LISTA");
+  const [bordesQr, setBordesQr] = useState(settings.qrMenuBordes ?? "REDONDEADO");
+
+  /**
+   * Acá el estado sucio se calcula comparando, no escuchando eventos.
+   *
+   * Esta pantalla mueve casi todo con controles PROPIOS —los temas, los colores
+   * de acento, el modo de fondo, el estilo de la carta— que son `<button>` y no
+   * campos nativos: el `onChange` del formulario nunca se entera. Con la barra
+   * atada a ese evento, elegir un tema dejaba el botón de guardar apagado y no
+   * había forma de guardar el cambio; peor que antes, cuando el botón al menos
+   * siempre estaba activo.
+   *
+   * Comparar contra lo que había al abrir además arregla lo de siempre: quien
+   * cambia un color y vuelve al original no dejó ningún cambio pendiente.
+   */
+  const instantanea = JSON.stringify({
+    habilitado, bgMode, bgColor, bgGradient, bgImageUrl, logoUrl,
+    headerTitle, headerSubtitle, accent, estimatedPrepTimeText,
+    fuente, carta, bordesQr,
+  });
+  const [instantaneaInicial] = useState(instantanea);
+  const sucio = instantanea !== instantaneaInicial && !estado.ok;
+  // Los grupos de estilo ya no necesitan avisar: el cambio de estado se ve solo.
+  const marcar = () => {};
 
   // Estado interactivo de UI
   const [subiendoLogo, setSubiendoLogo] = useState(false);
@@ -1094,7 +1228,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
   const urlDomicilio = `${appUrl}/m/${settings.slug}?tipo=domicilio`;
 
   // Aplicar tema prediseñado en 1 solo clic
-  const aplicarTema = (tema: typeof BRAND_THEMES[0]) => {
+  const aplicarTema = (tema: NonNullable<(typeof BRAND_THEMES)[number]>) => {
     setBgMode(tema.mode);
     setBgColor(tema.bgColor);
     setBgGradient(tema.bgGradient);
@@ -1325,13 +1459,13 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
 
         <div className="flex items-center gap-3 self-start sm:self-center bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-xl px-4 py-2.5">
           <span className="text-xs font-bold text-[var(--papel)]">
-            {habilitado ? "🟢 Servicio Activo" : "⚪ Servicio Desactivado"}
+            {habilitado ? "Servicio activo" : "Servicio desactivado"}
           </span>
           <input
             type="checkbox"
             checked={habilitado}
             onChange={(e) => setHabilitado(e.target.checked)}
-            className="size-5 rounded border-[var(--linea-30)] text-[var(--brasa)] focus:ring-[var(--brasa)] cursor-pointer"
+            className="size-5 cursor-pointer rounded accent-brand"
           />
         </div>
       </div>
@@ -1339,9 +1473,9 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
       {/* ─── Navegación por Pestañas ─── */}
       <div className="flex border-b border-dashed border-[var(--linea-30)] gap-2 pb-2 overflow-x-auto">
         {[
-          { id: "tema", label: "🎨 1. Identidad Visual & Tema", desc: "Colores, degradados y logo" },
-          { id: "textos", label: "🛵 2. Domicilios & Mensajes", desc: "Tiempos, títulos y textos" },
-          { id: "qrs", label: "🖨️ 3. Códigos QR & Enlaces", desc: "Mesas, tirillas e impresión" },
+          { id: "tema", label: "Identidad visual", desc: "Colores, degradados y logo" },
+          { id: "textos", label: "Domicilios y mensajes", desc: "Tiempos, títulos y textos" },
+          { id: "qrs", label: "Códigos QR", desc: "Mesas, tirillas e impresión" },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1364,7 +1498,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
       <div className="grid gap-8 lg:grid-cols-12 items-start">
         
         {/* Columna Izquierda: Opciones Interactivas sin código */}
-        <form action={accion} className="space-y-6 lg:col-span-7">
+        <form action={accion} onChange={marcar} onInput={marcar} className="space-y-6 lg:col-span-7">
           <Resultado estado={estado} />
 
           <input type="hidden" name="qrMenuEnabled" value={habilitado ? "on" : "off"} />
@@ -1377,19 +1511,59 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
           <input type="hidden" name="qrMenuHeaderSubtitle" value={headerSubtitle} />
           <input type="hidden" name="qrMenuAccent" value={accent} />
           <input type="hidden" name="estimatedPrepTimeText" value={estimatedPrepTimeText} />
+          <input type="hidden" name="qrMenuFuente" value={fuente} />
+          <input type="hidden" name="qrMenuCarta" value={carta} />
+          <input type="hidden" name="qrMenuBordes" value={bordesQr} />
 
           {/* ══════════════════════════════════════════════════════════════════
               PESTAÑA 1: IDENTIDAD VISUAL & TEMA
               ══════════════════════════════════════════════════════════════════ */}
           {tabActiva === "tema" && (
             <div className="space-y-6">
-              
+
+              <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6">
+              {/* Lo que de verdad diferencia una carta de otra no es el
+                  color —había seis paletas y todas daban la misma pantalla—
+                  sino la letra y la forma. Estas tres cambian eso. */}
+              <div className="space-y-4 pb-5 mb-5 border-b border-dashed border-[var(--linea-30)]">
+                <GrupoDeEstilo
+                  titulo="Letra de los títulos"
+                  valor={fuente}
+                  onCambio={(v) => { setFuente(v as FuenteMenuQr); marcar(); }}
+                  opciones={[
+                    { id: "CONDENSADA", nombre: "Condensada", pista: "Bar, parrilla, comida rápida" },
+                    { id: "LIMPIA", nombre: "Limpia", pista: "Café, saludable, moderno" },
+                    { id: "SERIF", nombre: "Serif", pista: "Mantel largo, trattoria" },
+                    { id: "MAQUINA", nombre: "Máquina", pista: "Especialidad, artesanal" },
+                  ]}
+                />
+                <GrupoDeEstilo
+                  titulo="Cómo se ven los platos"
+                  valor={carta}
+                  onCambio={(v) => { setCarta(v as CartaMenuQr); marcar(); }}
+                  opciones={[
+                    { id: "LISTA", nombre: "Lista", pista: "Cartas largas, con o sin foto" },
+                    { id: "REJILLA", nombre: "Rejilla", pista: "Cuando cada plato tiene foto" },
+                  ]}
+                />
+                <GrupoDeEstilo
+                  titulo="Bordes"
+                  valor={bordesQr}
+                  onCambio={(v) => { setBordesQr(v as BordesMenuQr); marcar(); }}
+                  opciones={[
+                    { id: "REDONDEADO", nombre: "Redondeados", pista: "Cercano, informal" },
+                    { id: "RECTO", nombre: "Rectos", pista: "Sobrio, editorial" },
+                  ]}
+                />
+              </div>
+              </div>
+
               {/* Temas Rápidos Listos en 1 Clic */}
               <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-bg)] p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <h3 className="text-sm font-bold text-[var(--papel)] flex items-center gap-2">
-                      <span>✨ Temas Gastronómicos Listos (1 Clic)</span>
+<span className="inline-flex items-center gap-1.5"><Sparkles aria-hidden className="size-3.5" />Temas listos</span>
                     </h3>
                     <p className="text-xs text-[var(--linea)]">
                       Selecciona un estilo profesional pre-configurado para tu tipo de restaurante o bar.
@@ -1441,9 +1615,9 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   </Label>
                   <div className="grid grid-cols-3 gap-2 pt-1">
                     {[
-                      { id: "SOLID", label: "🎨 Color Sólido" },
-                      { id: "GRADIENT", label: "🌈 Degradado" },
-                      { id: "PATTERN_IMAGE", label: "🖼️ Textura / Patrón" },
+                      { id: "SOLID", label: "Color sólido" },
+                      { id: "GRADIENT", label: "Degradado" },
+                      { id: "PATTERN_IMAGE", label: "Textura" },
                     ].map((modo) => (
                       <button
                         key={modo.id}
@@ -1532,7 +1706,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                         value={accent}
                         onChange={(e) => setAccent(e.target.value.toUpperCase())}
                         aria-label="Elegir otro color de acento"
-                        className="size-11 cursor-pointer rounded-lg border border-[var(--linea-30)] bg-transparent p-1"
+                        className="size-11 cursor-pointer rounded-xl border border-[var(--linea-30)] bg-transparent p-1"
                       />
                     </label>
                   </div>
@@ -1540,7 +1714,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                       contraste: si el acento no se lee sobre el fondo, se avisa acá
                       y no en la calle, con el cliente adelante. */}
                   {!acentoSirveComoTexto(accent, bgMode === "SOLID" ? bgColor : "#171512") && (
-                    <p className="flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-rotulo text-warning-soft">
+                    <p className="flex items-start gap-1.5 rounded-xl border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-rotulo text-warning-soft">
                       Ese acento queda muy cerca del fondo. Los botones se van a ver bien,
                       pero los precios escritos con él se leen apenas: el menú los va a
                       aclarar solo para que no desaparezcan.
@@ -1568,7 +1742,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                           )}
                         >
                           <span
-                            className="size-7 rounded-lg border border-[var(--linea-30)] shrink-0 shadow-md"
+                            className="size-7 rounded-xl border border-[var(--linea-30)] shrink-0 shadow-md"
                             style={{ background: preset.value }}
                           />
                           <span className="text-xs text-[var(--papel)] font-medium truncate">{preset.name}</span>
@@ -1611,7 +1785,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                       </span>
                       <div className="flex gap-2">
                         <label className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brasa)] text-[var(--tinta)] px-3 py-1.5 text-xs font-bold cursor-pointer hover:bg-[var(--brasa-hover)] shadow-md transition-all">
-                          {subiendoFondo ? "Subiendo..." : "📤 Cargar Foto"}
+                          {subiendoFondo ? "Subiendo…" : "Cargar foto"}
                           <input
                             type="file"
                             accept="image/*"
@@ -1624,10 +1798,10 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                           <button
                             type="button"
                             onClick={() => setBgImageUrl("")}
-                            className="p-1.5 rounded-lg border border-[var(--linea-30)] text-destructive-soft hover:bg-destructive/40 text-xs"
+                            className="p-1.5 rounded-xl border border-[var(--linea-30)] text-destructive-soft hover:bg-destructive/40 text-xs"
                             title="Quitar imagen"
                           >
-                            🗑️
+                            <Trash2 aria-hidden className="size-4" />
                           </button>
                         )}
                       </div>
@@ -1663,7 +1837,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex flex-wrap gap-2">
                       <label className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--brasa)] text-[var(--tinta)] px-3.5 py-2 text-xs font-bold cursor-pointer hover:bg-[var(--brasa-hover)] shadow-md transition-all">
-                        {subiendoLogo ? "Subiendo Logo..." : "📤 Subir Nuevo Logo"}
+                        {subiendoLogo ? "Subiendo…" : "Subir logo"}
                         <input
                           type="file"
                           accept="image/*"
@@ -1848,7 +2022,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                       onClick={() => copiarEnlace(urlDomicilio, "domicilio-btn")}
                       className="bg-[var(--brasa)] text-[var(--tinta)] font-bold text-xs h-9 hover:bg-[var(--brasa-hover)] cursor-pointer"
                     >
-                      {copiado === "domicilio-btn" ? "✔ Copiado" : "📋 Copiar Enlace"}
+                      {copiado === "domicilio-btn" ? "Copiado" : "Copiar enlace"}
                     </Button>
                     <Button
                       type="button"
@@ -1862,7 +2036,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                       }
                       className="border-[var(--linea-30)] text-[var(--papel)] text-xs h-9 hover:bg-[var(--panel-2)] cursor-pointer"
                     >
-                      🖨️ Imprimir QR
+                      <><Printer aria-hidden className="mr-1.5 inline size-4 align-[-3px]" />Imprimir QR</>
                     </Button>
                   </div>
                 </div>
@@ -1871,7 +2045,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(urlDomicilio)}`}
                     alt="QR Domicilio"
-                    className="size-20 rounded-lg border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-md"
+                    className="size-20 rounded-xl border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-md"
                   />
                   <div className="min-w-0 space-y-1 flex-1">
                     <span className="font-mono text-xs text-[var(--papel)] font-bold block truncate">
@@ -1909,7 +2083,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-display font-black text-base text-[var(--papel)]">
-                              🪑 MESA {mesa.name}
+                              MESA {mesa.name}
                             </span>
                             <div className="flex items-center gap-1">
                               <Button
@@ -1925,7 +2099,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                                 }
                                 className="h-7 text-xs font-semibold px-2 text-[var(--papel)] hover:bg-[var(--panel-3)]"
                               >
-                                🖨️ Imprimir
+                                <><Printer aria-hidden className="mr-1.5 inline size-4 align-[-3px]" />Imprimir</>
                               </Button>
                               <Button
                                 type="button"
@@ -1934,7 +2108,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                                 onClick={() => copiarEnlace(urlMesa, mesa.id)}
                                 className="h-7 text-xs font-semibold px-2 text-[var(--linea)] hover:text-[var(--papel)] hover:bg-[var(--panel-3)]"
                               >
-                                {copiado === mesa.id ? "✔" : "Copiar"}
+                                {copiado === mesa.id ? "Copiado" : "Copiar"}
                               </Button>
                             </div>
                           </div>
@@ -1943,7 +2117,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                             <img
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(urlMesa)}`}
                               alt={`QR Mesa ${mesa.name}`}
-                              className="size-16 rounded-lg border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-sm"
+                              className="size-16 rounded-xl border border-[var(--linea-30)] p-1 bg-white shrink-0 shadow-sm"
                             />
                             <div className="text-xs space-y-1 min-w-0 flex-1">
                               <span className="text-rotulo text-[var(--linea)] block truncate font-mono">
@@ -1969,15 +2143,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
             </div>
           )}
 
-          {/* Botón Guardar Cambios */}
-          <div className="pt-2">
-            <Button
-              type="submit"
-              className="w-full bg-[var(--brasa)] text-[var(--tinta)] hover:bg-[var(--brasa-hover)] font-bold text-base h-12 shadow-xl shadow-[var(--brasa)]/20 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
-            >
-              💾 Guardar Personalización del Menú & Domicilios
-            </Button>
-          </div>
+          <BarraGuardar sucio={sucio} estado={estado}>Guardar menú QR</BarraGuardar>
         </form>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -1991,12 +2157,12 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
             </span>
 
             {/* Alternador de vista previa */}
-            <div className="flex bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-lg p-0.5 text-rotulo">
+            <div className="flex bg-[var(--panel-2)] border border-[var(--linea-30)] rounded-xl p-0.5 text-rotulo">
               <button
                 type="button"
                 onClick={() => setPreviewModo("domicilio")}
                 className={cn(
-                  "px-2 py-1 rounded-md font-bold transition-all",
+                  "px-2 py-1 rounded-xl font-bold transition-all",
                   previewModo === "domicilio" ? "bg-[var(--brasa)] text-[var(--tinta)]" : "text-[var(--linea)]",
                 )}
               >
@@ -2006,7 +2172,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 type="button"
                 onClick={() => setPreviewModo("mesa")}
                 className={cn(
-                  "px-2 py-1 rounded-md font-bold transition-all",
+                  "px-2 py-1 rounded-xl font-bold transition-all",
                   previewModo === "mesa" ? "bg-[var(--brasa)] text-[var(--tinta)]" : "text-[var(--linea)]",
                 )}
               >
@@ -2026,52 +2192,94 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 <div className="size-1.5 rounded-full bg-[#3A3733]" />
               </div>
 
-              {/* Cabecera del Menú */}
-              <div className="p-4 text-center space-y-2 bg-black/50 backdrop-blur-md border-b border-white/10">
-                {logoUrl ? (
-                  <img
-                    src={logoUrl}
-                    alt="Logo"
-                    className="size-14 mx-auto rounded-full object-cover border-2 border-[var(--brasa)] shadow-lg animate-card-in"
-                  />
-                ) : (
-                  <div className="size-12 mx-auto rounded-full bg-[var(--brasa)]/20 border border-[var(--brasa)] flex items-center justify-center font-display font-black text-[var(--papel)] text-xl shadow-md">
-                    {(headerTitle || "P").slice(0, 1).toUpperCase()}
+              {/* Cabecera del Menú — la MISMA estructura que la carta real:
+                  nombre a la izquierda, logo al lado, línea de datos en mono y la
+                  perforación. Esta maqueta se quedó mostrando el diseño viejo
+                  cuando la carta cambió, que es exactamente lo que hace una
+                  maqueta que duplica un diseño; al menos ahora previsualiza
+                  también la LETRA elegida, que es el ajuste que más cambia el
+                  aspecto y el que menos se puede imaginar sin verlo. */}
+              <div className="space-y-2.5 px-4 pt-4 pb-3 bg-black/50 backdrop-blur-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="min-w-0 flex-1">
+                    <h4
+                      className={cn(
+                        "text-base font-black leading-[0.95] text-[var(--papel)] truncate",
+                        TRATAMIENTO_PREVIEW[fuente],
+                      )}
+                      style={{ fontFamily: FAMILIA_PREVIEW[fuente] }}
+                    >
+                      {headerTitle || "Menú Digital"}
+                    </h4>
+                    <p className="mt-0.5 text-rotulo leading-tight text-[var(--linea)] truncate">
+                      {headerSubtitle || "Pide directo desde tu celular"}
+                    </p>
                   </div>
-                )}
 
-                <div>
-                  <h4 className="font-black font-display text-base leading-tight uppercase tracking-tight text-[var(--papel)]">
-                    {headerTitle || "Menú Digital"}
-                  </h4>
-                  <p className="text-rotulo text-[var(--linea)] leading-tight mt-0.5">
-                    {headerSubtitle || "Pide directo desde tu celular"}
-                  </p>
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt=""
+                      className={cn(
+                        "size-9 shrink-0 self-center object-cover border border-[var(--linea-30)]",
+                        bordesQr === "RECTO" ? "rounded-none" : "rounded-lg",
+                      )}
+                    />
+                  ) : null}
                 </div>
 
-                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--panel-2)]/90 border border-[var(--linea-30)] text-rotulo font-mono font-bold text-[var(--brasa)]">
-                  {previewModo === "mesa" ? "🪑 Mesa 04 · Salón" : `🛵 Domicilio · ${estimatedPrepTimeText || "20-30 min"}`}
-                </div>
+                <p className="flex flex-wrap items-baseline gap-x-1.5 font-mono text-rotulo uppercase tracking-[0.14em] text-[var(--linea)]">
+                  <span className="text-[var(--brasa)]">
+                    {previewModo === "mesa" ? "Mesa 04" : "Domicilio"}
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>{estimatedPrepTimeText || "20-30 min"}</span>
+                </p>
               </div>
+
+              {/* La perforación, igual que en la carta real. */}
+              <div
+                aria-hidden
+                className="h-2 shrink-0 bg-black/50"
+                style={{
+                  maskImage: "radial-gradient(circle at 4px 8px, transparent 3.5px, black 4px)",
+                  maskSize: "8px 8px",
+                  maskRepeat: "repeat-x",
+                  WebkitMaskImage: "radial-gradient(circle at 4px 8px, transparent 3.5px, black 4px)",
+                  WebkitMaskSize: "8px 8px",
+                  WebkitMaskRepeat: "repeat-x",
+                }}
+              />
 
               {/* Contenido Simulado de la Carta */}
               <div className="p-3 flex-1 space-y-2.5 bg-black/20 overflow-y-auto">
                 {/* Buscador ficticio */}
                 <div className="h-7 bg-white/10 rounded-full px-3 flex items-center text-rotulo text-[var(--linea)] border border-white/10">
-                  🔍 Buscar hamburguesa, cerveza...
+                  <Search aria-hidden className="mr-1.5 inline size-3" />
+                  Buscar plato, bebida, postre…
                 </div>
 
-                {/* Categorías simuladas */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 text-rotulo font-mono">
-                  <span className="px-2 py-0.5 rounded-full bg-[var(--brasa)] text-[var(--tinta)] font-bold shrink-0">
-                    Todas (12)
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-white/10 text-[var(--papel)] shrink-0">
-                    🍔 Burgers
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-white/10 text-[var(--papel)] shrink-0">
-                    🍺 Bebidas
-                  </span>
+                {/* Las categorías, como en la carta real: un rótulo con su guía
+                    punteada y su cuenta, plegables. Las píldoras de filtro que
+                    había acá se eliminaron de la carta hace varios cambios y esta
+                    maqueta las seguía mostrando: es lo que pasa cuando un preview
+                    duplica un diseño en vez de renderizarlo. */}
+                <div className="space-y-2 pb-1">
+                  {[
+                    { nombre: "Burgers", n: 6 },
+                    { nombre: "Bebidas", n: 6 },
+                  ].map((c) => (
+                    <div
+                      key={c.nombre}
+                      className="flex items-center gap-2 font-mono text-rotulo uppercase text-[var(--linea)]"
+                    >
+                      <span aria-hidden>›</span>
+                      <span className="shrink-0">
+                        {c.nombre} · <span className="numeral font-bold text-[var(--papel)]">{c.n}</span>
+                      </span>
+                      <span aria-hidden className="h-px flex-1 border-t border-dashed border-[var(--linea-30)]" />
+                    </div>
+                  ))}
                 </div>
 
                 {/* Tarjetas de platos simulados */}
@@ -2196,7 +2404,7 @@ export function FormularioQrMenu({ settings }: { settings: QrMenuSettingsProps }
                 onClick={() => ejecutarImpresion(tarjetaImprimir)}
                 className="bg-[var(--brasa)] text-[var(--tinta)] font-bold text-xs gap-1.5 shadow-md hover:bg-[var(--brasa-hover)]"
               >
-                🖨️ Imprimir Ahora
+                <><Printer aria-hidden className="mr-1.5 inline size-4 align-[-3px]" />Imprimir</>
               </Button>
             </div>
 
@@ -2405,7 +2613,7 @@ function EnlaceSoporte() {
       href={enlaceWhatsapp("Quiero hablar sobre la facturación electrónica DIAN.")}
       target="_blank"
       rel="noopener"
-      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-brand/40 bg-brand/10 px-4 text-xs font-bold text-brand transition-colors hover:bg-brand/20"
+      className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-4 text-xs font-bold text-brand transition-colors hover:bg-brand/20"
     >
       Escribirle a soporte
     </a>
