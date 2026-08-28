@@ -5,9 +5,11 @@ import { useFormStatus } from "react-dom";
 import { avanzarComanda } from "@/features/cocina/actions";
 import { MINUTOS_POR_DEFECTO } from "@/features/cocina/constantes";
 import { ComandaItem, ComandaOrden } from "@/features/cocina/queries";
+import { puedeMarcarListo } from "@/features/cocina/reglas";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
+import { ChefHat } from "lucide-react";
 
 /**
  * La comanda, como la tirilla que el cocinero tendría en la mano.
@@ -64,9 +66,60 @@ function BotonRenglon({ estado }: { estado: string }) {
   );
 }
 
-function RenglonComanda({ item }: { item: ComandaItem }) {
+/**
+ * A quién le pertenece el plato mientras se cocina.
+ *
+ * Se pinta desde que alguien lo toma, no solo cuando el botón está bloqueado: el
+ * valor está en que los otros cocineros **no lleguen** a tocarlo, no en avisarles
+ * después de que lo intentaron.
+ */
+function Firma({ nombre, propio }: { nombre: string; propio: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-1 font-mono text-rotulo uppercase",
+        propio ? "text-brand" : "text-muted-foreground",
+      )}
+    >
+      <ChefHat aria-hidden className="size-3 shrink-0" />
+      {/* Un nombre largo se recorta, no parte el renglón: la tarjeta del KDS se
+          lee de lejos y de reojo, y dos líneas donde va una corren todo lo de
+          abajo. */}
+      <span className="truncate">{propio ? "Tuyo" : nombre}</span>
+    </span>
+  );
+}
+
+function RenglonComanda({
+  item,
+  actorId,
+  actorRole,
+}: {
+  item: ComandaItem;
+  actorId: string;
+  actorRole: string;
+}) {
   const [estado, accion] = useActionState(avanzarComanda, ESTADO_INICIAL);
   const listo = item.status === "LISTO";
+
+  /**
+   * La misma regla que el servidor, para no ofrecer un botón que va a rechazar.
+   *
+   * Esto no ES la seguridad —la acción es un POST alcanzable con curl y valida
+   * por su cuenta—: es que la pantalla no mienta. Un botón que se puede tocar y
+   * siempre falla es peor que ningún botón.
+   */
+  const veredicto =
+    item.status === "EN_PREPARACION"
+      ? puedeMarcarListo({
+          startedById: item.tomadoPorId,
+          actorId,
+          actorRole,
+          nombreDeQuienLoTomo: item.tomadoPor,
+        })
+      : { permitido: true as const, esRelevo: false };
+
+  const ajeno = !veredicto.permitido;
 
   return (
     // La línea de corte: punteada, como la perforación de la tirilla.
@@ -77,6 +130,10 @@ function RenglonComanda({ item }: { item: ComandaItem }) {
             <span className="numeral mr-1.5 font-bold text-brand">{item.quantity}x</span>
             <span className="font-semibold">{item.nameSnapshot}</span>
           </p>
+
+          {item.tomadoPor && item.status !== "LISTO" && (
+            <Firma nombre={item.tomadoPor} propio={item.tomadoPorId === actorId} />
+          )}
 
           {item.modificadores.length > 0 && (
             <div className="flex flex-wrap gap-1">
@@ -101,10 +158,23 @@ function RenglonComanda({ item }: { item: ComandaItem }) {
           )}
         </div>
 
-        <form action={accion}>
-          <input type="hidden" name="itemId" value={item.id} />
-          <BotonRenglon estado={item.status} />
-        </form>
+        {ajeno ? (
+          // Ni deshabilitado ni escondido: un botón gris invita a tocarlo y a
+          // preguntar por qué no anda. Esto dice qué está pasando en su lugar.
+          //
+          // No repite el nombre —eso ya lo dice la firma, justo debajo del plato—:
+          // "En manos de Ana Restrepo" mide el doble que el botón que reemplaza y,
+          // en una tarjeta de 22rem, empujaba "Churrasco 300 g" a dos renglones y
+          // partía el nombre de la firma en dos.
+          <span className="shrink-0 rounded-md border border-dashed border-[var(--linea-30)] px-3 py-1.5 font-mono text-rotulo uppercase text-muted-foreground">
+            Lo tomó otro
+          </span>
+        ) : (
+          <form action={accion}>
+            <input type="hidden" name="itemId" value={item.id} />
+            <BotonRenglon estado={item.status} />
+          </form>
+        )}
       </div>
 
       {!estado.ok && estado.error && <p className="pt-1 text-xs text-destructive-soft">{estado.error}</p>}
@@ -112,7 +182,15 @@ function RenglonComanda({ item }: { item: ComandaItem }) {
   );
 }
 
-export function Comanda({ comanda }: { comanda: ComandaOrden }) {
+export function Comanda({
+  comanda,
+  actorId,
+  actorRole,
+}: {
+  comanda: ComandaOrden;
+  actorId: string;
+  actorRole: string;
+}) {
   const minutos = useMinutos(comanda.desde);
   const maxEstimado = Math.max(
     ...comanda.items.map((i) => i.preparationMinutes ?? MINUTOS_POR_DEFECTO),
@@ -203,7 +281,7 @@ export function Comanda({ comanda }: { comanda: ComandaOrden }) {
 
       <div className="flex-1 px-4 py-2">
         {comanda.items.map((item) => (
-          <RenglonComanda key={item.id} item={item} />
+          <RenglonComanda key={item.id} item={item} actorId={actorId} actorRole={actorRole} />
         ))}
       </div>
 

@@ -3,18 +3,44 @@ import { tenantDb } from "@/lib/db/tenant";
 import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 import { margenPorcentual } from "@/lib/money";
 import { getSettings } from "@/features/negocio/queries";
+import { diasDelPeriodo, type Periodo } from "@/features/informes/periodo";
+import { formatBusinessDate } from "@/lib/time";
 
 /**
- * Informe de una jornada.
+ * El día de negocio como texto, para el SQL crudo.
+ *
+ * **No se manda el `Date`.** `businessDate` es una columna DATE y sus valores son
+ * la medianoche UTC del día; mandando un `Date`, el driver lo escribe como
+ * timestamptz y Postgres tiene que castear una de las dos puntas usando el
+ * TimeZone de la SESIÓN —que no es el del negocio ni el nuestro—. En Colombia eso
+ * corre el borde cinco horas y el primer día del mes se cae del informe. Un
+ * `'2026-08-27'::date` no depende de ninguna zona.
+ */
+function comoFecha(businessDate: Date): string {
+  return formatBusinessDate(businessDate);
+}
+
+/**
+ * Informe de un período.
  *
  * Todo se filtra por `businessDate` y no por un rango de horas: la jornada de un
  * bar que cierra a las 3 a.m. no coincide con el día del calendario, y el
  * businessDate ya viene calculado con la zona horaria y el corte de la empresa.
  * Filtrar por `createdAt BETWEEN` sería exactamente el error que ese campo evita.
  *
+ * El período es un tramo de DÍAS, no de instantes, así que las dos puntas son
+ * inclusivas: `businessDate` es una columna DATE con valores discretos y no hay
+ * un "último milisegundo" que se pueda escapar entre `lte` y `lt`. Ese cuidado
+ * —el rango semiabierto de `businessDayRange`— es para los instantes.
+ *
  * Solo cuentan los pedidos PAGADOS. Uno abierto todavía no es una venta, y uno
  * anulado nunca lo fue.
  */
+
+/** El fragmento de `where` que acota cualquier informe a su período. */
+export function enElPeriodo(p: Periodo) {
+  return { gte: p.desde, lte: p.hasta };
+}
 
 export type ResumenDeJornada = {
   ventasCop: number;
@@ -28,10 +54,10 @@ export type ResumenDeJornada = {
 
 export async function getResumenDeJornada(
   businessId: string,
-  businessDate: Date,
+  periodo: Periodo,
 ): Promise<ResumenDeJornada> {
   const agregado = await tenantDb(businessId).order.aggregate({
-    where: { businessDate, status: "PAGADA" },
+    where: { businessDate: enElPeriodo(periodo), status: "PAGADA" },
     _sum: {
       totalCop: true,
       subtotalCop: true,
@@ -55,10 +81,10 @@ export async function getResumenDeJornada(
 }
 
 /** Cuánto entró por cada medio de pago. Es lo que se cuadra contra el datáfono. */
-export async function getPorMetodoDePago(businessId: string, businessDate: Date) {
+export async function getPorMetodoDePago(businessId: string, periodo: Periodo) {
   const filas = await tenantDb(businessId).orderPayment.groupBy({
     by: ["method"],
-    where: { voidedAt: null, order: { businessDate, status: "PAGADA" } },
+    where: { voidedAt: null, order: { businessDate: enElPeriodo(periodo), status: "PAGADA" } },
     _sum: { amountCop: true },
     _count: { _all: true },
   });
@@ -79,12 +105,12 @@ export async function getPorMetodoDePago(businessId: string, businessDate: Date)
  * negocio cambió de régimen ayer, lo vendido antes tiene que seguir declarándose
  * como se cobró.
  */
-export async function getPorTarifa(businessId: string, businessDate: Date) {
+export async function getPorTarifa(businessId: string, periodo: Periodo) {
   const filas = await tenantDb(businessId).orderItem.groupBy({
     by: ["taxRateNameSnapshot", "taxRateBpSnapshot"],
     where: {
       status: { not: "ANULADO" },
-      order: { businessDate, status: "PAGADA" },
+      order: { businessDate: enElPeriodo(periodo), status: "PAGADA" },
     },
     _sum: { lineSubtotalCop: true, lineTaxCop: true },
   });
@@ -108,14 +134,14 @@ export async function getPorTarifa(businessId: string, businessDate: Date) {
  */
 export async function getProductosMasVendidos(
   businessId: string,
-  businessDate: Date,
+  periodo: Periodo,
   limite = 10,
 ) {
   const filas = await tenantDb(businessId).orderItem.groupBy({
     by: ["nameSnapshot"],
     where: {
       status: { not: "ANULADO" },
-      order: { businessDate, status: "PAGADA" },
+      order: { businessDate: enElPeriodo(periodo), status: "PAGADA" },
     },
     _sum: { quantity: true, lineTotalCop: true },
     orderBy: { _sum: { lineTotalCop: "desc" } },
@@ -130,12 +156,12 @@ export async function getProductosMasVendidos(
 }
 
 /** Anulaciones de la jornada: lo que después se discute. */
-export async function getAnulaciones(businessId: string, businessDate: Date) {
+export async function getAnulaciones(businessId: string, periodo: Periodo) {
   const db = tenantDb(businessId);
 
   const [renglones, pedidos] = await Promise.all([
     db.orderItem.findMany({
-      where: { status: "ANULADO", order: { businessDate } },
+      where: { status: "ANULADO", order: { businessDate: enElPeriodo(periodo) } },
       orderBy: { canceledAt: "desc" },
       take: 20,
       select: {
@@ -148,7 +174,7 @@ export async function getAnulaciones(businessId: string, businessDate: Date) {
         order: { select: { code: true } },
       },
     }),
-    db.order.count({ where: { businessDate, status: "ANULADA" } }),
+    db.order.count({ where: { businessDate: enElPeriodo(periodo), status: "ANULADA" } }),
   ]);
 
   return { renglones, pedidosAnulados: pedidos };
@@ -204,7 +230,7 @@ export interface InformeDeMargen {
 
 export async function getCostoYMargen(
   businessId: string,
-  businessDate: Date,
+  periodo: Periodo,
 ): Promise<InformeDeMargen> {
   const vacio: InformeDeMargen = {
     inventarioActivo: false,
@@ -223,7 +249,7 @@ export async function getCostoYMargen(
   const db = tenantDb(businessId);
   const where = {
     status: { not: "ANULADO" as const },
-    order: { businessDate, status: "PAGADA" as const },
+    order: { businessDate: enElPeriodo(periodo), status: "PAGADA" as const },
   };
 
   const [filas, sinCosto] = await Promise.all([
@@ -403,4 +429,235 @@ export async function getAlertasInventario(businessId: string): Promise<AlertaIn
   }
 
   return alertas;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Horas pico
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type FranjaHoraria = {
+  /** 0 a 23, en la hora de la empresa. */
+  hora: number;
+  pedidos: number;
+  ventasCop: number;
+};
+
+export type InformeDeHoras = {
+  franjas: FranjaHoraria[];
+  /** La franja con más pedidos, para poder nombrarla sin que nadie lea la barra. */
+  pico: FranjaHoraria | null;
+  pedidos: number;
+  /** Cuántos días de negocio cubre el tramo, para poder promediar por día. */
+  dias: number;
+};
+
+/**
+ * Cuándo trabaja el local, hora por hora.
+ *
+ * **Se cuenta por `openedAt`, no por `closedAt`.** La pregunta es a qué hora hay
+ * que tener gente en el piso, y eso lo decide cuándo ENTRAN los pedidos: una mesa
+ * que se abre a las 8 y paga a las 11 es trabajo de las 8. Contando por el pago,
+ * el pico se correría hacia el cierre y la conclusión sería contratar a la hora
+ * en que la cocina ya está apagada.
+ *
+ * Va en SQL crudo y no con `groupBy` porque Prisma no sabe extraer una hora en la
+ * zona del negocio. Las dos reglas de la casa se cumplen igual: el `businessId`
+ * viaja como parámetro y está a la vista en el WHERE —`$queryRaw` pasa de largo
+ * el scoping de `tenantDb`—, y el día de negocio también, así que no hay ningún
+ * `now()::date` decidiendo nada del lado del servidor de base.
+ *
+ * La zona se aplica solo para leer la hora del reloj de pared; a qué jornada
+ * pertenece cada pedido ya lo dice `businessDate`, que se calculó con la zona y
+ * el corte. Por eso un bar que cierra a las 3 a.m. ve su pico en la madrugada
+ * dentro del día que corresponde, y no partido entre dos.
+ */
+export async function getHorasPico(
+  businessId: string,
+  periodo: Periodo,
+  timeZone: string,
+): Promise<InformeDeHoras> {
+  const filas = await tenantDb(businessId).$queryRaw<
+    { hora: number; pedidos: number; ventas: bigint | number | null }[]
+  >`
+    SELECT date_part('hour', "openedAt" AT TIME ZONE ${timeZone})::int AS hora,
+           COUNT(*)::int                                                AS pedidos,
+           COALESCE(SUM("totalCop"), 0)::bigint                         AS ventas
+    FROM "Order"
+    WHERE "businessId" = ${businessId}
+      AND "status" = 'PAGADA'
+      AND "businessDate" >= ${comoFecha(periodo.desde)}::date
+      AND "businessDate" <= ${comoFecha(periodo.hasta)}::date
+    GROUP BY 1
+    ORDER BY 1
+  `;
+
+  // El bigint no cruza el límite RSC → Client Component, y un COP entero entra
+  // holgado en un number: la suma de un año no se acerca a 2^53.
+  const porHora = new Map(
+    filas.map((f) => [f.hora, { hora: f.hora, pedidos: f.pedidos, ventasCop: Number(f.ventas ?? 0) }]),
+  );
+
+  // Las 24 franjas siempre, con cero donde no hubo nada: sin las horas vacías, un
+  // gráfico de barras dibuja "de 12 a 20" pegado y no se ve dónde está el hueco.
+  const franjas: FranjaHoraria[] = Array.from({ length: 24 }, (_, hora) =>
+    porHora.get(hora) ?? { hora, pedidos: 0, ventasCop: 0 },
+  );
+
+  const pedidos = franjas.reduce((n, f) => n + f.pedidos, 0);
+  const pico = pedidos === 0 ? null : franjas.reduce((a, b) => (b.pedidos > a.pedidos ? b : a));
+
+  return { franjas, pico, pedidos, dias: diasDelPeriodo(periodo) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tiempos de cocina
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TiemposDeCocinero = {
+  cocineroId: string;
+  cocinero: string;
+  /** Renglones que esa persona tomó en el período. */
+  renglones: number;
+  esperaPromedioMs: number | null;
+  preparacionPromedioMs: number | null;
+  medidosEspera: number;
+  medidosPreparacion: number;
+  /** Los que terminó otra persona. Ese tiempo no es tiempo de cocción de nadie. */
+  relevados: number;
+};
+
+export type InformeDeCocina = {
+  /**
+   * Si el negocio usa el KDS. Sin KDS nadie toca nada y no hay ni un tiempo que
+   * medir: la pantalla lo dice en vez de mostrar una tabla de guiones.
+   */
+  kdsActivo: boolean;
+  esperaPromedioMs: number | null;
+  preparacionPromedioMs: number | null;
+  renglones: number;
+  medidosEspera: number;
+  medidosPreparacion: number;
+  cocineros: TiemposDeCocinero[];
+};
+
+/**
+ * Cuánto tarda la cocina, y quién.
+ *
+ * Dos tramos, no uno: **lo que el plato esperó en la fila** —de que entró a la
+ * plancha a que alguien lo tomó— y **lo que tardó en cocinarse** —de que lo
+ * tomaron a que lo dieron por terminado—. Mezclados en un solo número no se puede
+ * decidir nada: el primero se arregla con más gente, el segundo con otra receta o
+ * más equipo, y el promedio de los dos no manda a hacer ninguna de las dos cosas.
+ *
+ * La aritmética va en SQL porque un año de un local con movimiento son cientos de
+ * miles de renglones y traerlos para restar dos fechas en JS no es una opción.
+ * Los guardas del WHERE son los mismos que aplica `tiemposDeRenglon` en
+ * `features/cocina/reglas.ts`, que es donde está escrita la regla y donde se
+ * prueba: un tramo negativo —marcas fuera de orden, una corrección a mano— no
+ * entra al promedio, porque un promedio con un número imposible adentro es peor
+ * que uno con un dato menos.
+ *
+ * Y el total no promedia promedios: cada tramo vuelve con su cuenta y la
+ * ponderación se hace acá. Un cocinero con dos platos no puede pesar lo mismo que
+ * uno con doscientos.
+ */
+export async function getTiemposDeCocina(
+  businessId: string,
+  periodo: Periodo,
+): Promise<InformeDeCocina> {
+  const settings = await getSettings(businessId);
+  const kdsActivo = settings.comandaDestino === "KDS" || settings.comandaDestino === "AMBAS";
+
+  const vacio: InformeDeCocina = {
+    kdsActivo,
+    esperaPromedioMs: null,
+    preparacionPromedioMs: null,
+    renglones: 0,
+    medidosEspera: 0,
+    medidosPreparacion: 0,
+    cocineros: [],
+  };
+  if (!kdsActivo) return vacio;
+
+  const filas = await tenantDb(businessId).$queryRaw<
+    {
+      cocineroId: string;
+      cocinero: string | null;
+      renglones: number;
+      esperaSeg: number | null;
+      preparacionSeg: number | null;
+      medidosEspera: number;
+      medidosPreparacion: number;
+      relevados: number;
+    }[]
+  >`
+    SELECT oi."startedById" AS "cocineroId",
+           u."name"         AS "cocinero",
+           COUNT(*)::int    AS "renglones",
+           (AVG(EXTRACT(EPOCH FROM (oi."startedAt" - oi."sentToKitchenAt")))
+             FILTER (WHERE oi."sentToKitchenAt" IS NOT NULL AND oi."startedAt" >= oi."sentToKitchenAt")
+           )::float8 AS "esperaSeg",
+           (AVG(EXTRACT(EPOCH FROM (oi."readyAt" - oi."startedAt")))
+             FILTER (WHERE oi."readyAt" IS NOT NULL AND oi."readyAt" >= oi."startedAt")
+           )::float8 AS "preparacionSeg",
+           (COUNT(*)
+             FILTER (WHERE oi."sentToKitchenAt" IS NOT NULL AND oi."startedAt" >= oi."sentToKitchenAt")
+           )::int AS "medidosEspera",
+           (COUNT(*)
+             FILTER (WHERE oi."readyAt" IS NOT NULL AND oi."readyAt" >= oi."startedAt")
+           )::int AS "medidosPreparacion",
+           (COUNT(*)
+             FILTER (WHERE oi."readyById" IS NOT NULL AND oi."readyById" <> oi."startedById")
+           )::int AS "relevados"
+    FROM "OrderItem" oi
+    JOIN "Order" o ON o."id" = oi."orderId"
+    LEFT JOIN "User" u ON u."id" = oi."startedById"
+    WHERE oi."businessId" = ${businessId}
+      AND o."businessDate" >= ${comoFecha(periodo.desde)}::date
+      AND o."businessDate" <= ${comoFecha(periodo.hasta)}::date
+      AND oi."status" <> 'ANULADO'
+      AND oi."startedById" IS NOT NULL
+      AND oi."startedAt" IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 3 DESC
+  `;
+
+  const cocineros: TiemposDeCocinero[] = filas.map((f) => ({
+    cocineroId: f.cocineroId,
+    // La cuenta pudo darse de baja después; el trabajo del período sigue siendo
+    // suyo y tiene que aparecer con algún nombre.
+    cocinero: f.cocinero?.trim() || "Cuenta dada de baja",
+    renglones: f.renglones,
+    esperaPromedioMs: f.esperaSeg === null ? null : Math.round(f.esperaSeg * 1000),
+    preparacionPromedioMs: f.preparacionSeg === null ? null : Math.round(f.preparacionSeg * 1000),
+    medidosEspera: f.medidosEspera,
+    medidosPreparacion: f.medidosPreparacion,
+    relevados: f.relevados,
+  }));
+
+  return {
+    kdsActivo,
+    esperaPromedioMs: ponderar(cocineros, "esperaPromedioMs", "medidosEspera"),
+    preparacionPromedioMs: ponderar(cocineros, "preparacionPromedioMs", "medidosPreparacion"),
+    renglones: cocineros.reduce((n, c) => n + c.renglones, 0),
+    medidosEspera: cocineros.reduce((n, c) => n + c.medidosEspera, 0),
+    medidosPreparacion: cocineros.reduce((n, c) => n + c.medidosPreparacion, 0),
+    cocineros,
+  };
+}
+
+function ponderar(
+  filas: readonly TiemposDeCocinero[],
+  promedio: "esperaPromedioMs" | "preparacionPromedioMs",
+  cuenta: "medidosEspera" | "medidosPreparacion",
+): number | null {
+  let suma = 0;
+  let total = 0;
+  for (const f of filas) {
+    const p = f[promedio];
+    if (p === null || f[cuenta] === 0) continue;
+    suma += p * f[cuenta];
+    total += f[cuenta];
+  }
+  return total === 0 ? null : Math.round(suma / total);
 }

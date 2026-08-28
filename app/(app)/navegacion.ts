@@ -214,8 +214,16 @@ export function construirNavegacion({
             href: "/informes",
             icono: BarChart3,
             secciones: [
-              { titulo: "Ventas del día", vista: "" },
+              // "del día" se fue del nombre: la pantalla ya no es de un día. El
+              // tramo se elige adentro y viaja en la URL, así que el mismo enlace
+              // del menú sirve para el día, la semana, el mes y el año.
+              { titulo: "Ventas", vista: "" },
               { titulo: "Productos más vendidos", vista: "productos" },
+              { titulo: "Horas pico", vista: "horas" },
+              // Sin KDS no hay un solo toque que medir. Se ofrece igual —y la
+              // pantalla explica cómo encenderlo— porque esconderla dejaría al
+              // dueño sin enterarse nunca de que el dato existe.
+              ...(usaCocina ? [{ titulo: "Tiempos de cocina", vista: "cocina" }] : []),
               // Sin inventario no hay costos, y una sección que solo puede decir
               // "no hay datos" es una promesa que el producto no cumple.
               ...(usaInventario ? [{ titulo: "Costos y margen", vista: "costos" }] : []),

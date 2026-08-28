@@ -495,6 +495,8 @@ model User {
   ordersCanceled     Order[]             @relation("OrderCanceledBy")
   orderItemsCreated  OrderItem[]         @relation("OrderItemCreatedBy")
   orderItemsCanceled OrderItem[]         @relation("OrderItemCanceledBy")
+  orderItemsStarted  OrderItem[]         @relation("OrderItemStartedBy")
+  orderItemsReady    OrderItem[]         @relation("OrderItemReadyBy")
   paymentsReceived   OrderPayment[]      @relation("OrderPaymentReceivedBy")
   cashSessionsOpened CashSession[]       @relation("CashSessionOpenedBy")
   cashSessionsClosed CashSession[]       @relation("CashSessionClosedBy")
@@ -1294,8 +1296,33 @@ model OrderItem {
   canceledReason String?
   canceledAt     DateTime? @db.Timestamptz(3)
 
+  /// Quién lo tomó en la cocina, y quién lo dio por terminado.
+  ///
+  /// `startedById` es la firma de la comanda: quien toca "empezar" en el KDS se
+  /// hace cargo del plato, y es el único que puede después marcarlo listo. Sin
+  /// eso, dos cocineros tocan el mismo renglón y ninguno sabe si el otro ya lo
+  /// está haciendo.
+  ///
+  /// `readyById` existe aparte —y no se deduce del anterior— porque un jefe de
+  /// cocina puede destrabar un renglón que quedó a nombre de alguien que se fue.
+  /// Cuando los dos no coinciden, ese tiempo no es tiempo de cocción de nadie y
+  /// el informe tiene que poder dejarlo afuera en vez de cargárselo al que
+  /// empezó.
+  ///
+  /// Los dos son NULL en todo lo anterior a esta columna, y en todo negocio que
+  /// imprime la comanda en papel en vez de usar el KDS: ahí no hay ningún toque
+  /// que registrar, y el informe lo dice en vez de mostrar ceros.
+  startedById String?
+  startedBy   User?   @relation("OrderItemStartedBy", fields: [startedById], references: [id], onDelete: SetNull)
+  readyById   String?
+  readyBy     User?   @relation("OrderItemReadyBy", fields: [readyById], references: [id], onDelete: SetNull)
+
   createdAt       DateTime  @default(now()) @db.Timestamptz(3)
   sentToKitchenAt DateTime? @db.Timestamptz(3)
+  /// Cuándo alguien lo tomó. Es la marca que faltaba: `sentToKitchenAt` dice
+  /// cuándo entró a la plancha y `readyAt` cuándo salió, pero sin esto los dos
+  /// tramos —lo que esperó y lo que se cocinó— eran un solo número indistinguible.
+  startedAt       DateTime? @db.Timestamptz(3)
   readyAt         DateTime? @db.Timestamptz(3)
   deliveredAt     DateTime? @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(3)

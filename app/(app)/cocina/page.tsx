@@ -22,6 +22,12 @@ export default async function CocinaPage() {
     currentBusinessDate(settings),
   );
 
-  return <PantallaCocina initialEstaciones={estaciones} />;
+  return (
+    <PantallaCocina
+      initialEstaciones={estaciones}
+      actorId={ctx.user.id}
+      actorRole={ctx.role}
+    />
+  );
 }
 

@@ -289,6 +289,25 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  /**
+   * La tercera letra del sistema lleva las cifras tabulares puestas.
+   *
+   * Desde que `--font-mono` es Space Grotesk —proporcional, no monoespaciada—
+   * las cifras dejaron de tener el mismo ancho por sí solas. Medido a 20px:
+   * "111" mide 25.09px y "000" mide 38.47px, así que una columna de precios
+   * queda con el borde derecho en serrucho; con `tabular-nums` las tres miden
+   * 37.20px.
+   *
+   * Va acá, sobre la utilidad entera, y no solo en `.numeral`: el rol de esta
+   * letra en el sistema ES la cifra, la hora y el sello, así que lo tabular es
+   * su comportamiento por defecto y no algo que haya que pedir. Dependiendo de
+   * acordarse en cada uno de los 246 lugares donde se escribe `font-mono`,
+   * alcanza con un olvido para que una cuenta se desalinee sin que nada falle.
+   */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 @layer base {
@@ -367,6 +386,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: 11px;
     letter-spacing: 0.12em;
     padding: 4px 10px;
@@ -453,6 +473,7 @@
     align-items: center;
     gap: 12px;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     /* El paso de la escala, no un 10.5 suelto: era el único tamaño del sistema
        que no salía de `@theme`, y a la vista no se distingue del rótulo de 11 —
        solo desalinea. */
@@ -470,6 +491,7 @@
   /* Eyebrows */
   .eyebrow {
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: 11px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -496,6 +518,229 @@
   --qr-superficie: color-mix(in oklch, #000 34%, transparent);
   --qr-superficie-2: color-mix(in oklch, #000 55%, transparent);
   --qr-borde: color-mix(in oklch, var(--papel) 16%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   El loader: la comanda saliendo de la impresora
+   Es el isotipo en movimiento, no un símbolo genérico girando: la hoja se
+   alimenta a pasos desde la ranura, se imprime la P y se traza la línea de
+   acento; después la comanda se desprende y el ciclo reinicia. Un bar espera a
+   que salga un papel decenas de veces por noche, así que la espera del sistema
+   se ve como la que ya conoce.
+
+   Los colores NO se escriben acá: salen de los tokens de marca, así que el día
+   que cambie la paleta el loader cambia con ella.
+   ───────────────────────────────────────────────────────────────────────────── */
+.plt-loader {
+  --plt-duracion: 2400ms;
+  --plt-lado: 96px;
+  --plt-papel: var(--papel);
+  --plt-tinta: var(--tinta);
+  --plt-acento: var(--brasa);
+
+  display: block;
+  width: var(--plt-lado);
+  height: var(--plt-lado);
+  /* La ranura hereda este color. */
+  color: var(--plt-papel);
+}
+
+.plt-papel {
+  fill: var(--plt-papel);
+}
+.plt-p {
+  fill: var(--plt-tinta);
+}
+.plt-acento {
+  fill: var(--plt-acento);
+}
+.plt-ranura {
+  fill: currentColor;
+  opacity: 0;
+}
+
+/* Los transform-origin van en unidades del viewBox (96×96). */
+.plt-avance,
+.plt-barrido,
+.plt-acento,
+.plt-salida,
+.plt-ranura {
+  transform-box: view-box;
+}
+
+/* 1 · La hoja se revela de arriba hacia abajo, a pasos: es un motor de arrastre,
+      no un deslizamiento continuo. */
+.plt-avance {
+  transform-origin: 48px 16px;
+  animation: plt-avance var(--plt-duracion) infinite both;
+}
+
+/* 2 · La P se imprime de izquierda a derecha, como pasa el cabezal. */
+.plt-barrido {
+  transform-origin: 42px 32px;
+  animation: plt-barrido var(--plt-duracion) infinite both;
+}
+
+/* 3 · La línea de acento se traza al final. */
+.plt-acento {
+  transform-origin: 36px 54.5px;
+  animation: plt-acento var(--plt-duracion) infinite both;
+}
+
+/* 4 · La comanda se desprende y arranca la siguiente. */
+.plt-salida {
+  animation: plt-salida var(--plt-duracion) infinite both;
+}
+
+.plt-ranura {
+  animation: plt-ranura var(--plt-duracion) infinite both;
+}
+
+@keyframes plt-avance {
+  0%,
+  5% {
+    transform: scaleY(0);
+    animation-timing-function: steps(14, jump-end);
+  }
+  35%,
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes plt-barrido {
+  0%,
+  37.5% {
+    transform: scaleX(0);
+    animation-timing-function: cubic-bezier(0.2, 0.72, 0.28, 1);
+  }
+  49.2%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes plt-acento {
+  0%,
+  51.7% {
+    transform: scaleX(0);
+    animation-timing-function: cubic-bezier(0.16, 0.84, 0.24, 1);
+  }
+  61.7%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes plt-salida {
+  0%,
+  83.3% {
+    transform: translateY(0);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0.2);
+  }
+  97.5%,
+  100% {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+
+@keyframes plt-ranura {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  83.3% {
+    opacity: 0.16;
+  }
+  97.5%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Menos movimiento: se muestra la comanda entera, quieta, y solo respira el
+   acento. La secuencia completa es justamente lo que alguien pidió no ver. */
+@media (prefers-reduced-motion: reduce) {
+  .plt-avance,
+  .plt-barrido,
+  .plt-acento,
+  .plt-salida,
+  .plt-ranura {
+    animation: none;
+    transform: none;
+  }
+  .plt-ranura {
+    opacity: 0.16;
+  }
+  .plt-acento {
+    animation: plt-respira 2s ease-in-out infinite;
+  }
+}
+
+@keyframes plt-respira {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   El velo de pantalla completa
+   La página SIGUE VIÉNDOSE detrás, desenfocada: quien espera no pierde el lugar
+   donde estaba, y el desenfoque dice "esto está inerte" sin borrar el contexto.
+   Un velo opaco convierte cada espera en un salto a ninguna parte y obliga a
+   reconstruir mentalmente dónde se estaba al volver.
+   ───────────────────────────────────────────────────────────────────────────── */
+.plt-velo {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 22px;
+  padding: 24px;
+  /* Tinta translúcida, no un color propio: el velo es la misma sala con la luz
+     baja. El 52% está medido contra el salón cargado: por encima del 60% las
+     mesas dejan de distinguirse y el velo pasa a ser una pantalla negra, que es
+     justo lo que no se quiere. El saturate compensa el lavado del desenfoque. */
+  background: color-mix(in oklch, var(--tinta) 52%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  animation: plt-velo-entra 200ms ease-out both;
+}
+
+/* La comanda se despega del fondo con una sombra que sigue su silueta —el borde
+   dentado incluido—, no con un anillo de vidrio ni un resplandor detrás. Es un
+   papel apoyado sobre la sala, y una sombra es lo que hace un papel. */
+.plt-velo .plt-loader {
+  filter: drop-shadow(0 18px 28px color-mix(in oklch, var(--tinta) 72%, transparent))
+    drop-shadow(0 2px 4px color-mix(in oklch, var(--tinta) 55%, transparent));
+}
+
+.plt-velo-pie {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-rotulo);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-align: center;
+  color: color-mix(in oklch, var(--papel) 55%, transparent);
+}
+
+@keyframes plt-velo-entra {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Animaciones del Sistema Dark Kitchen-Fire (Open Design) */

@@ -39,7 +39,6 @@
     "date-fns": "^4.1.0",
     "ioredis": "^6.0.0",
     "jose": "^6.2.8",
-    "lottie-react": "^2.4.1",
     "lucide-react": "^0.550.0",
     "mercadopago": "^3.2.1",
     "next": "15.5.22",

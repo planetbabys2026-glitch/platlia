@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 import { abrirPedido, liberarMesa, renombrarCuenta } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { PantallaCargando } from "@/components/marca/loader";
 import { Input } from "@/components/ui/input";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 

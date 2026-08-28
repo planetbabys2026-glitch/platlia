@@ -514,8 +514,29 @@ Sistema tipográfico:
    Fontshare, no de Google, así que los `.woff2` viven en `app/fonts/` y se cargan con
    `next/font/local`: sin pedido a un tercero, que es lo único que funciona cuando la PWA arranca
    sin red. No poner `font-feature-settings` de Inter (`cv02`…`cv11`): General Sans no los tiene.
-3. **Monospaced (Dinero COP & Tiempos)**: `Space Mono` (`--font-mono` / 400, 700 con
-   `.numeral tabular-nums`) para moneda colombiana, cronómetros y sellos.
+3. **Cifras (Dinero COP & Tiempos)**: `Space Grotesk` (`--font-mono` / 400, 500, 600, 700) para
+   moneda colombiana, cronómetros y sellos. Es la hermana **proporcional** de Space Mono —mismo
+   diseñador, mismo esqueleto—, así que el sistema no cambió de familia: cambió de ancho. Space Mono
+   le daba a la "1" el mismo avance que a la "0" y una carta llena de precios quedaba con huecos que
+   se leen como error de maquetado.
+
+   **El token se sigue llamando `--font-mono` y ya no es monoespaciada.** Es el slot de Tailwind
+   —renombrarlo obligaba a tocar 246 usos en 52 archivos y a que `tailwind-merge` dejara de
+   reconocer la utilidad como familia tipográfica—, así que se conserva el nombre y se documenta acá.
+
+   **Lo tabular hay que pedirlo, y está pedido una sola vez.** Medido en el navegador a 20px: sin
+   `tabular-nums`, `"111"` mide 25.09px y `"000"` mide 38.47px —trece píxeles, o sea una columna de
+   dinero con el borde derecho en serrucho—; con `tabular-nums`, las tres miden 37.20px. Por eso
+   `globals.css` se lo pone a la **utilidad `font-mono` entera** y a `.chip`, `.rotulo-seccion` y
+   `.eyebrow`, no solo a `.numeral`: el rol de esta letra ES la cifra, así que lo tabular es su
+   comportamiento por defecto. Si dependiera de acordarse en cada renglón, alcanza un olvido para que
+   una cuenta se desalinee sin que nada falle.
+
+   **La tirilla impresa NO usa este token** (`app/imprimir/pedido/[id]`). Ahí `componerRecibo` rellena
+   con espacios hasta un ancho en CARACTERES y el `width` va en `ch`: las dos cosas suponen que toda
+   letra mide lo mismo, así que esa pantalla declara una monoespaciada de verdad a mano. Apuntarla a
+   `--font-mono` torcería cada columna de cada recibo, y es un defecto que no se ve en pantalla: se
+   descubre en el papel que se le entrega al cliente.
 
 **La escala son seis pasos y no se inventa uno nuevo.** Había veinte tamaños, ocho de ellos valores
 sueltos en píxeles (9, 9.5, 10, 10.5, 11, 11.5, 12, 13) que a la vista son el mismo tamaño pero no
@@ -929,6 +950,79 @@ entregado alcanzara; y con `p.tipCop > 0` no había forma de **quitar** una prop
 exige caja siempre, la exija el negocio o no: `requireOpenCashSession` decide si se pueden *tomar*
 pedidos sin turno, que es otra cosa.
 
+### La cocina firma cada plato, y esa firma es el informe
+
+`OrderItem` no tenía marca de "empezado". Con `sentToKitchenAt` y `readyAt` solamente,
+**los dos tramos que importan estaban colapsados en un número**: lo que el plato esperó en la
+fila —que se arregla con más gente— y lo que tardó en cocinarse —que se arregla con otra receta o
+más equipo—. El promedio de los dos no manda a hacer ninguna de las dos cosas. Ahora hay
+`startedAt`, `startedById` y `readyById`.
+
+**Solo el cocinero que lo tomó lo marca listo.** Es lo que le da sentido a tocar "Empezar": si
+cualquiera puede cerrarlo, el botón no compromete a nadie y el tiempo de preparación que sale en el
+informe no es de quien cocinó. Con dos excepciones, y las dos son necesarias:
+
+- **Sin dueño se deja pasar.** `startedById` es NULL en todo lo anterior a la columna. Tratar ese
+  NULL como "de nadie, y por lo tanto de ninguno" dejaría trabadas para siempre las comandas viejas.
+- **Un administrador releva.** Un cocinero termina el turno y deja tres platos a su nombre; sin
+  válvula esa comanda no la cierra nadie. El relevo queda firmado en `readyById`, así que el informe
+  puede leer aparte lo que terminó otro en vez de cargárselo a quien empezó — por eso `readyById`
+  existe y no se deduce de `startedById`.
+
+Las reglas viven en `features/cocina/reglas.ts`, puras y con tests, y **la pantalla aplica las
+mismas**: no se ofrece un botón que el servidor va a rechazar, y donde no va el botón va quién tiene
+el plato. Eso no es la seguridad —la acción es un POST alcanzable con curl y valida por su cuenta—:
+es que la pantalla no mienta.
+
+**El `status` va en el `where` del update, no en un `if` antes.** Es el mismo `update` condicionado
+del descuento de stock y del reclamo de impresión. Dos cocineros tocando el mismo plato desde dos
+pantallas leen los dos `PENDIENTE`, los dos pasan la guarda y el segundo pisa la firma del primero:
+el plato quedaría a nombre de quien no lo tomó, que es exactamente lo que esto existe para evitar.
+
+**Sin KDS no hay un solo tiempo que medir**, y el informe lo dice en vez de mostrar una tabla de
+guiones: `comandaDestino` en `IMPRESA` significa que nadie toca nada. `null` no es cero, igual que en
+`lineCostCop`.
+
+### Los informes no son de un día
+
+Eran de un día y nada más: para saber cómo venía el mes había que abrir treinta pantallas y sumar a
+mano. `features/informes/periodo.ts` —puro, con tests— define día, semana, mes, año y rango a medida,
+y todo el resto del módulo pasó de recibir un `businessDate` a recibir un `Periodo`.
+
+- **La semana arranca el lunes.** No es estética: el fin de semana es la mitad de la venta y tiene
+  que quedar junto dentro del mismo tramo. Partiéndolo, cada semana mezcla el domingo de una con el
+  sábado de la otra y ninguna comparación significa nada.
+- **El período anterior dura lo mismo.** "vs. período anterior" solo quiere decir algo así. Para mes
+  y año se retrocede por calendario —restar 31 días funciona en agosto y rompe en marzo—; para un
+  rango a medida se corre la ventana entera, así que 10 días se comparan contra 10.
+- **El tramo viaja en la URL** (`?periodo=`, `?jornada=`, `?desde=`, `?hasta=`). Un informe es algo
+  que se manda al contador. `?jornada=X` sin `periodo` sigue significando exactamente lo que
+  significaba, así que los enlaces viejos no se rompen. Y las flechas calculan el tramo vecino del
+  lado del cliente con el mismo módulo puro, en vez de mandar un `?mover=-1` que quedaría pegado en
+  la URL y correría el informe un tramo más cada vez que alguien la abre.
+
+**Las horas pico se cuentan por `createdAt`, no por `closedAt`.** La pregunta es a qué hora hay que
+tener gente en el piso: una mesa que se abre a las 8 y paga a las 11 es trabajo de las 8. Contando
+por el pago, el pico se corre hacia el cierre y la conclusión sería contratar a la hora en que la
+cocina ya está apagada.
+
+**Dos cosas del SQL crudo que ya costaron una tarde cada una** (`getHorasPico`, `getTiemposDeCocina`
+— van en crudo porque Prisma no sabe extraer una hora en la zona del negocio ni restar dos columnas
+de fecha, y un año de un local con movimiento son cientos de miles de renglones que no se pueden
+traer a JS):
+
+1. **El día de negocio se manda como TEXTO, no como `Date`.** `businessDate` es una columna DATE y
+   sus valores son la medianoche UTC del día; mandando un `Date`, el driver lo escribe como
+   timestamptz y Postgres castea una punta con el TimeZone de la **sesión**. Verificado contra la
+   base: con la sesión en `America/Bogota`, `'2026-08-27T00:00:00Z'::timestamptz::date` da
+   **2026-08-26**. El primer día del mes se caía del informe. `'2026-08-27'::date` no depende de
+   ninguna zona.
+2. **`FILTER` va pegado al agregado, antes del cast.** `AVG(x)::float8 FILTER (...)` no es SQL
+   válido; va `(AVG(x) FILTER (...))::float8`.
+
+Y **el total no promedia promedios**: cada tramo vuelve con su cuenta y la ponderación se hace en JS.
+Un cocinero con dos platos no puede pesar lo mismo que uno con doscientos.
+
 ### Caja: lo cobrado no desaparece
 
 `getCuentasPorCobrar` filtra por `ABIERTA` / `CUENTA_PEDIDA`, así que apenas se cobraba, el pedido se
@@ -1169,6 +1263,42 @@ está separada de `estado` porque copiar una estructura con el mutex adentro es 
 que ya no protege nada, y el CSS va **concatenado** y no dentro del `Sprintf`, porque su
 `width: 100%` se lee como un verbo de formato desconocido.
 
+### El loader es el isotipo imprimiéndose
+
+Uno solo, en `components/marca/loader.tsx`, y es una **comanda saliendo de la impresora**: la hoja
+se alimenta a pasos desde la ranura, se imprime la P, se traza la línea de acento, la comanda se
+desprende y arranca la siguiente. Un bar mira salir ese papel decenas de veces por noche; la espera
+del sistema se parece a la que ya conoce. Antes había una animación Lottie de 14 KB con resplandor
+de gradiente y anillo de vidrio —la misma que trae cualquier producto— y arrastraba `lottie-react`
+al bundle solo para dibujarla.
+
+**Los colores no se escriben en el loader**: salen de `--papel`, `--tinta` y `--brasa`, así que
+sigue la paleta sola.
+
+**El velo deja ver la página.** `--tinta` al 52% con `blur(14px)`: quien espera no pierde el lugar
+donde estaba, y el desenfoque dice "esto está inerte" sin borrar el contexto. El 52% está medido
+contra el salón cargado —por encima del 60% las mesas dejan de distinguirse y el velo pasa a ser una
+pantalla negra—. La comanda se despega con un `drop-shadow` que sigue su silueta, borde dentado
+incluido: un `box-shadow` en un contenedor dibujaría el rectángulo del SVG y delataría que no es un
+papel.
+
+**Va en dos lugares y en los dos con la misma clase**, que es lo que hace que no parpadee entre
+ellos —abrir una mesa encadena los dos y se ve como una sola espera—:
+
+| Dónde | Qué |
+|---|---|
+| `loading.tsx` de `(app)` y de `superadmin` | `VeloDeCarga`, el cambio de módulo y la entrada al panel |
+| `PantallaCargando` | la acción que termina en otra pantalla (abrir mesa, liberar, cerrar sin consumo) |
+
+El **esqueleto sigue debajo** del velo de ruta (`EsqueletoPantalla`): le da al desenfoque algo que
+desenfocar, deja adivinar la forma de lo que viene, y es la red si el navegador no soporta
+`backdrop-filter`.
+
+**Abajo de ~40px deja de ser el isotipo.** Medido: a 44px todavía se leen el borde dentado, la P y el
+acento; a 20px es un rectángulo beige. Por eso **no va dentro de los botones** —ahí el texto ya dice
+qué está pasando y alcanza con el spinner de siempre—, y el ciclo de 2400ms tampoco llegaría a
+completarse en una acción de 400ms.
+
 ### El menú QR es la excepción
 
 `app/m/[slug]/` no se apoya en `--tinta`: **el fondo y el acento los elige cada negocio**
@@ -1199,6 +1329,8 @@ agente-impresion/        el binario en Go que corre en la PC del local
 lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plataforma
 features/dian/           emitir factura y nota crédito
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests
+features/cocina/reglas.ts   quién marca listo y los dos tramos de tiempo (puro)
+features/informes/periodo.ts  día · semana · mes · año · rango a medida (puro)
 features/<dominio>/{actions,queries,schemas}.ts + components/
 components/ui/           shadcn (generado)
 ```

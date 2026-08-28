@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { PantallaCargando } from "@/components/marca/loader";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";

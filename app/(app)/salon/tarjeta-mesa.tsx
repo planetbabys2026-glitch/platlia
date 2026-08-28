@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { abrirPedido } from "@/features/pedidos/actions";
 import type { MesaDelSalon } from "@/features/salon/queries";
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { PantallaCargando } from "@/components/marca/loader";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatCop } from "@/lib/money";
 import { cn } from "@/lib/utils";

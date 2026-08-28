@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { cerrarSinConsumo } from "@/features/pedidos/actions";
 import { Button } from "@/components/ui/button";
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { PantallaCargando } from "@/components/marca/loader";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 
 /**

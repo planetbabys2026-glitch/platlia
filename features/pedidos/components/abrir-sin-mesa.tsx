@@ -7,7 +7,7 @@ import { abrirPedido } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
-import { PantallaCargando } from "@/components/ui/cargando-overlay";
+import { PantallaCargando } from "@/components/marca/loader";
 
 /**
  * Abre un pedido sin mesa y lleva derecho a él.

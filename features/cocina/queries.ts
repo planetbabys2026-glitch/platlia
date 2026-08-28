@@ -41,6 +41,14 @@ export type ComandaItem = {
    * es texto que alguien escribió, esto es lo que se eligió de la carta.
    */
   modificadores: string[];
+  /**
+   * Quién lo tomó. El id es para saber si el botón de "Listo" es tuyo; el nombre,
+   * para que el que no lo tomó sepa a quién ir a buscar en vez de leer "no podés".
+   */
+  tomadoPorId: string | null;
+  tomadoPor: string | null;
+  /** Milisegundos, para el cronómetro del renglón. `null` mientras nadie lo tomó. */
+  desdeQueLoTomaron: number | null;
 };
 
 export type ComandaOrden = {
@@ -91,6 +99,9 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
       status: true,
       createdAt: true,
       sentToKitchenAt: true,
+      startedAt: true,
+      startedById: true,
+      startedBy: { select: { name: true } },
       modifiers: {
         orderBy: { sortOrder: "asc" },
         select: { optionNameSnapshot: true },
@@ -152,6 +163,9 @@ export async function getComandas(businessId: string, businessDate: Date): Promi
       status: item.status,
       preparationMinutes: item.product.preparationMinutes,
       modificadores: item.modifiers.map((m) => m.optionNameSnapshot),
+      tomadoPorId: item.startedById,
+      tomadoPor: item.startedBy?.name ?? null,
+      desdeQueLoTomaron: item.startedAt?.getTime() ?? null,
     });
   }
 

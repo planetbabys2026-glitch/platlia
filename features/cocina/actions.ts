@@ -12,27 +12,36 @@ import {
   publishTurneroUpdate,
 } from "@/lib/redis";
 import { id } from "@/lib/validaciones";
+import {
+  FIRMA_AL_LLEGAR,
+  MARCA_AL_LLEGAR,
+  puedeMarcarListo,
+  SIGUIENTE_ESTADO,
+  type EstadoRenglon,
+} from "./reglas";
+
+/**
+ * Se identifica por el código y no importando el namespace `Prisma`: solo
+ * `lib/db/` importa el cliente base.
+ */
+function esFilaNoEncontrada(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2025"
+  );
+}
 
 /**
  * La cocina mueve el renglón por sus estados: pendiente → en preparación → listo
  * → entregado.
  *
- * No se salta hacia atrás ni se brinca a entregado desde pendiente: los tiempos
- * que después se miran en los informes —cuánto tardó en salir un plato— solo
- * significan algo si las marcas se pusieron en orden.
+ * Las reglas —el orden de los estados, qué marca deja cada paso y quién puede
+ * darlo— viven en `features/cocina/reglas.ts`, puras y con tests: son la clase de
+ * cosa que no falla de forma visible cuando está mal, simplemente deja pasar a
+ * quien no debía o guarda un tiempo que no significa nada.
  */
-
-const SIGUIENTE: Record<string, string> = {
-  PENDIENTE: OrderItemStatus.EN_PREPARACION,
-  EN_PREPARACION: OrderItemStatus.LISTO,
-  LISTO: OrderItemStatus.ENTREGADO,
-};
-
-const MARCA_DE_TIEMPO: Record<string, "readyAt" | "deliveredAt" | null> = {
-  EN_PREPARACION: null,
-  LISTO: "readyAt",
-  ENTREGADO: "deliveredAt",
-};
 
 export const avanzarComanda = defineAction({
   schema: z.object({ itemId: id }),
@@ -46,12 +55,14 @@ export const avanzarComanda = defineAction({
         status: true,
         orderId: true,
         nameSnapshot: true,
+        startedById: true,
+        startedBy: { select: { name: true } },
         order: { select: { deliveryStatus: true } },
       },
     });
     if (!item) throw new ErrorDeUsuario("Ese renglón no existe.");
 
-    const siguiente = SIGUIENTE[item.status];
+    const siguiente = SIGUIENTE_ESTADO[item.status as EstadoRenglon];
     if (!siguiente) {
       throw new ErrorDeUsuario(
         item.status === "ANULADO"
@@ -60,14 +71,51 @@ export const avanzarComanda = defineAction({
       );
     }
 
-    const marca = MARCA_DE_TIEMPO[siguiente];
-    await db.orderItem.update({
-      where: { id: item.id },
-      data: {
-        status: siguiente as OrderItemStatus,
-        ...(marca ? { [marca]: new Date() } : {}),
-      },
-    });
+    /**
+     * Marcar listo lo hace quien lo tomó.
+     *
+     * Se verifica acá y no solo en la pantalla porque esto es un POST: esconder
+     * el botón no impide nada. Y se verifica antes del update para poder dar el
+     * mensaje bueno —a quién hay que ir a buscar—, no un "no se pudo".
+     */
+    if (siguiente === "LISTO") {
+      const veredicto = puedeMarcarListo({
+        startedById: item.startedById,
+        actorId: ctx.user.id,
+        actorRole: ctx.role,
+        nombreDeQuienLoTomo: item.startedBy?.name ?? null,
+      });
+      if (!veredicto.permitido) throw new ErrorDeUsuario(veredicto.motivo);
+    }
+
+    const marca = MARCA_AL_LLEGAR[siguiente];
+    const firma = FIRMA_AL_LLEGAR[siguiente];
+
+    /**
+     * El `status` va en el `where`, no en un `if` antes.
+     *
+     * Dos cocineros tocando el mismo plato desde dos pantallas leen los dos
+     * `PENDIENTE`, los dos pasan la guarda de arriba y el segundo pisa la firma
+     * del primero: el plato quedaría a nombre de quien no lo tomó, que es
+     * exactamente lo que esta pantalla existe para evitar. Es el mismo `update`
+     * condicionado con el que se descuenta el stock o se reclama un trabajo de
+     * impresión; Prisma contesta P2025 cuando no encuentra la fila.
+     */
+    try {
+      await db.orderItem.update({
+        where: { id: item.id, status: item.status },
+        data: {
+          status: siguiente as OrderItemStatus,
+          ...(marca ? { [marca]: new Date() } : {}),
+          ...(firma ? { [firma]: ctx.user.id } : {}),
+        },
+      });
+    } catch (error) {
+      if (esFilaNoEncontrada(error)) {
+        throw new ErrorDeUsuario(`Otra persona ya movió ${item.nameSnapshot}.`);
+      }
+      throw error;
+    }
 
     /**
      * Cuando la cocina termina, el domicilio sale de la cocina y entra a la caja.

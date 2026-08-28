@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Big_Shoulders, Space_Mono } from "next/font/google";
+import { Big_Shoulders, Space_Grotesk } from "next/font/google";
 import localFont from "next/font/local";
 import { RegistroServiceWorker } from "@/components/pwa/registro-sw";
 import { Toaster } from "@/components/ui/sonner";
@@ -36,12 +36,31 @@ const bigShoulders = Big_Shoulders({
   adjustFontFallback: false,
 });
 
-// Space Mono para precios en COP, tiempos de cocina y códigos de comanda térmica
-const spaceMono = Space_Mono({
+/**
+ * Space Grotesk para precios en COP, tiempos de cocina y sellos.
+ *
+ * Es la hermana proporcional de Space Mono —mismo diseñador, mismo esqueleto—,
+ * así que el sistema no cambia de familia: cambia de ancho. Space Mono reparte
+ * el mismo avance a la "1" que a la "0", y en una carta llena de precios eso deja
+ * huecos que se leen como errores de maquetado.
+ *
+ * **A cambio hay que pedir las cifras tabulares a mano.** Medido en el navegador
+ * a 20px: sin `tabular-nums`, "111" mide 25.09px y "000" mide 38.47px —trece
+ * píxeles de diferencia, o sea una columna de dinero con el borde derecho en
+ * serrucho—; con `tabular-nums` las tres miden 37.20px. Por eso `globals.css` se
+ * lo pone a la utilidad `font-mono` entera y no solo a `.numeral`: si dependiera
+ * de acordarse en cada renglón, el día que alguien lo olvide la cuenta se
+ * desalinea y nada falla.
+ *
+ * Los pesos son los cuatro que el código usa de verdad. Space Mono solo traía 400
+ * y 700, así que hasta acá el `font-medium` y el `font-semibold` de las pantallas
+ * los sintetizaba el navegador.
+ */
+const spaceGrotesk = Space_Grotesk({
   variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -80,7 +99,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`dark ${generalSans.variable} ${bigShoulders.variable} ${spaceMono.variable} h-full antialiased`}
+      className={`dark ${generalSans.variable} ${bigShoulders.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         {children}

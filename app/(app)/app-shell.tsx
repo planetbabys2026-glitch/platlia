@@ -825,13 +825,22 @@ function Shell({
             aria-haspopup="menu"
             aria-expanded={flotante?.key === "cuenta"}
             aria-label={`Cuenta de ${user?.name ?? "usuario"}`}
-            onClick={(e) =>
+            onClick={(e) => {
+              /**
+               * El `top` se mide ACÁ, no adentro del actualizador.
+               *
+               * React llama al actualizador de `useState` más tarde, durante el
+               * render, y para entonces ya dejó `currentTarget` en `null`: leerlo
+               * ahí tira "Cannot read properties of null" y el menú de la cuenta
+               * no abría nunca —se caía la pantalla entera al borde de error—.
+               * Es el mismo motivo por el que `BotonRiel` recibe un número y no
+               * el evento.
+               */
+              const top = e.currentTarget.getBoundingClientRect().top;
               setFlotante((f) =>
-                f?.key === "cuenta"
-                  ? null
-                  : { key: "cuenta", top: e.currentTarget.getBoundingClientRect().top, modo: "panel" as const },
-              )
-            }
+                f?.key === "cuenta" ? null : { key: "cuenta", top, modo: "panel" as const },
+              );
+            }}
             className={cn(
               "flex size-11 items-center justify-center rounded-full font-mono text-xs font-bold uppercase transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tinta)]",

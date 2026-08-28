@@ -7,8 +7,17 @@ import { Flame } from "lucide-react";
 
 export function PantallaCocina({
   initialEstaciones,
+  actorId,
+  actorRole,
 }: {
   initialEstaciones: EstacionGroup[];
+  /**
+   * Quién está mirando. Viaja como prop y no dentro de cada comanda porque no
+   * cambia entre renglones ni entre actualizaciones del stream: repetirlo en cada
+   * uno sería mandarlo cien veces por segundo para decir siempre lo mismo.
+   */
+  actorId: string;
+  actorRole: string;
 }) {
   const [estaciones, setEstaciones] = useState<EstacionGroup[]>(initialEstaciones);
 
@@ -85,7 +94,7 @@ export function PantallaCocina({
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] gap-4">
             {estacion.comandas.map((comanda) => (
               <li key={comanda.id}>
-                <Comanda comanda={comanda} />
+                <Comanda comanda={comanda} actorId={actorId} actorRole={actorRole} />
               </li>
             ))}
           </ul>

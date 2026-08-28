@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { obtenerEstadoPreparaciones } from "@/features/cocina/actions";
 import type { ItemPreparacion } from "@/features/cocina/queries";
 import { cn } from "@/lib/utils";
+import { Loader } from "@/components/marca/loader";
 
 function formatTiempoTranscurrido(fecha: Date | string | null): string {
   if (!fecha) return "Hace un momento";
@@ -199,8 +200,11 @@ export function BotonEstadoPreparaciones({
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
           {isPending && items.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-              <RefreshCw className="size-6 animate-spin text-brand" />
+            <div className="flex flex-col items-center gap-3 py-12 text-center text-sm text-muted-foreground">
+              {/* 44px es donde la comanda todavía se lee entera —borde dentado, P
+                  y línea de acento—. Más chica se vuelve un rectángulo beige y
+                  deja de ser el isotipo. */}
+              <Loader lado={44} etiqueta="Consultando cocina" />
               <p>Consultando cocina…</p>
             </div>
           ) : grupos.length === 0 ? (

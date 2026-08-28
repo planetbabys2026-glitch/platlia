@@ -75,8 +75,17 @@ export default async function TiquetePage({
       <style>{`
         @page { size: ${milimetros}mm auto; margin: 3mm; }
         @media print { .no-imprimir { display: none !important; } }
+        /* ESTA es la unica pantalla del producto que necesita una
+           monoespaciada DE VERDAD, y por eso no usa la variable --font-mono.
+           componerRecibo arma cada renglon rellenando con espacios hasta un
+           ancho en CARACTERES, y el width de abajo esta en ch: las dos cosas
+           suponen que toda letra mide lo mismo. Desde que --font-mono es Space
+           Grotesk (proporcional), apuntar aca habria torcido cada columna de
+           cada recibo impreso, y es un defecto que no se ve en pantalla: se
+           descubre en el papel que se le entrega al cliente. */
         .tiquete {
-          font-family: var(--font-mono), ui-monospace, monospace;
+          font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas",
+            "Liberation Mono", "Courier New", monospace;
           font-size: 9.5px;
           line-height: 1.4;
           white-space: pre;
