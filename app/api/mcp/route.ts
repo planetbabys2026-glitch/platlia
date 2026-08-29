@@ -21,7 +21,16 @@ import { HERRAMIENTAS, HERRAMIENTA_POR_NOMBRE } from "@/lib/mcp/herramientas";
 
 export const dynamic = "force-dynamic";
 
-const VERSION_PROTOCOLO = "2024-11-05";
+/**
+ * Las versiones del protocolo que sabemos hablar, de la más nueva a la más vieja.
+ *
+ * Nuestra superficie son tres métodos y herramientas de solo lectura, que no
+ * cambiaron entre estas revisiones, así que se acepta la que pida el cliente. Con
+ * una sola fija —estaba en la de 2024— un cliente actual pide la suya, se le
+ * contesta otra, y algunos cortan ahí en vez de seguir.
+ */
+const VERSIONES = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
+const VERSION_PROTOCOLO = VERSIONES[0];
 
 type Peticion = { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: Record<string, unknown> };
 
@@ -101,7 +110,11 @@ export async function POST(req: Request) {
 
   if (method === "initialize") {
     return respuesta(id, {
-      protocolVersion: VERSION_PROTOCOLO,
+      // Se devuelve la que pidió si la sabemos hablar; si no, la nuestra, que es
+      // lo que el protocolo manda hacer para que el cliente decida si sigue.
+      protocolVersion: (VERSIONES as readonly string[]).includes(String(params?.protocolVersion))
+        ? String(params?.protocolVersion)
+        : VERSION_PROTOCOLO,
       capabilities: { tools: {} },
       serverInfo: { name: "platlia", version: "1.0.0" },
       instructions:
@@ -152,10 +165,27 @@ export async function POST(req: Request) {
   return error(id, -32601, `Método no soportado: ${method}.`);
 }
 
-/** Algunos clientes tantean con GET antes de hablar. Se les dice qué es esto. */
+/**
+ * En este transporte, `GET` es cómo un cliente abre el canal por el que el
+ * servidor le habla a él, y hay que contestar **405** cuando no se ofrece.
+ *
+ * Acá no se ofrece a propósito: las siete herramientas son de solo lectura y
+ * contestan en el momento, así que no hay nada que empujar. Antes esto devolvía un
+ * 200 con un JSON descriptivo, que es peor que no contestar: el cliente pide un
+ * flujo de eventos, recibe otra cosa con código de éxito, y se queda esperando.
+ */
 export async function GET() {
-  return Response.json(
-    { name: "platlia", protocol: "mcp", transport: "http", version: VERSION_PROTOCOLO },
-    { status: 200 },
-  );
+  return new Response(null, { status: 405, headers: { allow: "POST, OPTIONS" } });
+}
+
+/** El navegador pregunta antes de un POST con cabecera propia. */
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "POST, OPTIONS",
+      "access-control-allow-headers": "content-type, authorization, mcp-protocol-version",
+    },
+  });
 }

@@ -116,7 +116,14 @@ export default async function ConfiguracionPage() {
   const conexionesIa = esPropietario
     ? await db.tokenIa.findMany({
         orderBy: { createdAt: "desc" },
-        select: { id: true, nombre: true, ultimoUsoEn: true, createdAt: true },
+        select: {
+          id: true,
+          nombre: true,
+          ultimoUsoEn: true,
+          createdAt: true,
+          expiresAt: true,
+          clientId: true,
+        },
       })
     : null;
 
@@ -158,7 +165,9 @@ export default async function ConfiguracionPage() {
         esPropietario={esPropietario}
         slug={negocio.slug}
         mesas={mesas}
-        conexionesIa={conexionesIa}
+        conexionesIa={
+          conexionesIa?.map(({ clientId, ...c }) => ({ ...c, porOauth: clientId !== null })) ?? null
+        }
         sede={negocio.name}
         cantidadDeSedes={sedesDeLaCuenta}
         urlMcp={`${env.APP_URL}/api/mcp`}

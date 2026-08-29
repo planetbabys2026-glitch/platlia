@@ -8,7 +8,14 @@ import { licenciaVigente } from "@/lib/auth/reglas";
 // inquilino todavía; la membresía se verifica a mano, que es lo que lo reemplaza.
 // eslint-disable-next-line no-restricted-imports
 import { rootDb } from "@/lib/db/root";
-import { VIDA_DEL_CODIGO_MS, generarSecreto, hashOpaco, redirectPermitido, urlDeRetorno } from "@/lib/mcp/oauth";
+import {
+  VIDA_DEL_CODIGO_MS,
+  generarSecreto,
+  hashOpaco,
+  decidirSobreCliente,
+  nombreMostrable,
+  urlDeRetorno,
+} from "@/lib/mcp/oauth";
 import { autorizarSchema } from "./schemas";
 
 /**
@@ -37,14 +44,62 @@ export async function autorizar(_estado: unknown, formData: FormData) {
   const sesion = await readSession("APP");
   if (!sesion) return { error: "Se cerró tu sesión. Ingresá de nuevo." };
 
+
+  /**
+   * Acá se ata el `client_id` a su dirección de retorno, la primera vez.
+   *
+   * No todos los clientes usan el alta automática: en Claude.ai, por ejemplo, la
+   * opción "usa tu propio cliente OAuth" manda el nombre que uno escribió y nunca
+   * pasa por el registro. Cortar ahí hacía imposible conectar por ese camino.
+   *
+   * El alta se hace ACÁ y no al pintar la pantalla porque aquello es un GET:
+   * cualquier robot que siguiera el enlace dejaría filas. Se escribe recién cuando
+   * una persona con sesión aprueba.
+   *
+   * Desde este momento ese `client_id` no puede volver a ningún otro lado. Lo peor
+   * que puede hacer alguien tomando un nombre conocido antes que su dueño es
+   * dejarlo inservible para él —molesto, y nunca una filtración—, porque el código
+   * seguiría yendo a la dirección atada y no a la suya.
+   */
   const cliente = await rootDb.oAuthClient.findUnique({
     where: { clientId: input.clientId },
     select: { redirectUris: true },
   });
-  if (!cliente || !redirectPermitido(input.redirectUri, cliente.redirectUris)) {
+
+  const veredicto = decidirSobreCliente({
+    registradas: cliente?.redirectUris ?? null,
+    redirectUri: input.redirectUri,
+  });
+
+  if (veredicto === "RECHAZAR") {
     // No se redirige: mandar un `error=` a una dirección que no verificamos sería
     // usar a Platlia de trampolín hacia donde quiera el que armó el enlace.
-    return { error: "La aplicación o su dirección de retorno no están registradas." };
+    return { error: "Esa no es la dirección con la que se registró esta aplicación." };
+  }
+
+  if (veredicto === "ATAR") {
+    try {
+      await rootDb.oAuthClient.create({
+        data: {
+          clientId: input.clientId,
+          clientName: nombreMostrable(input.clientId),
+          redirectUris: [input.redirectUri],
+        },
+      });
+    } catch {
+      // Alguien la creó entre la lectura y la escritura: se relee y se valida,
+      // que es lo mismo que habría pasado si hubiera llegado un instante antes.
+      const ahora = await rootDb.oAuthClient.findUnique({
+        where: { clientId: input.clientId },
+        select: { redirectUris: true },
+      });
+      if (
+        decidirSobreCliente({ registradas: ahora?.redirectUris ?? null, redirectUri: input.redirectUri }) !==
+        "SEGUIR"
+      ) {
+        return { error: "Esa no es la dirección con la que se registró esta aplicación." };
+      }
+    }
   }
 
   const membresia = await rootDb.membership.findUnique({

@@ -9,7 +9,13 @@ import { licenciaVigente } from "@/lib/auth/reglas";
 // cual acotar, igual que en /elegir-negocio.
 // eslint-disable-next-line no-restricted-imports
 import { rootDb } from "@/lib/db/root";
-import { revisarPeticion, urlDeRetorno } from "@/lib/mcp/oauth";
+import {
+  hostDeRetorno,
+  nombreMostrable,
+  redirectPermitido,
+  revisarPeticion,
+  urlDeRetorno,
+} from "@/lib/mcp/oauth";
 import { FormularioAutorizar } from "./formulario";
 
 export const metadata: Metadata = { title: "Autorizar acceso · Platlia" };
@@ -103,23 +109,39 @@ export default async function AutorizarPage({
   });
 
   /**
-   * Si la aplicación no se registró, o la dirección de retorno no es una de las
-   * suyas, el error se muestra ACÁ y no se redirige.
+   * Una aplicación que no se dio de alta NO es motivo para cortar.
    *
-   * Redirigir con un `error=` a una dirección que no verificamos sería usar a
-   * Platlia de trampolín hacia donde quiera el que armó el enlace. Cuando la
-   * dirección todavía no está probada, la única salida segura es la pantalla.
+   * El alta automática está y funciona, pero no todos los clientes la usan: hay
+   * quien manda el nombre del conector como `client_id` y nunca pasa por ahí. Con
+   * eso cortado, conectar era imposible y el mensaje mandaba a borrar y volver a
+   * agregar la conexión, que muchas veces no cambia nada.
+   *
+   * Se acepta y la primera vez queda ATADA a esta dirección de retorno (lo escribe
+   * la acción, al aprobar, no este GET). Desde entonces ese `client_id` no puede
+   * apuntar a ningún otro lado, que es lo que impide reusar un nombre conocido
+   * para desviar el código.
+   *
+   * Y lo que de verdad protege acá abajo no es el registro sino que **el dueño vea
+   * a dónde va el código**: quien quiera robarlo puede registrar una aplicación
+   * llamada "Claude" apuntando a su propio servidor. Lo único que separa eso de lo
+   * legítimo es que en pantalla diga otra cosa que `claude.ai`.
    */
-  if (!cliente || !cliente.redirectUris.includes(peticion.redirectUri!)) {
+  const yaRegistrada = cliente !== null;
+  if (cliente && !redirectPermitido(peticion.redirectUri!, cliente.redirectUris)) {
+    // Registrada y pidiendo volver a otro lado: acá sí se corta, y sin redirigir
+    // —mandar un `error=` a una dirección no verificada sería usar a Platlia de
+    // trampolín hacia donde quiera el que armó el enlace.
     return (
-      <Marco titulo="Esta aplicación no está registrada">
+      <Marco titulo="Esa dirección no es la de esta aplicación">
         <p className="text-sm text-muted-foreground">
-          No reconocemos a quien está pidiendo el acceso, o la dirección a la que quiere volver no
-          es la que registró. No vamos a mandarte ahí.
+          <strong className="text-foreground">{nombreMostrable(cliente.clientName)}</strong> ya está
+          registrada, pero quiere volver a{" "}
+          <strong className="text-foreground">{hostDeRetorno(peticion.redirectUri!)}</strong>, que no
+          es la dirección con la que se dio de alta. No vamos a mandarte ahí.
         </p>
         <p className="text-sm text-muted-foreground">
-          Si estás conectando tu asistente, borrá la conexión y volvé a agregarla: el registro se
-          hace solo.
+          Si sos vos quien está conectando su asistente y cambiaste algo, escribinos y lo
+          resolvemos.
         </p>
       </Marco>
     );
@@ -168,7 +190,9 @@ export default async function AutorizarPage({
   return (
     <Marco titulo="Autorizar acceso">
       <FormularioAutorizar
-        aplicacion={cliente.clientName}
+        aplicacion={nombreMostrable(cliente?.clientName ?? peticion.clientId!)}
+        destino={hostDeRetorno(peticion.redirectUri!)}
+        yaRegistrada={yaRegistrada}
         sedes={sedes}
         clientId={peticion.clientId!}
         redirectUri={peticion.redirectUri!}

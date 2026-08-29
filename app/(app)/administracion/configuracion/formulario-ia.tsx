@@ -15,6 +15,10 @@ export type ConexionIa = {
   nombre: string;
   ultimoUsoEn: Date | null;
   createdAt: Date;
+  /** Salió del flujo de autorización, no de una llave pegada a mano. */
+  porOauth: boolean;
+  /** Las de OAuth caducan y se renuevan solas; las manuales no caducan. */
+  expiresAt: Date | null;
 };
 
 /**
@@ -122,6 +126,20 @@ export function FormularioIa({
         </div>
       ) : null}
 
+      {/* La llave a mano es el camino de excepción y la pantalla ahora lo dice.
+          Antes estaba primero y sin explicación, así que quien entraba creaba una
+          llave que su asistente iba a pedirle solo por el otro camino. */}
+      <div className="space-y-3 rounded-2xl border border-[var(--linea-16)] bg-[var(--panel)] p-4">
+        <p className="rotulo-seccion">
+          <span className="shrink-0">¿Tu asistente pide un token?</span>
+        </p>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Algunos programas no abren esa ventana y solo saben pegar un token —Claude Desktop con
+          archivo de configuración, Cursor, n8n, un script propio—. Para esos, creá una llave acá.{" "}
+          <strong className="text-foreground">No caduca</strong>, así que conviene cortarla cuando
+          dejes de usarla.
+        </p>
+
       <form action={accion} className="flex flex-wrap items-end gap-3">
         <div className="min-w-56 flex-1 space-y-1.5">
           <Label htmlFor="nombre-ia">Nombre de la conexión</Label>
@@ -137,9 +155,10 @@ export function FormularioIa({
         </div>
         <Button type="submit" className="gap-1.5">
           <Plus className="size-4" />
-          Crear conexión
+          Crear llave
         </Button>
       </form>
+      </div>
 
       {!estado.ok && estado.error ? (
         <p role="alert" className="text-sm text-destructive-soft">
@@ -169,6 +188,14 @@ export function FormularioIa({
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">{c.nombre}</p>
+                  {/* Con dos conexiones del mismo nombre —una aprobada desde el
+                      asistente y otra pegada a mano— el nombre solo no alcanza
+                      para saber cuál cortar. */}
+                  <p className="font-mono text-rotulo uppercase tracking-[0.12em] text-muted-foreground">
+                    {c.porOauth
+                      ? `Aprobada desde el asistente · vence ${formatDateTimeInTimeZone(c.expiresAt!, timeZone).split(",")[0]}`
+                      : "Llave pegada a mano · no caduca"}
+                  </p>
                   <p className="font-mono text-rotulo uppercase tracking-[0.12em] text-muted-foreground">
                     {c.ultimoUsoEn
                       ? `Se usó ${formatDateTimeInTimeZone(c.ultimoUsoEn, timeZone)}`
@@ -195,8 +222,13 @@ export function FormularioIa({
         <p className="rotulo-seccion">
           <span className="shrink-0">Cómo conectarla</span>
         </p>
-        <p className="text-sm text-muted-foreground">
-          En tu asistente, agregá un servidor MCP con esta dirección y pegá la llave como token.
+        {/* Esto decía "pegá la llave como token", y era el consejo equivocado para
+            el caso normal: manda a crear a mano una llave que el asistente iba a
+            pedir solo. La mayoría no necesita ver ningún token. */}
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Agregá esta dirección como servidor MCP en tu asistente. Te va a abrir una ventana para
+          que apruebes el acceso y listo:{" "}
+          <strong className="text-foreground">no hace falta ninguna llave</strong>.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 py-2.5 font-mono text-xs text-foreground">

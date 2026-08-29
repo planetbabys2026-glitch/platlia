@@ -120,8 +120,28 @@ async function main() {
     },
   });
 
+  /**
+   * Los códigos de autorización de OAuth que ya no sirven.
+   *
+   * Viven diez minutos y se usan una sola vez, así que a los pocos minutos de
+   * nacer no son más que basura. Se barren acá y no al canjearlos —ahí hay un
+   * cliente esperando— ni por reloj propio: el barrido diario ya corre.
+   *
+   * Se borran los usados con más de un día, no los de recién: si algo sale mal
+   * durante una conexión, el rastro del día tiene que seguir estando para poder
+   * mirarlo.
+   */
+  const codigos = await rootDb.oAuthCode.deleteMany({
+    where: {
+      OR: [
+        { expiresAt: { lt: new Date(ahora.getTime() - 24 * 60 * 60 * 1000) } },
+        { usedAt: { lt: new Date(ahora.getTime() - 24 * 60 * 60 * 1000) } },
+      ],
+    },
+  });
+
   console.log(
-    `Revisadas ${suscripciones.length} suscripciones. ${cambios.length} cambiaron de estado, ${avisados.length} avisadas, ${expirados.count} pagos pendientes expirados.`,
+    `Revisadas ${suscripciones.length} suscripciones. ${cambios.length} cambiaron de estado, ${avisados.length} avisadas, ${expirados.count} pagos pendientes expirados, ${codigos.count} códigos de IA barridos.`,
   );
   for (const cambio of cambios) console.log(`  · ${cambio}`);
   for (const aviso of avisados) console.log(`  ✉ ${aviso}`);

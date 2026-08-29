@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  decidirSobreCliente,
   redirectPermitido,
   redirectRegistrableEs,
   revisarPeticion,
@@ -105,5 +106,42 @@ describe("la vuelta al cliente", () => {
   it("conserva lo que la dirección ya traía", () => {
     const u = urlDeRetorno("https://claude.ai/cb?origen=app", { code: "abc", state: null });
     expect(new URL(u).searchParams.get("origen")).toBe("app");
+  });
+});
+
+describe("qué hacer con la aplicación que pide", () => {
+  const CB = "https://claude.ai/api/mcp/auth_callback";
+
+  it("una que no conocemos se ata a la dirección con la que llegó", () => {
+    // No todos los clientes usan el alta automática: en Claude.ai, la opción
+    // "usa tu propio cliente OAuth" manda el nombre escrito a mano. Cortarles el
+    // paso hacía imposible conectar por ese camino.
+    expect(decidirSobreCliente({ registradas: null, redirectUri: CB })).toBe("ATAR");
+  });
+
+  it("una conocida que vuelve al mismo lado sigue de largo", () => {
+    expect(decidirSobreCliente({ registradas: [CB], redirectUri: CB })).toBe("SEGUIR");
+  });
+
+  it("una conocida que quiere volver a OTRO lado se rechaza", () => {
+    // Es la razón de ser del atado: tomar un client_id conocido y desviar el
+    // código a otro servidor.
+    expect(decidirSobreCliente({ registradas: [CB], redirectUri: "https://evil.com/cb" })).toBe(
+      "RECHAZAR",
+    );
+  });
+
+  it("nunca ata un http:// de la calle, ni siquiera siendo nueva", () => {
+    // Si no, "traigo mi propio client_id" sería la puerta de atrás del alta
+    // automática, que sí lo exige.
+    expect(decidirSobreCliente({ registradas: null, redirectUri: "http://evil.com/cb" })).toBe(
+      "RECHAZAR",
+    );
+  });
+
+  it("deja pasar localhost, que es donde se desarrolla", () => {
+    expect(decidirSobreCliente({ registradas: null, redirectUri: "http://localhost:3000/cb" })).toBe(
+      "ATAR",
+    );
   });
 });

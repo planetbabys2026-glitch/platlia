@@ -131,3 +131,53 @@ export function urlDeRetorno(redirectUri: string, params: Record<string, string 
   for (const [k, v] of Object.entries(params)) if (v !== null) u.searchParams.set(k, v);
   return u.toString();
 }
+
+/**
+ * A dónde va a volver el código, dicho en una palabra.
+ *
+ * Es lo que se le muestra al dueño antes de que apruebe, y es **la defensa real**
+ * de todo esto. El registro previo protege menos de lo que parece: alguien que
+ * quiera robar el acceso puede registrar una aplicación llamada "Claude" que
+ * apunte a su servidor y mandar el enlace igual. Lo único que separa eso de lo
+ * legítimo es que en pantalla diga `evil.com` en vez de `claude.ai`, y que quien
+ * aprueba lo vea.
+ */
+export function hostDeRetorno(uri: string): string {
+  try {
+    return new URL(uri).host;
+  } catch {
+    return uri;
+  }
+}
+
+/** Texto que llega de afuera y se va a mostrar: acotado, nunca crudo. */
+export function nombreMostrable(valor: string): string {
+  return valor.trim().slice(0, 80) || "Aplicación sin nombre";
+}
+
+export type VeredictoCliente = "ATAR" | "SEGUIR" | "RECHAZAR";
+
+/**
+ * Qué hacer con la aplicación que está pidiendo, según lo que ya sepamos de ella.
+ *
+ * Es la decisión de seguridad del flujo entero y por eso vive acá, pura y con
+ * tests, en vez de enterrada en la acción: de esto depende que el código de
+ * autorización llegue a quien lo pidió y no a otro.
+ *
+ * - **Sin registrar** → se ata a esta dirección y se sigue. No todos los clientes
+ *   usan el alta automática, y cortarles el paso hacía imposible conectar.
+ * - **Registrada y coincide** → adelante.
+ * - **Registrada y NO coincide** → se rechaza, sin importar cuánto se parezca.
+ *
+ * Lo peor que consigue alguien tomando un nombre conocido antes que su dueño es
+ * dejárselo inservible: molesto, y nunca una filtración, porque a partir de ahí el
+ * código va a la dirección atada y no a la suya.
+ */
+export function decidirSobreCliente(args: {
+  registradas: readonly string[] | null;
+  redirectUri: string;
+}): VeredictoCliente {
+  if (!redirectRegistrableEs(args.redirectUri)) return "RECHAZAR";
+  if (args.registradas === null) return "ATAR";
+  return redirectPermitido(args.redirectUri, args.registradas) ? "SEGUIR" : "RECHAZAR";
+}

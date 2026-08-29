@@ -615,6 +615,35 @@ Cuatro decisiones que sostienen el flujo, y las cuatro son fáciles de escribir 
    impresión y de la guarda anti-doble-emisión ante la DIAN—: leerlo primero y marcarlo después da
    dos llaves por dos canjes simultáneos del mismo código.
 
+**`GET /api/mcp` contesta 405, y eso es lo correcto.** En este transporte el `GET` es cómo un cliente
+abre el canal por el que el servidor le habla a él; acá no se ofrece —las siete herramientas
+contestan en el momento y no hay nada que empujar—. Antes devolvía un 200 con un JSON descriptivo,
+que es peor que no contestar: el cliente pide un flujo de eventos, recibe otra cosa con código de
+éxito, y se queda esperando.
+
+**La versión del protocolo se negocia.** Estaba fija en la de 2024; un cliente actual pide la suya,
+se le contesta otra, y algunos cortan ahí. Se devuelve la pedida cuando está en `VERSIONES` —nuestra
+superficie son tres métodos de solo lectura, que no cambiaron entre esas revisiones— y la nuestra si
+no.
+
+**Los códigos usados y vencidos los barre el cron diario** (`pnpm cron:subs`), con un día de gracia:
+si algo salió mal durante una conexión, el rastro del día tiene que seguir estando para mirarlo.
+
+**No registrarse NO es motivo para cortar** (`decidirSobreCliente`, puro y con tests). El alta
+automática está y funciona, pero no todos los clientes la usan: en Claude.ai la opción *"usa tu
+propio cliente OAuth"* manda el nombre escrito a mano y nunca pasa por el registro —con eso cortado,
+conectar por ese camino era imposible y el mensaje mandaba a borrar y volver a agregar la conexión,
+que no cambia nada—. Un `client_id` desconocido se acepta y queda **atado** a esa dirección de
+retorno; desde entonces no puede apuntar a ningún otro lado. Lo peor que consigue alguien tomando un
+nombre conocido antes que su dueño es dejárselo inservible: molesto, y nunca una filtración. El atado
+lo escribe la **acción** al aprobar y no la página, que es un GET: si no, cualquier robot que siguiera
+el enlace dejaría filas.
+
+**Lo que de verdad protege es que el dueño vea A DÓNDE va el código**, y por eso la pantalla lo dice.
+El registro previo protege menos de lo que parece: quien quiera robar el acceso puede registrar una
+aplicación llamada "Claude" apuntando a su propio servidor y mandar el enlace igual. Lo único que
+separa eso de lo legítimo es que en pantalla diga otra cosa que `claude.ai`.
+
 **El refresco se rota en cada uso**, así que uno filtrado deja de servir en cuanto el cliente
 legítimo renueva. Y **la llave de OAuth caduca a los 30 días mientras la manual no**: no es una
 inconsistencia, del otro lado de una llave manual no hay nadie que sepa renovarla y caducarla sería

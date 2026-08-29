@@ -20,6 +20,8 @@ export type SedeAutorizable = { id: string; nombre: string };
  */
 export function FormularioAutorizar({
   aplicacion,
+  destino,
+  yaRegistrada,
   sedes,
   clientId,
   redirectUri,
@@ -28,6 +30,9 @@ export function FormularioAutorizar({
   urlDeCancelacion,
 }: {
   aplicacion: string;
+  /** El host al que va a volver el código. Es lo que hay que leer antes de aprobar. */
+  destino: string;
+  yaRegistrada: boolean;
   sedes: SedeAutorizable[];
   clientId: string;
   redirectUri: string;
@@ -56,6 +61,18 @@ export function FormularioAutorizar({
           Va a poder consultar tus ventas, tu inventario, tus horas de más movimiento y tus
           márgenes, y contestarte preguntándole.
         </p>
+        {/* A dónde va el código es LO que hay que leer antes de aprobar: quien
+            quiera robar el acceso puede llamar a su aplicación "Claude" y apuntarla
+            a su propio servidor, y esto es lo único que lo delata. */}
+        <p className="flex flex-wrap items-baseline gap-x-2 border-t border-[var(--linea-16)] pt-3 text-sm text-muted-foreground">
+          Te va a devolver a
+          <strong className="font-mono text-foreground">{destino}</strong>
+        </p>
+        {!yaRegistrada ? (
+          <p className="text-sm text-muted-foreground">
+            Es la primera vez que la vemos. Si no reconocés esa dirección, cancelá.
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-[var(--linea-16)] bg-[var(--panel-2)] p-4 space-y-2">
