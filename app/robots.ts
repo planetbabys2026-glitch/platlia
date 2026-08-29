@@ -14,6 +14,37 @@ import { env } from "@/lib/env";
  * antes de indexar y, cuando encuentran solo reglas para Googlebot, algunos se
  * abstienen. Como parte del tráfico hoy llega por una respuesta de un asistente
  * —"¿qué software uso para mi bar en Colombia?"— conviene nombrarlos.
+ *
+ * **Pero solo los que contestan, no los que entrenan.** Cloudflare antepone su
+ * propio bloque a este archivo (`# BEGIN Cloudflare Managed content`) y ahí los
+ * rastreadores de entrenamiento —ClaudeBot, GPTBot, CCBot, Google-Extended,
+ * meta-externalagent, Applebot-Extended— llevan `Disallow: /`. Nombrarlos acá con
+ * `Allow: /` no los desbloquea: deja **dos grupos `User-agent` con el mismo
+ * nombre diciendo lo opuesto**, y con grupos duplicados el comportamiento no está
+ * definido igual en todos los rastreadores —los conservadores toman la primera
+ * coincidencia, que es la de Cloudflare—. O sea que la contradicción no nos daba
+ * nada y volvía impredecible el archivo entero.
+ *
+ * Los cuatro que quedan son los que de verdad importan para aparecer en una
+ * respuesta, y Cloudflare **no** los bloquea, así que acá no hay conflicto:
+ *
+ * | Agente | Qué hace |
+ * |---|---|
+ * | `Claude-User` | entra a la página cuando alguien le pregunta a Claude |
+ * | `ChatGPT-User` | lo mismo, del lado de ChatGPT |
+ * | `OAI-SearchBot` | arma el índice de búsqueda de ChatGPT |
+ * | `PerplexityBot` | arma el de Perplexity |
+ *
+ * Lo que se pierde bloqueando a los otros es entrar al **corpus de
+ * entrenamiento**: que el modelo te conozca sin tener que buscar. Es una decisión
+ * de negocio y está tomada a propósito —el contenido se protege del
+ * entrenamiento—, no un olvido. Si algún día se apaga el robots.txt gestionado de
+ * Cloudflare (panel → AI Crawl Control), acá se pueden sumar los otros y hay que
+ * actualizar `tests/unit/robots.test.ts`, que fija justamente esto.
+ *
+ * Y `Google-Extended` no se nombra porque no hace falta discutirlo: solo controla
+ * si el contenido alimenta a Gemini. **No tiene ningún efecto sobre el
+ * posicionamiento en la Búsqueda de Google**, que es el que importa acá.
  */
 export default function robots(): MetadataRoute.Robots {
   // Lo que nunca se indexa: pantallas con sesión, la consola de soporte, los
@@ -42,17 +73,13 @@ export default function robots(): MetadataRoute.Robots {
     "/panel",
   ];
 
-  const agentesDeIa = [
-    "GPTBot",
-    "OAI-SearchBot",
-    "ChatGPT-User",
-    "ClaudeBot",
-    "Claude-User",
-    "PerplexityBot",
-    "Google-Extended",
-    "Applebot-Extended",
-    "meta-externalagent",
-  ];
+  /**
+   * Solo los que contestan una pregunta en el momento o arman un índice de
+   * búsqueda. Los de entrenamiento van afuera: Cloudflare ya los bloquea y
+   * nombrarlos acá solo creaba un grupo duplicado que se contradice. Ver el
+   * comentario de arriba.
+   */
+  const agentesDeIa = ["OAI-SearchBot", "ChatGPT-User", "Claude-User", "PerplexityBot"];
 
   return {
     rules: [

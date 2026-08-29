@@ -1681,6 +1681,10 @@ no portadas de productos. Ese término no lo gana una home compitiendo de frente
 *dentro* de esas listas —el alta en Capterra, ComparaSoftware y similares es gratis y es la palanca
 más rápida— y publicando las propias. Lo que sigue es la mitad que sí vive en el repo.
 
+**Y el canal de asistentes no es el mismo que el buscador.** Quien contesta "¿qué software me
+recomendás?" entra con `Claude-User` o `ChatGPT-User`, no con el crawler de entrenamiento; eso está
+abierto y separado más abajo.
+
 ### Una página por término, y distintas por dentro
 
 `/software-para-restaurantes` y `/software-para-bares` existen porque un `<h1>` que dice las dos
@@ -1744,17 +1748,44 @@ cual el campo dejaba de servir para lo único que sirve. Las fechas ahora son re
 mano en `app/(marketing)/rutas.ts`; las guías entran solas desde `GUIAS`, porque listarlas en los
 dos lados es la forma de que un día aparezcan duplicadas.
 
-### Dos cosas que no están en el repo y hay que mirar en el panel
+### Cloudflare antepone su propio `robots.txt`, y bloquea entrenar pero no contestar
 
-1. **Cloudflare antepone su propio `robots.txt` al de la aplicación.** El archivo en vivo tiene 283
-   líneas: el bloque "Managed content" pone `Disallow: /` para ClaudeBot, GPTBot, CCBot,
-   Google-Extended y meta-externalagent, que `app/robots.ts` permite a propósito. No bloquea a
-   Googlebot —usa el grupo `*`—, pero con grupos `User-agent` duplicados el comportamiento no está
-   definido de forma consistente y los rastreadores conservadores toman la primera coincidencia. Se
-   apaga en Cloudflare → Settings → Crawlers.
-2. **`www.platlia.com` responde 525.** Cloudflare no alcanza el origen para ese hostname. Si la
-   propiedad de Search Console se creó como `https://www.platlia.com`, no va a mostrar nada nunca.
-   Lo correcto es una propiedad de **dominio**, verificada por DNS.
+El archivo en vivo tiene 283 líneas: el bloque `# BEGIN Cloudflare Managed content` va **antes** del
+que sirve la aplicación. Separa bien dos cosas que es fácil confundir:
+
+| `Disallow: /` (entrenan modelos) | Sin nombrar → caen en `*` con `Allow: /` |
+|---|---|
+| ClaudeBot · GPTBot · CCBot | **Claude-User · ChatGPT-User** |
+| Google-Extended · meta-externalagent | **OAI-SearchBot · PerplexityBot** |
+| Applebot-Extended · Amazonbot · Bytespider | **Googlebot** |
+
+O sea que **el canal que importa está abierto**: cuando alguien le pregunta a un asistente "¿qué
+software uso para mi bar?", el que entra a la página es `Claude-User` o `ChatGPT-User`, y el índice
+que ese asistente consulta lo arma `OAI-SearchBot`. Ninguno está bloqueado. Y `Google-Extended` solo
+controla si el contenido alimenta a Gemini: **no tiene ningún efecto sobre el posicionamiento en la
+Búsqueda**.
+
+Lo que sí estaba mal era la **contradicción**: `app/robots.ts` nombraba a ClaudeBot, GPTBot,
+Google-Extended, Applebot-Extended y meta-externalagent con `Allow: /` mientras Cloudflare les ponía
+`Disallow: /`. Eso no los desbloquea —deja dos grupos `User-agent` con el mismo nombre diciendo lo
+opuesto, y con grupos duplicados el comportamiento no está definido igual en todos los rastreadores;
+los conservadores toman la primera coincidencia, que es la de Cloudflare—. No daba nada y volvía
+impredecible el archivo entero.
+
+**La decisión tomada es conservar el bloqueo de entrenamiento** y que nuestro archivo diga lo mismo:
+`agentesDeIa` quedó con los cuatro que contestan en vivo y nada más. Lo que se resigna es entrar al
+**corpus de entrenamiento** —que el modelo conozca el producto sin tener que buscarlo—, y es a
+propósito. `tests/unit/robots.test.ts` fija las dos mitades: que no reaparezca ninguno de los
+bloqueados y que no se caiga ninguno de los cuatro. Si algún día se apaga el robots.txt gestionado
+—panel → **AI Crawl Control**, ya no está en Settings → Crawlers—, hay que actualizar esa prueba.
+
+### `www` respondía 525
+
+Cloudflare no alcanzaba el origen para ese hostname, así que cualquiera que escribiera `www.` no
+entraba —y si la propiedad de Search Console se hubiera creado como `https://www.platlia.com`, no
+habría mostrado nada nunca—. Se resolvió con una Redirect Rule (`www.platlia.com/*` → `301` a la
+raíz); la propiedad correcta en Search Console es la de **dominio**, verificada por DNS, que cubre
+los dos hostnames.
 
 `GOOGLE_SITE_VERIFICATION` y `BING_SITE_VERIFICATION` están en `lib/env.ts` y se emiten desde el
 `metadata` raíz. **Opcionales, y tienen que seguir siéndolo**: `next build` importa `lib/env.ts` al
