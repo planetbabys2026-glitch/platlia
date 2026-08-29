@@ -262,6 +262,7 @@ model Business {
   printJobs     PrintJob[]
   printAgents   PrintAgent[]
   tokensIa      TokenIa[]
+  oauthCodes    OAuthCode[]
   auditLogs     AuditLog[]
 
   inventoryItems       InventoryItem[]
@@ -498,6 +499,7 @@ model User {
   orderItemsCanceled OrderItem[]         @relation("OrderItemCanceledBy")
   orderItemsStarted  OrderItem[]         @relation("OrderItemStartedBy")
   tokensIaCreados    TokenIa[]           @relation("TokenIaCreatedBy")
+  oauthCodes         OAuthCode[]         @relation("OAuthCodeUser")
   orderItemsReady    OrderItem[]         @relation("OrderItemReadyBy")
   paymentsReceived   OrderPayment[]      @relation("OrderPaymentReceivedBy")
   cashSessionsOpened CashSession[]       @relation("CashSessionOpenedBy")
@@ -818,20 +820,16 @@ model PrintJob {
 /// verifica por su cuenta.
 /**
  * La llave con la que la IA de un negocio lee SU información.
- *
  * Cada fila es una conexión: "el ChatGPT de Ana", "el Claude del celular del
  * administrador". Del token se guarda **solo el hash**, igual que en
  * `PrintAgent` y `VerificationToken`: una copia de la base no le regala a nadie
  * la contabilidad de un local.
- *
  * SHA-256 y no argon2, por lo mismo que el agente de impresión: son 32 bytes
  * aleatorios y no una contraseña que alguien repite en otro lado, y el hash se
  * verifica en cada pregunta que hace el asistente.
- *
  * `ultimoUsoEn` no es adorno: es lo único que le permite al dueño ver que una
  * conexión que creyó apagada sigue viva, o darse cuenta de que la que configuró
  * nunca funcionó.
- *
  * Revocar BORRA la fila. Un hash revocado que se queda en la tabla es una llave
  * vieja esperando a que alguien se equivoque en la consulta; quién tuvo acceso y
  * hasta cuándo queda en `AuditLog`, que es donde se revisa eso.
@@ -852,7 +850,61 @@ model TokenIa {
   ultimoUsoEn DateTime? @db.Timestamptz(3)
   createdAt   DateTime  @default(now()) @db.Timestamptz(3)
 
+  /// Qué aplicación pidió esta llave, cuando salió del flujo de OAuth.
+  /// Nula en las que el dueño creó a mano desde Configuración.
+  clientId String?
+
+  /// Las llaves de OAuth caducan y se renuevan solas con el refresco; las que se
+  /// crean a mano no, porque del otro lado no hay nadie que sepa renovarlas.
+  expiresAt   DateTime? @db.Timestamptz(3)
+  refreshHash String?   @unique
+
   @@index([businessId])
+}
+
+/// La aplicación que pide acceso: Claude, ChatGPT, un cliente propio.
+///
+/// Se da de alta sola (RFC 7591): un cliente MCP se registra antes de mandar a
+/// nadie a autorizar nada. No es una cuenta ni tiene secreto —son aplicaciones
+/// que corren en el navegador de la gente— y por eso lo único que la ata es el
+/// `redirectUris`, que se compara exacto: es lo que impide que alguien reuse un
+/// `client_id` ajeno para que el código le llegue a su servidor.
+model OAuthClient {
+  id           String   @id @default(cuid())
+  clientId     String   @unique
+  clientName   String
+  redirectUris String[]
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+}
+
+/// El código de autorización: vive diez minutos y se usa una sola vez.
+///
+/// Guarda a qué SEDE dijo que sí el dueño, que es lo que hace que la llave que
+/// sale de acá sea de una sede y no de la cuenta entera.
+model OAuthCode {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  codeHash String @unique
+
+  clientId    String
+  redirectUri String
+
+  /// PKCE: se guarda el desafío y al canjear se exige el verificador que lo genera.
+  codeChallenge String
+
+  userId String?
+  user   User?   @relation("OAuthCodeUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId])
+  @@index([expiresAt])
 }
 
 model PrintAgent {

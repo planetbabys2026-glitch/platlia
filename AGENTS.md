@@ -569,6 +569,77 @@ dirección del servidor, en cambio, es la misma para todas, y eso hay que decirl
 cliente de IA las dos conexiones se ven idénticas, así que con más de una sede la pantalla nombra de
 cuál es la llave. Con una sola no lo dice: sería ruido.
 
+### Un cliente de IA moderno no acepta que le peguen un token
+
+La llave que se copia a mano desde Configuración sirve para lo que deje poner una cabecera propia.
+Claude.ai no: hace el **descubrimiento** del protocolo —pega en `/api/mcp` sin credencial, lee de la
+respuesta a dónde ir a pedirla, da de alta su aplicación solo, manda a la persona a aprobar y recién
+ahí canja un código por el token—. Sin esas rutas adivina `/authorize`, se encuentra un 404 y no hay
+forma de conectar. Pasó tal cual.
+
+Son seis piezas y la cadena se corta si falta cualquiera:
+
+| Ruta | Qué hace |
+|---|---|
+| `401` de `/api/mcp` con `WWW-Authenticate: … resource_metadata=…` | **arranca todo**: sin esa cabecera no hay descubrimiento |
+| `/.well-known/oauth-protected-resource` (y `…/api/mcp`) | a qué servidor pedirle permiso (RFC 9728) |
+| `/.well-known/oauth-authorization-server` | dónde queda cada endpoint (RFC 8414) |
+| `/api/oauth/register` | la aplicación se da de alta sola (RFC 7591) |
+| `/authorize` | **la única pantalla**: el dueño aprueba, y elige la sede |
+| `/api/oauth/token` | canje del código y renovación |
+
+**Las dos variantes del documento de recurso tienen que existir.** El RFC define la forma con el
+camino del recurso pegado atrás y hay clientes que solo prueban esa: con una sola, el descubrimiento
+funciona o no según con qué se conecte.
+
+Los nombres de esas rutas van **en inglés**, a diferencia del resto del producto: son superficie del
+protocolo, no del producto, y un cliente que no encuentre el documento las adivina —y lo que adivina
+es exactamente eso.
+
+**Registrarse no da acceso a nada.** Se consigue un identificador y la promesa de que el código va a
+viajar a la dirección registrada; el acceso lo da un dueño aprobándolo, y solo a la sede que elija.
+No hay secreto de cliente porque son aplicaciones que corren en el equipo de la gente y no pueden
+guardarlo: lo que las ata es PKCE y la dirección de retorno.
+
+Cuatro decisiones que sostienen el flujo, y las cuatro son fáciles de escribir mal:
+
+1. **PKCE solo en `S256`.** `plain` está en el RFC y se rechaza: manda el verificador tal cual, así
+   que ver pasar la petición alcanza para canjear el código.
+2. **La dirección de retorno se compara ENTERA contra las registradas.** El código viaja en esa URL:
+   aceptar una que el cliente no registró es mandarle el código al servidor de quien lo pidió. Nada
+   de comodines ni de comparar solo el dominio.
+3. **Cuando la dirección no está verificada, el error se muestra en pantalla y NO se redirige.**
+   Mandar un `error=` a una dirección sin verificar sería usar a Platlia de trampolín hacia donde
+   quiera el que armó el enlace.
+4. **El código se quema en el mismo `updateMany` con que se reclama** —el patrón del reclamo de
+   impresión y de la guarda anti-doble-emisión ante la DIAN—: leerlo primero y marcarlo después da
+   dos llaves por dos canjes simultáneos del mismo código.
+
+**El refresco se rota en cada uso**, así que uno filtrado deja de servir en cuanto el cliente
+legítimo renueva. Y **la llave de OAuth caduca a los 30 días mientras la manual no**: no es una
+inconsistencia, del otro lado de una llave manual no hay nadie que sepa renovarla y caducarla sería
+cortar la conexión sin que nadie se entere.
+
+**El flujo sobrevive al ingreso.** `/authorize` es la única del flujo que NO va en la lista pública
+del middleware —necesita una persona con sesión, y es la que decide—, y el middleware ya manda el
+`desde` con la URL entera. Sin eso se aterriza en el panel y hay que empezar de nuevo desde el
+asistente, con un error que del otro lado no explica nada. La página además maneja el caso que el
+middleware no puede ver: cookie con firma válida pero sesión revocada en la base, porque el
+middleware corre en edge y no toca la base a propósito.
+
+**La pantalla de permiso dice quién pide, a qué sede y qué NO va a poder hacer.** Una pantalla que no
+dice qué se está entregando entrena a la gente a aprobar sin leer, y después el clic no significa
+nada. Con varias sedes hay que elegir una y no hay opción por defecto que sea la correcta.
+
+**`autorizar` no pasa por `defineAction`** —justamente se está eligiendo la sede— así que las tres
+verificaciones del wrapper van a mano: PROPIETARIO **de esa** sede, licencia vigente y dirección
+registrada. Que la pantalla ya filtre las sedes vencidas no es la seguridad: es un POST alcanzable
+con curl.
+
+**`OAuthCode` tiene `businessId` y va en `lib/db/tenant-models.ts`; `OAuthClient` no lo tiene y va en
+`GLOBAL_MODELS`** —cuando una aplicación se registra todavía no se sabe de qué sede va a ser la
+llave—. El test de scoping obliga a clasificar cada modelo nuevo en una de las dos listas.
+
 Las llaves las crea el **propietario** en Configuración → Conexión con IA, hasta cinco, y el token se
 muestra **una sola vez**. La lista guarda `ultimoUsoEn`, que es lo que le permite al dueño reconocer
 cuál apagar meses después: sin eso, revocar es adivinar entre cinco nombres.
@@ -1576,7 +1647,8 @@ app/imprimir/            HTML limpio para @page 55mm/80mm
 app/turnero/             el televisor del salón: fuera de (app), sin barra de navegación
 lib/db/                  pool.ts · root.ts (rootDb) · tenant.ts (tenantDb) · tenant-models.ts
 lib/{auth,actions,billing,printing,email}/      infraestructura
-lib/mcp/                 token · herramientas (el servidor MCP por negocio)
+lib/mcp/                 token · herramientas · oauth (el servidor MCP por negocio)
+app/authorize/           la pantalla donde el dueño aprueba el acceso de una IA
 lib/printing/            ticket · recibo · comanda (puros) · escpos · cola · emitir · agente
 agente-impresion/        el binario en Go que corre en la PC del local
 lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plataforma

@@ -19,7 +19,9 @@ import { licenciaVigente } from "@/lib/auth/reglas";
  * archivo de configuración sepa qué es y de dónde sacarlo.
  */
 
-const PREFIJO = "plt_ia_";
+/** Se exporta para que el canje de OAuth emita llaves con el mismo prefijo. */
+export const PREFIJO_TOKEN = "plt_ia_";
+const PREFIJO = PREFIJO_TOKEN;
 
 export type NegocioAutenticado = { tokenId: string; businessId: string; nombre: string };
 
@@ -59,6 +61,7 @@ export async function autenticar(
       id: true,
       businessId: true,
       nombre: true,
+      expiresAt: true,
       business: {
         select: {
           status: true,
@@ -70,6 +73,15 @@ export async function autenticar(
     },
   });
   if (!fila) return "TOKEN";
+
+  /**
+   * Las llaves que salen de OAuth caducan; las creadas a mano tienen `expiresAt`
+   * nulo y no. No es una inconsistencia: del otro lado de una llave manual no hay
+   * nadie que sepa renovarla, así que caducarla sería cortar la conexión sin que
+   * nadie se entere. Una vencida se contesta como inválida —el cliente la renueva
+   * con su refresco, que es exactamente lo que va a hacer.
+   */
+  if (fila.expiresAt && fila.expiresAt <= new Date()) return "TOKEN";
 
   /**
    * La licencia manda acá también.

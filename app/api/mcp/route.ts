@@ -1,4 +1,5 @@
 import { autenticar } from "@/lib/mcp/token";
+import { env } from "@/lib/env";
 import { HERRAMIENTAS, HERRAMIENTA_POR_NOMBRE } from "@/lib/mcp/herramientas";
 
 /**
@@ -48,11 +49,22 @@ export async function POST(req: Request) {
     return error(null, -32603, "El servicio no está disponible en este momento.", 503);
   }
   if (negocio === "TOKEN") {
-    // 401 con `WWW-Authenticate`: es lo que hace que un cliente de IA muestre
-    // "revisá el token" en vez de un error genérico de red.
+    /**
+     * Este 401 es el que arranca todo.
+     *
+     * Un cliente moderno no pide un token: pega acá sin credencial a propósito y
+     * lee de esta cabecera dónde está el documento que le dice a qué servidor ir a
+     * pedir permiso. Sin `resource_metadata` no hay descubrimiento, y el cliente
+     * termina adivinando `/authorize` —que fue exactamente lo que pasó.
+     */
     return Response.json(
       { jsonrpc: "2.0", id: null, error: { code: -32001, message: "Token inválido o revocado." } },
-      { status: 401, headers: { "WWW-Authenticate": 'Bearer realm="Platlia"' } },
+      {
+        status: 401,
+        headers: {
+          "WWW-Authenticate": `Bearer realm="Platlia", resource_metadata="${env.APP_URL}/.well-known/oauth-protected-resource"`,
+        },
+      },
     );
   }
 

@@ -81,6 +81,18 @@ function esPublica(pathname: string): boolean {
    * "el servidor está caído".
    */
   if (pathname.startsWith("/api/mcp")) return true;
+
+  /**
+   * El descubrimiento y el canje de OAuth del servidor MCP.
+   *
+   * Son las rutas que un cliente de IA visita ANTES de tener ninguna credencial:
+   * si el middleware las manda a `/ingresar`, el cliente recibe un HTML de login
+   * donde esperaba JSON y el descubrimiento muere ahí. `/authorize` NO va en esta
+   * lista a propósito: es la única del flujo que necesita una persona con sesión,
+   * y es la que decide.
+   */
+  if (pathname.startsWith("/.well-known/oauth-")) return true;
+  if (pathname.startsWith("/api/oauth/")) return true;
   // El agente de impresión corre en una PC del local y tampoco es un navegador:
   // se autentica con su token en cada llamada, como el webhook de MercadoPago.
   if (pathname.startsWith("/api/impresion/")) return true;

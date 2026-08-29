@@ -47,6 +47,7 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "PrintRoute",
   "PrintJob",
   "PrintAgent",
+  "OAuthCode",
   "TokenIa",
 ]);
 
@@ -63,6 +64,11 @@ export const GLOBAL_MODELS: ReadonlySet<string> = new Set([
   "VerificationToken",
   "MpWebhookEvent",
   "PlaceholderImage",
+  // La aplicación que pide acceso por OAuth es de la plataforma: cuando se
+  // registra todavía no se sabe de qué sede va a ser la llave —eso lo decide el
+  // dueño después, en la pantalla de autorización—. El código que sale de ahí sí
+  // tiene `businessId` y por eso vive en la lista de arriba.
+  "OAuthClient",
   // La lista de precios es de Platlia, no de un negocio: la edita el
   // superadministrador y la leen todos por igual.
   "ListaDePrecios",
