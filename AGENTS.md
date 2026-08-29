@@ -1664,6 +1664,112 @@ acento es demasiado oscuro para escribir con él sobre el fondo, `acentoSirveCom
 se aclara con `mezclarHacia`. Escribir `text-white` sobre el acento es un error: hay acentos claros
 —el ámbar y el celeste de los presets— donde queda ilegible.
 
+## Aparecer en Google
+
+El producto llegó a la búsqueda con **cinco URLs**, una sola comercial, y una portada que trata
+"bares" y "restaurantes" como si fueran lo mismo. Lo técnico estaba bien —HTML renderizado en
+servidor, canónica, sitemap, JSON-LD de `Organization`, `SoftwareApplication` y `FAQPage`— y aun
+así no había nada que rankear.
+
+**AMP no es la respuesta, y Search Console la sugiere igual.** Su propia documentación dice que
+Google indexa las páginas AMP como cualquier otra y aplica el mismo estándar "independientemente de
+la tecnología". No es factor de posicionamiento. El panel que lo ofrece es ayuda genérica, no un
+diagnóstico.
+
+**Cuatro de los seis resultados de "software para restaurantes Colombia" son listas y directorios**,
+no portadas de productos. Ese término no lo gana una home compitiendo de frente: se llega estando
+*dentro* de esas listas —el alta en Capterra, ComparaSoftware y similares es gratis y es la palanca
+más rápida— y publicando las propias. Lo que sigue es la mitad que sí vive en el repo.
+
+### Una página por término, y distintas por dentro
+
+`/software-para-restaurantes` y `/software-para-bares` existen porque un `<h1>` que dice las dos
+cosas es más débil, para cualquiera de las dos búsquedas, que uno que dice una sola. Cada una se
+queda con su término entero en `<h1>`, `<title>`, canónica y primer párrafo.
+
+**Y son distintas por dentro, no la misma con sinónimos cambiados.** Dos páginas que dicen lo mismo
+son exactamente lo que Google llama contenido de puerta de entrada y se penaliza. Lo que las separa
+es verdad del producto: un bar necesita que la jornada no corte a medianoche, un restaurante
+necesita costeo por receta. Si el contenido no fuera de verdad distinto, correspondería una sola
+página. `PaginaSegmento` es el molde; el contenido va por props.
+
+`/precios` es página propia porque "software para restaurantes precio" no tenía dónde aterrizar: el
+precio solo existía como `/#precios`. Todo lo que dice un número sale de la lista, con las mismas
+funciones que cobra el checkout.
+
+### El precio estaba congelado en el build, y nadie lo sabía
+
+**Una consulta a la base NO alcanza para que Next considere dinámica a una página**: solo lo hacen
+las APIs dinámicas (`cookies()`, `searchParams`). Así que la portada quedaba prerenderizada con el
+precio horneado en el HTML —verificado: el `$69.900` estaba escrito dentro de
+`.next/server/app/index.html`—, y la promesa de que "una promoción se refleja sola" era falsa:
+hacía falta volver a desplegar.
+
+Las cuatro pantallas con precio llevan `export const revalidate = 300`. Cinco minutos y no
+`force-dynamic`, porque siguen sirviéndose de caché —que es lo que le conviene a un rastreador y a
+quien abre con datos flojos—; y cinco y no una hora porque **detener una promoción es urgente por
+definición**: existe una acción aparte justamente para eso.
+
+### Las guías
+
+`app/(marketing)/guias/`. El metadato vive en `guias.ts` y el contenido en `_contenidos/`, separados
+porque el metadato lo consumen tres lugares que no pueden divergir: el índice,
+`generateStaticParams` y el sitemap. **Esa misma separación permite declarar una guía sin
+escribirla** —el índice la lista, el sitemap se la manda a Google, y el enlace da 404 sin que nada
+falle—, así que `tests/unit/guias.test.ts` compara las dos listas en los dos sentidos.
+
+**La regla de qué se publica:** cada guía trata algo que sabemos por haberlo construido y verificado
+—la API de la DIAN, el texto de la ley, la aritmética del costeo—, no por resumir lo que ya escribió
+otro. **La regla de exactitud:** toda afirmación legal o tributaria va con su fuente enlazada. El
+que lee va a tomar una decisión de plata; equivocarse no es un problema de posicionamiento.
+
+Dos cosas que salieron de escribirlas y valen para todo el sitio:
+
+- **El umbral del no responsable se escribe en UVT, no en pesos.** La UVT se reajusta cada año, así
+  que cualquier cifra en pesos queda mal en enero y nadie se acuerda de volver. Lo estable es el
+  "3.500 UVT" del artículo.
+- **Las descripciones no pasan de 160 caracteres.** Google corta ahí, y las cinco nacieron entre 172
+  y 216: el resultado terminaba en puntos suspensivos justo donde estaba el argumento. Hay un test.
+
+No hay `@tailwindcss/typography` en el proyecto: las clases `prose` de la página de habeas data no
+hacen nada. Por eso las piezas de `components/articulo.tsx` (`P`, `H2`, `Norma`, `Tabla`, `Aparte`)
+llevan sus clases escritas; repetirlas en cinco guías largas garantizaba que a la tercera los `h2`
+dejaran de medir lo mismo.
+
+### El sitemap mentía en cada `lastmod`
+
+`const ahora = new Date()` se evaluaba **en cada petición**, así que las cinco URLs declaraban
+"modificada ahora mismo" siempre. Google descarta los `lastmod` que detecta poco fiables, con lo
+cual el campo dejaba de servir para lo único que sirve. Las fechas ahora son reales y se escriben a
+mano en `app/(marketing)/rutas.ts`; las guías entran solas desde `GUIAS`, porque listarlas en los
+dos lados es la forma de que un día aparezcan duplicadas.
+
+### Dos cosas que no están en el repo y hay que mirar en el panel
+
+1. **Cloudflare antepone su propio `robots.txt` al de la aplicación.** El archivo en vivo tiene 283
+   líneas: el bloque "Managed content" pone `Disallow: /` para ClaudeBot, GPTBot, CCBot,
+   Google-Extended y meta-externalagent, que `app/robots.ts` permite a propósito. No bloquea a
+   Googlebot —usa el grupo `*`—, pero con grupos `User-agent` duplicados el comportamiento no está
+   definido de forma consistente y los rastreadores conservadores toman la primera coincidencia. Se
+   apaga en Cloudflare → Settings → Crawlers.
+2. **`www.platlia.com` responde 525.** Cloudflare no alcanza el origen para ese hostname. Si la
+   propiedad de Search Console se creó como `https://www.platlia.com`, no va a mostrar nada nunca.
+   Lo correcto es una propiedad de **dominio**, verificada por DNS.
+
+`GOOGLE_SITE_VERIFICATION` y `BING_SITE_VERIFICATION` están en `lib/env.ts` y se emiten desde el
+`metadata` raíz. **Opcionales, y tienen que seguir siéndolo**: `next build` importa `lib/env.ts` al
+recolectar las rutas, así que una variable de SEO obligatoria sería un despliegue que no arranca por
+algo que no afecta a ningún usuario. Anclarla acá es lo que la hace sobrevivir a un cambio de
+proveedor de DNS.
+
+### El test de enlaces internos no entendía las rutas dinámicas
+
+`enlaces-internos.test.ts` armaba la lista de rutas reales desde las carpetas, así que
+`/guias/propina-en-colombia` figuraba como enlace roto: la ruta es `/guias/[slug]`. Enlazar una guía
+desde otra se reportaba como defecto y la única salida era no enlazarlas, que es lo contrario de lo
+que hay que hacer cuando los enlaces internos son los únicos que existen. Ahora compara segmento a
+segmento y `[algo]` acepta cualquier valor.
+
 ## Estructura
 
 ```
@@ -1674,6 +1780,9 @@ generated/prisma/        cliente generado (ignorado por git)
 app/(auth|onboarding|app|superadmin|bootstrap|bloqueado)/   grupos de rutas
 app/imprimir/            HTML limpio para @page 55mm/80mm
 app/turnero/             el televisor del salón: fuera de (app), sin barra de navegación
+app/(marketing)/         la portada, las dos páginas de segmento, /precios y /guias
+app/(marketing)/rutas.ts        las páginas públicas con su fecha real de edición
+app/(marketing)/guias/          metadato en guias.ts · contenido en _contenidos/ (privada)
 lib/db/                  pool.ts · root.ts (rootDb) · tenant.ts (tenantDb) · tenant-models.ts
 lib/{auth,actions,billing,printing,email}/      infraestructura
 lib/mcp/                 token · herramientas · oauth (el servidor MCP por negocio)

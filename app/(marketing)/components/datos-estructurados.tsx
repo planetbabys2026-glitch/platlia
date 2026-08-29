@@ -97,3 +97,74 @@ export function DatosEstructurados({
     </>
   );
 }
+
+/**
+ * El marcado de una guía.
+ *
+ * `Article` es lo que le permite a Google mostrar la fecha junto al resultado, y
+ * a un asistente saber que esto es contenido editorial fechado y no la página de
+ * un producto. `dateModified` importa más que `datePublished`: es el campo con el
+ * que se decide si vale la pena volver a rastrear.
+ *
+ * Va junto con `BreadcrumbList` porque las migas son lo que convierte la línea de
+ * `platlia.com › guias › propina-en-colombia` en algo legible, y eso sube el
+ * porcentaje de clics sin mover la posición.
+ *
+ * Mismo `JSON.stringify` que arriba, y por la misma razón: una comilla en un
+ * título rompería el bloque entero y el buscador lo descartaría en silencio.
+ */
+export function ArticuloEstructurado({
+  url,
+  titulo,
+  descripcion,
+  publicado,
+  actualizado,
+  seccion,
+}: {
+  /** La URL absoluta y canónica de la guía. */
+  url: string;
+  titulo: string;
+  descripcion: string;
+  publicado: string;
+  actualizado: string;
+  /** El nombre visible de la sección, para las migas. */
+  seccion: { nombre: string; url: string };
+}) {
+  const origen = new URL(url).origin;
+
+  const articulo = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: titulo,
+    description: descripcion,
+    inLanguage: "es-CO",
+    datePublished: publicado,
+    dateModified: actualizado,
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    author: { "@type": "Organization", name: "Platlia", url: origen },
+    publisher: { "@type": "Organization", name: "Platlia", url: origen },
+  };
+
+  const migas = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Inicio", item: origen },
+      { "@type": "ListItem", position: 2, name: seccion.nombre, item: seccion.url },
+      { "@type": "ListItem", position: 3, name: titulo, item: url },
+    ],
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articulo) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(migas) }}
+      />
+    </>
+  );
+}

@@ -77,7 +77,8 @@ export const metadata: Metadata = {
     // El título es lo que se lee en el resultado de búsqueda: dice qué es y
     // para quién, no el nombre solo. "Software" y "punto de venta" están
     // porque son las palabras con las que la gente busca esto.
-    default: "Platlia — Software y punto de venta para bares y restaurantes en Colombia",
+    default:
+      "Platlia — Software y punto de venta para bares y restaurantes en Colombia",
     template: "%s · Platlia",
   },
   description:
@@ -112,7 +113,28 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
-    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  /**
+   * La verificación de propiedad, anclada en el código.
+   *
+   * Search Console y Bing aceptan varios métodos; el de DNS TXT se pierde el día
+   * que el dominio cambia de proveedor, y la verificación se cae sin avisar —lo
+   * único que se ve es que los informes dejan de actualizarse—. Con la meta acá,
+   * mientras el sitio se despliegue sigue verificado.
+   *
+   * Los códigos son opcionales: sin ellos Next simplemente no emite la etiqueta.
+   */
+  verification: {
+    google: env.GOOGLE_SITE_VERIFICATION,
+    other: env.BING_SITE_VERIFICATION
+      ? { "msvalidate.01": env.BING_SITE_VERIFICATION }
+      : {},
   },
   appleWebApp: { capable: true, title: "Platlia", statusBarStyle: "default" },
   manifest: "/manifest.webmanifest",
@@ -122,9 +144,7 @@ export const metadata: Metadata = {
       { url: "/favicon.svg", type: "image/svg+xml" },
       { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
     ],
-    apple: [
-      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
-    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

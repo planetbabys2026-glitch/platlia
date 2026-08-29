@@ -35,8 +35,23 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/#precios" className="hover:text-[var(--papel)] transition-colors">
+                <Link href="/software-para-restaurantes" className="hover:text-[var(--papel)] transition-colors">
+                  Software para Restaurantes
+                </Link>
+              </li>
+              <li>
+                <Link href="/software-para-bares" className="hover:text-[var(--papel)] transition-colors">
+                  Software para Bares
+                </Link>
+              </li>
+              <li>
+                <Link href="/precios" className="hover:text-[var(--papel)] transition-colors">
                   Planes de Licencia (COP)
+                </Link>
+              </li>
+              <li>
+                <Link href="/guias" className="hover:text-[var(--papel)] transition-colors">
+                  Guías para tu Negocio
                 </Link>
               </li>
               <li>

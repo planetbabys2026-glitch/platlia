@@ -1,3 +1,4 @@
+import { RUTAS_PUBLICAS } from "@/app/(marketing)/rutas";
 import { NextResponse, type NextRequest } from "next/server";
 import { COOKIE_SESION, COOKIE_SUPERADMIN, verifySessionToken } from "@/lib/auth/token";
 
@@ -13,17 +14,28 @@ import { COOKIE_SESION, COOKIE_SUPERADMIN, verifySessionToken } from "@/lib/auth
  * ahí no hay Prisma ni sockets.
  */
 
+/**
+ * Las páginas de la marca salen de `RUTAS_PUBLICAS`, no de una copia acá.
+ *
+ * Es un módulo de datos puro —una lista de constantes, sin dependencias—, así
+ * que se puede importar desde el edge sin romper la regla de este archivo.
+ *
+ * Escribirlas a mano es lo que hizo que `robots.txt` y `sitemap.xml` vivieran un
+ * tiempo redirigiendo al login, y lo que acaba de pasar con `/precios`, `/guias`
+ * y las dos páginas de segmento: se publican, el sitemap se las manda a Google,
+ * y el middleware las contesta con un 307 al login. Se ve solo si alguien las
+ * abre sin sesión, que es justamente lo que nadie del equipo hace.
+ *
+ * Derivándolas, publicar una página nueva la vuelve pública sola.
+ */
 const PUBLICAS = new Set([
-  "/",
-  "/ingresar",
-  "/registro",
+  ...RUTAS_PUBLICAS.map((r) => r.ruta),
+
   "/recuperar",
   "/restablecer-contrasena",
   "/verificar-correo",
   "/terminos",
   "/privacidad",
-  "/pqr",
-  "/habeas-data",
   /**
    * Los archivos que lee un buscador ANTES de indexar.
    *
@@ -47,6 +59,9 @@ function esPublica(pathname: string): boolean {
   if (PUBLICAS.has(pathname)) return true;
   // Menú Digital QR público para clientes (mesas y domicilios)
   if (pathname.startsWith("/m/")) return true;
+  // Las guías: `RUTAS_PUBLICAS` trae el índice, pero cada guía es un slug bajo
+  // `/guias/[slug]` y no puede estar enumerada acá.
+  if (pathname.startsWith("/guias/")) return true;
   /**
    * La imagen que se ve al compartir el enlace.
    *

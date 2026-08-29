@@ -14,6 +14,26 @@ import { DatosEstructurados } from "./components/datos-estructurados";
 import { Footer } from "./components/footer";
 
 /**
+ * Se regenera cada 5 minutos, y hace falta.
+ *
+ * Esta página lee el precio de la lista, pero una consulta a la base NO alcanza
+ * para que Next la considere dinámica —solo lo hacen las APIs dinámicas como
+ * `cookies()` o `searchParams`—, así que quedaba prerenderizada en el build con
+ * el precio horneado en el HTML. Verificado: el `$69.900` estaba escrito dentro
+ * de `.next/server/app/*.html`.
+ *
+ * O sea que la promesa de que una promoción se refleja sola era falsa: hacía
+ * falta volver a desplegar. Y detener una promoción es urgente por definición
+ * —existe una acción aparte justamente para eso—, así que la ventana no puede
+ * ser de una hora.
+ *
+ * 5 minutos y no `force-dynamic`: la página sigue sirviéndose desde caché, que
+ * es lo que le conviene a un rastreador y a alguien que la abre con datos
+ * flojos, y el precio nunca puede estar más de 5 minutos desactualizado.
+ */
+export const revalidate = 300;
+
+/**
  * El título y la descripción de la portada llevan el PRECIO, y sale de la lista.
  *
  * Un resultado de búsqueda que dice "desde $69.900" recibe muchos más clics que

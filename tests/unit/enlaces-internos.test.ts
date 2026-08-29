@@ -20,7 +20,12 @@ const RAIZ = process.cwd();
 /** Los archivos de código donde puede haber un `href`. */
 function archivos(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {
-    if (entrada === "node_modules" || entrada === ".next" || entrada === "generated") continue;
+    if (
+      entrada === "node_modules" ||
+      entrada === ".next" ||
+      entrada === "generated"
+    )
+      continue;
     const ruta = join(dir, entrada);
     if (statSync(ruta).isDirectory()) archivos(ruta, acc);
     else if (/\.tsx?$/.test(entrada)) acc.push(ruta);
@@ -37,7 +42,9 @@ function rutasReales(): Set<string> {
   const rutas = new Set<string>(["/"]);
   for (const archivo of archivos(join(RAIZ, "app"))) {
     if (!/[/\\]page\.tsx$/.test(archivo)) continue;
-    const relativo = archivo.slice(join(RAIZ, "app").length).replace(/[/\\]page\.tsx$/, "");
+    const relativo = archivo
+      .slice(join(RAIZ, "app").length)
+      .replace(/[/\\]page\.tsx$/, "");
     const segmentos = relativo
       .split(/[/\\]/)
       .filter((s) => s && !s.startsWith("(") && !s.startsWith("_"));
@@ -49,6 +56,28 @@ function rutasReales(): Set<string> {
 /** Un `href` con partes dinámicas no se puede comparar contra una ruta fija. */
 function comparable(href: string): boolean {
   return href.startsWith("/") && !href.includes("${") && !href.includes("[");
+}
+
+/**
+ * Una URL concreta puede estar cubierta por una ruta dinámica.
+ *
+ * `/guias/propina-en-colombia` no aparece como carpeta —la ruta es
+ * `/guias/[slug]`—, pero el enlace es válido: es una instancia de ese patrón.
+ * Sin esto, enlazar a una guía desde otra se reportaba como enlace roto y la
+ * única salida era no enlazarlas, que es justo lo contrario de lo que hay que
+ * hacer. Se compara segmento a segmento y `[algo]` acepta cualquier valor.
+ */
+function cubiertaPorRutaDinamica(href: string, rutas: Set<string>): boolean {
+  const partes = href.split("/").filter(Boolean);
+
+  return [...rutas].some((patron) => {
+    const suyas = patron.split("/").filter(Boolean);
+    if (suyas.length !== partes.length) return false;
+    return suyas.every(
+      (seg, i) =>
+        (seg.startsWith("[") && seg.endsWith("]")) || seg === partes[i],
+    );
+  });
 }
 
 describe("los enlaces internos llevan a alguna parte", () => {
@@ -65,7 +94,7 @@ describe("los enlaces internos llevan a alguna parte", () => {
           // La sección viaja en `?vista=` y el ancla en `#`: la pantalla es la
           // parte de antes de las dos.
           const base = href.split(/[?#]/)[0]!.replace(/\/$/, "") || "/";
-          if (!rutas.has(base)) {
+          if (!rutas.has(base) && !cubiertaPorRutaDinamica(base, rutas)) {
             rotos.push(`${archivo.slice(RAIZ.length + 1)} → ${href}`);
           }
         }

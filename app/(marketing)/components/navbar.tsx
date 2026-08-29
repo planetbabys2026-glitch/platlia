@@ -10,6 +10,12 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
+    /* El punto de quiebre es `tableta:` (1020px) y no `md:` (768px).
+       Con `md:`, a 820px —una tablet vertical, que es un tamaño real— el logo, los
+       cinco enlaces y los dos botones no entraban y la página desbordaba 85px a lo
+       ancho: había barra horizontal en la portada y en todas las páginas de marca.
+       Es el mismo motivo por el que la barra lateral del producto conmuta a 1020 y
+       no a 768. Abajo de eso va el cajón, que lleva los mismos enlaces. */
     <header className="sticky top-0 z-40 w-full border-b border-[var(--linea-16)] bg-[var(--tinta)]/90 backdrop-blur-md transition-all">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         {/* Branding */}
@@ -18,12 +24,15 @@ export function Navbar() {
         </Link>
 
         {/* Desktop Nav Links */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-mono uppercase tracking-wider text-[var(--linea)]">
+        <nav className="hidden tableta:flex items-center gap-8 text-sm font-mono uppercase tracking-wider text-[var(--linea)]">
           <Link href="/#virtudes" className="transition-colors hover:text-[var(--papel)]">
             Virtudes
           </Link>
-          <Link href="/#precios" className="transition-colors hover:text-[var(--papel)]">
+          <Link href="/precios" className="transition-colors hover:text-[var(--papel)]">
             Precios
+          </Link>
+          <Link href="/guias" className="transition-colors hover:text-[var(--papel)]">
+            Guías
           </Link>
           <Link href="/#preguntas" className="transition-colors hover:text-[var(--papel)]">
             Preguntas
@@ -34,7 +43,7 @@ export function Navbar() {
         </nav>
 
         {/* Action Buttons */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden tableta:flex items-center gap-3">
           <Button asChild variant="outline" size="sm" className="border-[var(--linea-30)] text-[var(--papel)] hover:bg-[var(--panel-2)] font-mono text-xs">
             <Link href="/ingresar">Ingresar</Link>
           </Button>
@@ -50,7 +59,7 @@ export function Navbar() {
         <button
           type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 rounded-lg text-[var(--papel)] hover:bg-[var(--panel-2)] focus:outline-none"
+          className="tableta:hidden p-2 rounded-lg text-[var(--papel)] hover:bg-[var(--panel-2)] focus:outline-none"
           aria-label="Abrir menú de navegación"
         >
           {mobileMenuOpen ? <X className="size-6" /> : <Menu className="size-6" />}
@@ -59,7 +68,7 @@ export function Navbar() {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-[var(--linea-30)] bg-[var(--panel-bg)] px-6 py-6 space-y-4 shadow-xl">
+        <div className="tableta:hidden border-b border-[var(--linea-30)] bg-[var(--panel-bg)] px-6 py-6 space-y-4 shadow-xl">
           <nav className="flex flex-col gap-4 font-mono text-sm uppercase tracking-wider">
             <Link
               href="/#virtudes"
@@ -69,11 +78,32 @@ export function Navbar() {
               Virtudes del sistema
             </Link>
             <Link
-              href="/#precios"
+              href="/software-para-restaurantes"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-[var(--linea)] hover:text-[var(--papel)] py-1"
+            >
+              Para restaurantes
+            </Link>
+            <Link
+              href="/software-para-bares"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-[var(--linea)] hover:text-[var(--papel)] py-1"
+            >
+              Para bares
+            </Link>
+            <Link
+              href="/precios"
               onClick={() => setMobileMenuOpen(false)}
               className="text-[var(--linea)] hover:text-[var(--papel)] py-1"
             >
               Planes y precios
+            </Link>
+            <Link
+              href="/guias"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-[var(--linea)] hover:text-[var(--papel)] py-1"
+            >
+              Guías
             </Link>
             <Link
               href="/#preguntas"

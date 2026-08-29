@@ -6,7 +6,9 @@ import { z } from "zod";
 // también necesitan leer la configuración. La protección equivalente es la guarda
 // de abajo, que es lo que realmente importa: que esto nunca se evalúe en el navegador.
 if (typeof window !== "undefined") {
-  throw new Error("lib/env.ts es solo de servidor y nunca debe llegar al cliente.");
+  throw new Error(
+    "lib/env.ts es solo de servidor y nunca debe llegar al cliente.",
+  );
 }
 
 /**
@@ -25,15 +27,20 @@ const booleanDeEntorno = (porDefecto: "true" | "false") =>
   );
 
 const schema = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
 
   // ─── Requeridos siempre ───────────────────────────────────────────────────
   DATABASE_URL: z
     .string()
     .min(1)
-    .refine((v) => v.startsWith("postgres://") || v.startsWith("postgresql://"), {
-      message: "debe ser una cadena de conexión de PostgreSQL",
-    }),
+    .refine(
+      (v) => v.startsWith("postgres://") || v.startsWith("postgresql://"),
+      {
+        message: "debe ser una cadena de conexión de PostgreSQL",
+      },
+    ),
   // openssl rand -base64 48
   SESSION_SECRET: z.string().min(32, "debe tener al menos 32 caracteres"),
   // Se le quita la barra final: todo el código compone `${APP_URL}/algo`, y una
@@ -56,7 +63,8 @@ const schema = z.object({
 
   // ─── Pagos (MercadoPago) ──────────────────────────────────────────────────
   MP_ACCESS_TOKEN: opcional(z.string().min(1)).default(
-    () => process.env.MP_ACCESS_TOKEN || process.env.MERCADOPAGO_ACCESS_TOKEN || "",
+    () =>
+      process.env.MP_ACCESS_TOKEN || process.env.MERCADOPAGO_ACCESS_TOKEN || "",
   ),
   MERCADOPAGO_ACCESS_TOKEN: opcional(z.string().min(1)),
   MP_PUBLIC_KEY: opcional(z.string().min(1)).default(
@@ -69,7 +77,8 @@ const schema = z.object({
   MERCADOPAGO_PUBLIC_KEY: opcional(z.string().min(1)),
   NEXT_PUBLIC_MP_PUBLIC_KEY: opcional(z.string().min(1)),
   MP_WEBHOOK_SECRET: opcional(z.string().min(1)).default(
-    () => process.env.MP_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET_TEST || "",
+    () =>
+      process.env.MP_WEBHOOK_SECRET || process.env.MP_WEBHOOK_SECRET_TEST || "",
   ),
   MP_WEBHOOK_SECRET_TEST: opcional(z.string().min(1)),
   MP_BACK_URL: opcional(z.url()),
@@ -127,6 +136,21 @@ const schema = z.object({
   FACTUS_USERNAME: opcional(z.string().min(1)),
   FACTUS_PASSWORD: opcional(z.string().min(1)),
 
+  // ─── Verificación de propiedad en buscadores ──────────────────────────────
+  // Los códigos que Google Search Console y Bing Webmaster Tools piden poner en
+  // una meta del `<head>`. Van por entorno y no escritos en el repo porque son
+  // de la cuenta de quien administra el sitio, no del código.
+  //
+  // **Opcionales, y tienen que seguir siéndolo**: `next build` importa este
+  // archivo al recolectar las rutas, así que una variable de SEO obligatoria
+  // sería un despliegue que no arranca por algo que no afecta a ningún usuario.
+  //
+  // Anclar la verificación acá es lo que la hace sobrevivir: verificada solo por
+  // TXT de DNS, se pierde el día que alguien mueve el dominio de proveedor, y
+  // Search Console deja de reportar sin que nadie lo note.
+  GOOGLE_SITE_VERIFICATION: opcional(z.string().min(1)),
+  BING_SITE_VERIFICATION: opcional(z.string().min(1)),
+
   // ─── Bootstrap del superadministrador ─────────────────────────────────────
   // Se define únicamente durante el primer despliegue y se borra después. Sin
   // ella, /pl-bootstrap responde 404 y es indistinguible de una ruta inexistente.
@@ -157,7 +181,9 @@ export function requireEnv<K extends keyof typeof env>(
 ): NonNullable<(typeof env)[K]> {
   const value = env[key];
   if (value === undefined || value === "") {
-    throw new Error(`Falta la variable de entorno ${String(key)}, necesaria para ${paraQue}.`);
+    throw new Error(
+      `Falta la variable de entorno ${String(key)}, necesaria para ${paraQue}.`,
+    );
   }
   return value as NonNullable<(typeof env)[K]>;
 }
