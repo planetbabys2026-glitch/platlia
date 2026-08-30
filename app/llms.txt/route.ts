@@ -27,40 +27,35 @@ export async function GET() {
 
   const cuerpo = `# Platlia
 
-> Software de gestión y punto de venta para bares y restaurantes en Colombia.
-> Toma de pedidos en mesa, pantalla de cocina, caja, menú QR con autopedido,
-> domicilios, inventario por receta, informes y facturación electrónica DIAN.
+> Software de gestión y punto de venta para bares y restaurantes en Colombia. Toma de pedidos en mesa, pantalla de cocina, caja, menú QR con autopedido, domicilios, inventario por receta, informes y facturación electrónica DIAN.
 
-## Datos
+## Docs
 
-- Sitio: ${env.APP_URL}
-- País: Colombia (precios en pesos colombianos, impuesto al consumo e IVA)
+- [Platlia - Software POS para Bares y Restaurantes](${env.APP_URL}): Sistema de gestión y punto de venta integral para restaurantes, bares, discotecas y cafeterías en Colombia.
+- [Precios y Tarifas](${env.APP_URL}/#precios): Tarifas transparentes de la licencia (${precio}), sin comisiones por venta ni permanencia.
+- [Preguntas Frecuentes](${env.APP_URL}/#preguntas): Respuestas a las dudas comunes sobre funcionamiento, menú QR, impresoras y facturación DIAN.
+- [Crear cuenta de prueba](${env.APP_URL}/registro): Registro rápido con 7 días gratis sin ingresar tarjeta de crédito.
+
+## Key Facts
+
+- País: Colombia (precios en pesos colombianos COP, impuesto al consumo e IVA)
 - Precio de la licencia: ${precio}, sin límite de mesas, meseros ni pantallas
-- Prueba: 7 días gratis, sin tarjeta de crédito
-- Permanencia: ninguna, se cancela cuando se quiera
-- Contacto: ${CORREO_SOPORTE} · WhatsApp ${WHATSAPP_SOPORTE_VISIBLE}
+- Prueba gratis: 7 días completos sin requerir tarjeta de crédito
+- Permanencia: Sin contrato de permanencia, se cancela cuando se quiera
+- Contacto y soporte: [${CORREO_SOPORTE}](mailto:${CORREO_SOPORTE}) · WhatsApp ${WHATSAPP_SOPORTE_VISIBLE}
+- Integración con IA (MCP): Servidor de herramientas MCP integrado para consulta en lenguaje natural sobre ventas, inventario y finanzas en español.
 
-## Qué incluye la licencia
+## Funcionalidades
 
-- Salón con plano de mesas, y mostrador para pedidos sin mesa
-- Pantalla de cocina con tiempos por plato y responsable de cada uno
+- Salón con plano de mesas interactivo y comanda digital
+- Pantalla de cocina (KDS) con tiempos por plato y responsable asignado
 - Caja: cobro, arqueo, movimientos de efectivo y cierre de turno
-- Menú QR personalizable (colores, letra y logo del negocio) con autopedido
+- Menú QR personalizable (colores, letra y logo del negocio) con autopedido en mesa
 - Domicilios con seguimiento en vivo para el comensal
-- Inventario con receta y costo por plato, y descuento de stock al vender
-- Informes por día, semana, mes, año y rango, con horas pico
+- Inventario con receta y costo por plato, con descuento automático de stock al vender
+- Informes por día, semana, mes, año y rango, con análisis de horas pico
 - Impresión térmica de comandas y recibos en la impresora del local
-- Conexión con asistentes de IA por MCP: el dueño emite una llave desde
-  Configuración y su asistente —ChatGPT, Claude o el que use— consulta las
-  ventas, el inventario, las horas pico y los márgenes preguntando en español.
-  Es de solo lectura, no expone ningún dato de comensales (ni nombres, ni
-  teléfonos, ni direcciones) y cada sede tiene su propia llave.
-
-## Qué se cobra aparte
-
-- Las facturas electrónicas de la DIAN se compran por paquete, según cuántas se
-  emitan al año. La conexión con la DIAN la provee Platlia: el negocio no
-  contrata ni configura un proveedor externo.
+- Facturación electrónica DIAN integrada (paquetes de folios según emisión)
 
 ## Preguntas frecuentes
 
@@ -68,11 +63,11 @@ ${preguntasFrecuentes(mensual)
   .map(({ pregunta, respuesta }) => `### ${pregunta}\n\n${respuesta}`)
   .join("\n\n")}
 
-## Enlaces
+## Contact
 
-- Precios: ${env.APP_URL}/#precios
-- Preguntas frecuentes: ${env.APP_URL}/#preguntas
-- Crear cuenta de prueba: ${env.APP_URL}/registro
+- Website: [${env.APP_URL}](${env.APP_URL})
+- Email: [${CORREO_SOPORTE}](mailto:${CORREO_SOPORTE})
+- Support: WhatsApp ${WHATSAPP_SOPORTE_VISIBLE}
 `;
 
   return new Response(cuerpo, {

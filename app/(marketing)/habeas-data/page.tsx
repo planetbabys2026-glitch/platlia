@@ -49,7 +49,7 @@ export default function HabeasDataPage() {
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
               <Lock className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-bold text-sm text-foreground">Seguridad de la Información</h3>
+                <h2 className="font-bold text-sm text-foreground">Seguridad de la Información</h2>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   Infraestructura protegida con cifrado en tránsito (TLS 1.3) y en reposo (AES-256) en servidores de alta disponibilidad.
                 </p>
@@ -59,7 +59,7 @@ export default function HabeasDataPage() {
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
               <Eye className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-bold text-sm text-foreground">Uso Estrictamente Operativo</h3>
+                <h2 className="font-bold text-sm text-foreground">Uso Estrictamente Operativo</h2>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   Tus datos de facturación, clientes y recetas se procesan exclusivamente para la prestación del servicio SaaS asignado.
                 </p>
@@ -69,7 +69,7 @@ export default function HabeasDataPage() {
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
               <RefreshCw className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-bold text-sm text-foreground">Derechos ARCO</h3>
+                <h2 className="font-bold text-sm text-foreground">Derechos ARCO</h2>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   Acceso, Rectificación, Cancelación y Oposición garantizados de forma gratuita para el titular de los datos.
                 </p>
@@ -79,7 +79,7 @@ export default function HabeasDataPage() {
             <div className="p-5 rounded-2xl bg-muted/40 border border-border flex items-start gap-3.5">
               <ShieldCheck className="size-6 text-brand shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-bold text-sm text-foreground">Canal de Protección</h3>
+                <h2 className="font-bold text-sm text-foreground">Canal de Protección</h2>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   Correo oficial exclusivo: <span className="font-mono text-foreground font-semibold">protecciondatos@platlia.com</span>.
                 </p>

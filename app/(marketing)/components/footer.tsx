@@ -25,9 +25,9 @@ export function Footer() {
 
           {/* Navegación Rápida */}
           <div className="md:col-span-3 space-y-3">
-            <h4 className="font-display font-black text-lg text-[var(--papel)] uppercase tracking-tight">
+            <h3 className="font-display font-black text-lg text-[var(--papel)] uppercase tracking-tight">
               Platlia POS
-            </h4>
+            </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <Link href="/#virtudes" className="hover:text-[var(--papel)] transition-colors">
@@ -69,9 +69,9 @@ export function Footer() {
 
           {/* Enlaces Legales & Atención */}
           <div className="md:col-span-4 space-y-3">
-            <h4 className="font-display font-black text-lg text-[var(--papel)] uppercase tracking-tight">
+            <h3 className="font-display font-black text-lg text-[var(--papel)] uppercase tracking-tight">
               Atención & Marco Legal
-            </h4>
+            </h3>
             <ul className="space-y-2.5 text-sm text-muted-foreground">
               <li>
                 <Link href="/habeas-data" className="hover:text-[var(--papel)] transition-colors flex items-center gap-2">
