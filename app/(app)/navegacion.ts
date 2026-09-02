@@ -1,15 +1,16 @@
 import {
+  Banknote,
   BarChart3,
   Bike,
   BookOpen,
   Boxes,
-  BookMarked,
   ChefHat,
-  CreditCard,
   LayoutGrid,
-  MonitorPlay,
+  PencilRuler,
   Settings,
+  ShoppingCart,
   SlidersHorizontal,
+  Tv,
   Users,
   Wallet,
 } from "lucide-react";
@@ -155,6 +156,9 @@ export function construirNavegacion({
 
   const operacion: ItemNav[] = [
     ...(usaMesas && puedeVer("salon_pos")
+      // LayoutGrid es el plano: el salón se dibuja como una cuadrícula de mesas,
+      // y es el mismo icono que la pantalla donde se editan —mismo concepto visto
+      // desde dos lados, que es la única repetición que el test permite.
       ? [{ titulo: "Salón", href: "/salon", icono: LayoutGrid, enBarraInferior: true }]
       : []),
     // El POS va con su propio permiso: un mesero toma pedidos en la mesa pero no
@@ -167,7 +171,10 @@ export function construirNavegacion({
             // de venta y la entrada del negocio.
             titulo: usaMesas ? "Pedido sin mesa" : "POS",
             href: "/pos",
-            icono: BookMarked,
+            // Un carrito, no un libro con marcador: acá se arma una venta. El
+            // BookMarked anterior se leía como "la carta guardada", que es otra
+            // pantalla del producto.
+            icono: ShoppingCart,
             enBarraInferior: !usaMesas,
           },
         ]
@@ -188,7 +195,11 @@ export function construirNavegacion({
           {
             titulo: "Caja",
             href: "/caja",
-            icono: CreditCard,
+            // Un billete, no una tarjeta. La caja no es el datáfono: se cuenta
+            // efectivo, se arquean dos saldos, se pagan proveedores y se fía. Con
+            // CreditCard, la pantalla que más plata mueve se anunciaba como si
+            // fuera uno solo de sus medios de pago.
+            icono: Banknote,
             insignia: cuentasPorCobrar,
             enBarraInferior: true,
             secciones: seccionesDeCaja(cuentasPorCobrar),
@@ -199,7 +210,8 @@ export function construirNavegacion({
       ? [{ titulo: "Domicilios", href: "/domicilios", icono: Bike, insignia: domiciliosActivos }]
       : []),
     ...(usaTurnero && puedeVer("turnero")
-      ? [{ titulo: "Turnero", href: "/turnero", icono: MonitorPlay }]
+      // Es literalmente el televisor del salón.
+      ? [{ titulo: "Turnero", href: "/turnero", icono: Tv }]
       : []),
   ];
 
@@ -258,7 +270,10 @@ export function construirNavegacion({
     ? {
         titulo: "Configuración",
         href: "/administracion/configuracion",
-        icono: SlidersHorizontal,
+        // El engranaje, y el MISMO para el propietario y para quien no lo es: la
+        // pantalla es una sola y antes cambiaba de dibujo según quién la mirara.
+        // Los deslizadores se quedaron donde significan algo, en Modificadores.
+        icono: Settings,
         secciones: [
           { titulo: "Datos del negocio", vista: "" },
           { titulo: "Módulos", vista: "modulos" },
@@ -322,6 +337,20 @@ export function construirNavegacion({
  * "Más". Se toman de la misma lista para que nunca ofrezca algo que el menú
  * grande ya no tiene.
  */
+/**
+ * El icono del acordeón de Administración.
+ *
+ * Vive acá y no en el shell aunque el shell sea el único que lo pinta: lo
+ * pintaba en DOS lugares —el riel colapsado y la barra desplegada— con la
+ * constante escrita a mano en cada uno, que es exactamente cómo se desincronizan.
+ * Y estando acá queda cubierto por `navegacion-iconos.test.ts`, que es lo que
+ * impide que vuelva a chocar con el engranaje de Configuración.
+ *
+ * Escuadra y lápiz, no engranaje: acá se ARMA el negocio —la carta, el plano del
+ * salón, el equipo—; el engranaje es Configuración, que son los parámetros.
+ */
+export const ICONO_ADMINISTRACION = PencilRuler;
+
 export function itemsDeBarraInferior(grupos: GrupoNav[]): ItemNav[] {
   return grupos
     .flatMap((g) => g.items)

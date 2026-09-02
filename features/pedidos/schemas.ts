@@ -268,11 +268,20 @@ const ventaPosCompleta = z
   .object({
     orderId: id.optional(),
     type: z.enum([OrderType.LLEVAR, OrderType.DOMICILIO]).default(OrderType.LLEVAR),
-    customerName: z
-      .string()
-      .trim()
-      .min(1, "El nombre del cliente es obligatorio para facturar e imprimir.")
-      .max(120, "El nombre del cliente no puede superar 120 caracteres."),
+    /**
+     * Opcional salvo en domicilio.
+     *
+     * Era obligatorio siempre, con el argumento de que es lo que se canta al
+     * entregar. No lo es: **todo pedido sin mesa recibe `turnNumber`** al
+     * crearse, y el turno es lo que se canta y lo que sale grande en la comanda.
+     * Exigir además un nombre para una gaseosa de mostrador es una tecleada por
+     * venta en la pantalla que más ventas por minuto hace del producto.
+     *
+     * En domicilio sí, y por una razón distinta: ahí no hay turno que cantar
+     * sino un paquete que alguien tiene que recibir en una puerta. Va junto a la
+     * dirección y el celular, que ya se exigen abajo por lo mismo.
+     */
+    customerName: textoOpcional(120),
     customerPhone: textoOpcional(40),
     deliveryAddress: textoOpcional(300),
     notes: textoOpcional(300),
@@ -339,6 +348,10 @@ const ventaPosCompleta = z
   .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.deliveryAddress?.trim()), {
     error: "Ingresá la dirección de entrega para el domicilio.",
     path: ["deliveryAddress"],
+  })
+  .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.customerName?.trim()), {
+    error: "En un domicilio hace falta a nombre de quién va el pedido.",
+    path: ["customerName"],
   })
   .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.customerPhone?.trim()), {
     error: "Ingresá el teléfono celular del cliente para el domicilio.",

@@ -169,7 +169,7 @@ export async function POST(req: Request) {
  * En este transporte, `GET` es cómo un cliente abre el canal por el que el
  * servidor le habla a él, y hay que contestar **405** cuando no se ofrece.
  *
- * Acá no se ofrece a propósito: las siete herramientas son de solo lectura y
+ * Acá no se ofrece a propósito: las herramientas son todas de solo lectura y
  * contestan en el momento, así que no hay nada que empujar. Antes esto devolvía un
  * 200 con un JSON descriptivo, que es peor que no contestar: el cliente pide un
  * flujo de eventos, recibe otra cosa con código de éxito, y se queda esperando.

@@ -4,7 +4,7 @@ import { useState, useActionState } from "react";
 
 import Link from "next/link";
 import { ReceiptWidth } from "@/generated/prisma/enums";
-import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, subirImagenQrMenu } from "@/features/negocio/actions";
+import { guardarDatosNegocio, guardarModulos, guardarOperacion, guardarQrMenuSettings, guardarTurneroSettings, quitarLogoNegocio, subirImagenQrMenu, subirLogoNegocio } from "@/features/negocio/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Building2, CreditCard, Printer, Search, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -177,7 +177,112 @@ export type DatosNegocio = {
   address: string | null;
   phone: string | null;
   email: string | null;
+  logoUrl: string | null;
 };
+
+/**
+ * El logo del negocio.
+ *
+ * Vive FUERA del `<form>` de datos y se guarda solo, sin pasar por "Guardar
+ * datos": subir un archivo es su propia acción —tiene que viajar el binario— y
+ * meterlo adentro obligaría a que el formulario entero fuera `multipart` y a que
+ * un cambio de nombre arrastrara una imagen de 5 MB. Por eso también avisa por su
+ * cuenta cuando terminó: acá no hay barra de guardado que lo diga.
+ */
+function LogoDelNegocio({ inicial }: { inicial: string | null }) {
+  const [logoUrl, setLogoUrl] = useState(inicial);
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const subir = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // El input se limpia siempre: sin esto, volver a elegir EL MISMO archivo no
+    // dispara `change` y el reintento después de un error no hace nada.
+    e.target.value = "";
+    if (!file) return;
+
+    setSubiendo(true);
+    setError(null);
+    const res = await subirLogoNegocio(undefined, { file });
+    setSubiendo(false);
+
+    if (res.ok && res.data?.url) setLogoUrl(res.data.url);
+    else setError(res.ok ? "No se pudo subir el logo." : res.error);
+  };
+
+  const quitar = async () => {
+    setSubiendo(true);
+    setError(null);
+    const res = await quitarLogoNegocio(undefined, {});
+    setSubiendo(false);
+    if (res.ok) setLogoUrl(null);
+    else setError(res.error || "No se pudo quitar el logo.");
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/80 bg-[var(--panel-2)] p-4">
+      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        Logo del negocio
+      </Label>
+      <p className="text-sm text-muted-foreground">
+        Sale impreso arriba de la tirilla de compra, y podés usarlo también en el
+        televisor del turnero y en el menú QR.
+      </p>
+
+      <div className="flex items-center gap-4 pt-1">
+        {logoUrl ? (
+           
+          <img
+            src={logoUrl}
+            alt="Logo del negocio"
+            className="size-16 shrink-0 rounded-lg border border-border object-contain bg-[var(--papel)] p-1"
+          />
+        ) : (
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-border text-muted-foreground">
+            <Building2 className="size-6" />
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl bg-brand px-3.5 text-sm font-bold text-brand-foreground transition-colors hover:bg-brand/90">
+              {subiendo ? "Subiendo…" : logoUrl ? "Cambiar logo" : "Subir logo"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => void subir(e)}
+                disabled={subiendo}
+                className="hidden"
+              />
+            </label>
+            {logoUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={subiendo}
+                onClick={() => void quitar()}
+                className="text-destructive-soft border-destructive/40 hover:bg-destructive/20"
+              >
+                Quitar
+              </Button>
+            )}
+          </div>
+          {/* Lo que de verdad importa para el papel: una térmica no imprime
+              grises ni color, convierte cada punto en quemado o no quemado. Un
+              logo de trazo grueso y dos tintas sale nítido; una foto sale como
+              una mancha, y eso no se ve hasta que salió el primer tiquete. */}
+          <p className="text-xs text-muted-foreground">
+            PNG o JPG. Para el papel térmico conviene un logo de trazo grueso y
+            fondo claro: la impresora quema o no quema cada punto, así que las
+            fotos y los degradados salen como manchas.
+          </p>
+          {error && <p className="text-sm text-destructive-soft">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function FormularioDatos({ negocio }: { negocio: DatosNegocio }) {
   const [estado, accion, pendiente] = useActionState(guardarDatosNegocio, ESTADO_INICIAL);
@@ -186,6 +291,7 @@ export function FormularioDatos({ negocio }: { negocio: DatosNegocio }) {
   return (
     <form action={accion} onChange={marcar} onInput={marcar} className="space-y-4">
       <Resultado estado={estado} />
+      <LogoDelNegocio inicial={negocio.logoUrl} />
       <Campo label="Nombre" name="name" defaultValue={negocio.name} required />
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo
@@ -547,6 +653,9 @@ export type TurneroSettingsProps = {
   turneroImageIntervalSeconds: number;
   turneroYoutubeUrl: string | null;
   turneroBadgePosition: string;
+  turneroMostrarLogo: boolean;
+  /** Para poder decir que falta cargarlo, en vez de ofrecer un interruptor mudo. */
+  logoUrl: string | null;
 };
 
 export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps }) {
@@ -703,6 +812,32 @@ export function FormularioTurnero({ settings }: { settings: TurneroSettingsProps
             </div>
           </div>
         )}
+
+        <div className="space-y-2 border-t border-border pt-4">
+          <Casilla
+            name="turneroMostrarLogo"
+            label="Mostrar el logo del negocio en vez del de Platlia"
+            defaultChecked={settings.turneroMostrarLogo}
+            ayuda={
+              settings.logoUrl
+                ? "El televisor va a mostrar tu logo en el encabezado del recuadro de turnos."
+                : "Todavía no cargaste un logo. Subilo en Datos del negocio: hasta entonces el televisor muestra el de Platlia, porque un hueco donde va una marca se lee como pantalla rota."
+            }
+          />
+          {settings.logoUrl && (
+            <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-[var(--panel-2)] p-3">
+              { }
+              <img
+                src={settings.logoUrl}
+                alt="Logo del negocio"
+                className="h-7 w-auto max-w-[140px] object-contain"
+              />
+              <span className="text-xs text-muted-foreground">
+                Así se va a ver, al tamaño real del encabezado.
+              </span>
+            </div>
+          )}
+        </div>
 
         <BarraGuardar sucio={sucio} estado={estado}>Guardar turnero</BarraGuardar>
       </form>

@@ -135,6 +135,24 @@ export default async function TiquetePage({
           margin: 0 auto;
           width: ${ancho}ch;
         }
+        /* El logo, en escala de grises y contenido dentro del cabezal.
+           En blanco y negro porque una termica no imprime color: mandarle un
+           logo saturado deja que el driver decida el gris de cada punto, y lo
+           que sale es una mancha. Con grayscale y contraste alto, cada trazo
+           cae de un lado o del otro.
+           El alto va topeado en 22 mm: cada milimetro de logo es papel que se
+           gasta en CADA venta de cada noche, y un logo cuadrado sin tope se
+           comeria 7 cm de rollo por tiquete. */
+        .logo-negocio {
+          display: block;
+          margin: 0 auto 2mm;
+          max-width: ${imprimibleMm}mm;
+          max-height: 22mm;
+          width: auto;
+          filter: grayscale(1) contrast(1.6);
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
         /* El QR no puede quedar más ancho que el rollo ni más chico que lo que
            un teléfono alcanza a leer de un papel térmico. */
         .qr-dian { width: ${milimetros === 55 ? 30 : 38}mm; margin: 2mm auto 0; }
@@ -142,6 +160,17 @@ export default async function TiquetePage({
       `}</style>
 
       {imprimirSolo && <ImprimirAlAbrir />}
+      {/* El logo va arriba de todo y NO reemplaza al encabezado: el nombre, el
+          NIT y la dirección se siguen imprimiendo en texto. Un logo es una marca,
+          no un dato fiscal, y quien reclame una garantía necesita el NIT legible
+          aunque el dibujo salga flojo.
+          eslint-disable-next-line @next/next/no-img-element — next/image sirve
+          una imagen optimizada por una ruta propia y acá se imprime: hace falta
+          el archivo tal cual, y el ancho lo manda el rollo, no el viewport. */}
+      {negocio.logoUrl && (
+         
+        <img className="logo-negocio" src={negocio.logoUrl} alt="" />
+      )}
       <pre className="tiquete">{lineas.join("\n")}</pre>
       {qrDian && (
         <div

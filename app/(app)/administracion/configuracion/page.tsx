@@ -39,6 +39,7 @@ export default async function ConfiguracionPage() {
         address: true,
         phone: true,
         email: true,
+        logoUrl: true,
       },
     }),
     getSettings(ctx.business.id),

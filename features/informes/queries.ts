@@ -3,6 +3,7 @@ import { tenantDb } from "@/lib/db/tenant";
 import { calcularStockDisponibleProducto } from "@/lib/inventory/stock";
 import { margenPorcentual } from "@/lib/money";
 import { getSettings } from "@/features/negocio/queries";
+import { resumirGastos, type ResumenDeGastos } from "@/features/caja/reglas";
 import { diasDelPeriodo, type Periodo } from "@/features/informes/periodo";
 import { formatBusinessDate } from "@/lib/time";
 
@@ -670,4 +671,41 @@ function ponderar(
     total += f[cuenta];
   }
   return total === 0 ? null : Math.round(suma / total);
+}
+
+/* ── Gastos de caja y ganancia estimada ─────────────────────────────────────── */
+
+export type { GastoPorConcepto as RenglonDeGasto } from "@/features/caja/reglas";
+export type { ResumenDeGastos as InformeDeGastos } from "@/features/caja/reglas";
+
+/**
+ * Lo que salió por la caja en el período, para poder estimar una ganancia.
+ *
+ * Existe para el negocio que **no lleva inventario**: sin costeo por receta no
+ * hay margen por producto, así que lo único que queda para saber si la noche
+ * dejó algo es cruzar lo que se vendió contra lo que se pagó por la caja. No
+ * reemplaza a `getCostoYMargen` —ese mide el costo de la mercancía vendida, esto
+ * mide la plata que salió del cajón— y los dos números no se suman.
+ *
+ * **La jornada sale de la sesión de caja, no de `createdAt`.** `CashMovement` no
+ * tiene `businessDate`: cuelga de la `CashSession`, que sí lo tiene. Filtrar por
+ * la hora del movimiento metería el gasto de las 2 a.m. en el día siguiente, que
+ * es exactamente lo que el día de negocio existe para evitar.
+ *
+ * Toda la aritmética vive en `resumirGastos`, puro y con tests. Acá queda la ida
+ * a la base y nada más.
+ */
+export async function getGastosDeCaja(
+  businessId: string,
+  periodo: Periodo,
+): Promise<ResumenDeGastos> {
+  const filas = await tenantDb(businessId).cashMovement.findMany({
+    where: {
+      type: { in: ["EGRESO", "RETIRO", "AJUSTE"] },
+      cashSession: { businessDate: enElPeriodo(periodo) },
+    },
+    select: { type: true, account: true, amountCop: true, concept: true },
+  });
+
+  return resumirGastos(filas);
 }

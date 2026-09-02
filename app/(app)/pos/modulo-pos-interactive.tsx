@@ -709,6 +709,22 @@ export function ModuloPosInteractive({
   };
 
   // ── Procesar Acción (PAGAR_DIRECTO, ENVIAR_COCINA, ENVIAR_CAJA, PARQUEAR) ──
+  /**
+   * El nombre solo hace falta en un domicilio.
+   *
+   * En sitio y para llevar, el pedido se identifica por su TURNO —que se reparte
+   * solo al crearlo— y eso es lo que se canta al entregar y lo que sale grande en
+   * la comanda. Pedir además un nombre para una gaseosa de mostrador es una
+   * tecleada por venta en la pantalla más rápida del producto. En domicilio no
+   * hay turno que cantar sino un paquete que alguien recibe en una puerta, así
+   * que ahí el nombre va junto a la dirección y el celular.
+   *
+   * Va en una constante y no repetido en cada botón porque son cuatro lugares
+   * que tienen que decidir igual: si uno se olvida, el POS frena una venta que
+   * el servidor habría aceptado.
+   */
+  const faltaNombre = tipoConsumo === "DOMICILIO" && !customerName.trim();
+
   const ejecutarProcesarPos = async (accion: AccionPos) => {
     // Un pedido retomado puede tener el carrito vacío y todo en la plancha: eso
     // no es un pedido vacío, y mandarlo a caja o cobrarlo es exactamente lo que
@@ -718,8 +734,8 @@ export function ModuloPosInteractive({
       return;
     }
 
-    if (!customerName.trim()) {
-      setErrorGlobal("Falta el nombre: es lo que se canta al entregar y lo que sale en el tiquete.");
+    if (faltaNombre) {
+      setErrorGlobal("En un domicilio hace falta a nombre de quién va el pedido.");
       document.getElementById("customerName")?.focus();
       return;
     }
@@ -1398,15 +1414,23 @@ export function ModuloPosInteractive({
                   <div className="space-y-3 pt-1">
                     <CampoPedido
                       id="customerName"
-                      etiqueta="Nombre del cliente"
-                      obligatorio
+                      etiqueta={
+                        tipoConsumo === "DOMICILIO"
+                          ? "Nombre de quien recibe"
+                          : "Nombre del cliente (opcional)"
+                      }
+                      obligatorio={tipoConsumo === "DOMICILIO"}
                       value={customerName}
                       onChange={(v) => {
                         setCustomerName(v);
                         if (errorGlobal && v.trim()) setErrorGlobal(null);
                       }}
-                      placeholder="Ej. Carlos o Mostrador"
-                      invalido={cart.length > 0 && !customerName.trim() && Boolean(errorGlobal)}
+                      placeholder={
+                        tipoConsumo === "DOMICILIO"
+                          ? "Ej. Carlos Gómez"
+                          : "Se entrega por turno; el nombre ayuda si lo sabés"
+                      }
+                      invalido={cart.length > 0 && faltaNombre && Boolean(errorGlobal)}
                     />
 
                     {tipoConsumo === "DOMICILIO" && (
@@ -1626,9 +1650,9 @@ export function ModuloPosInteractive({
                             type="button"
                             variant="outline"
                             onClick={() => {
-                              if (!customerName.trim()) {
+                              if (faltaNombre) {
                                 setErrorGlobal(
-                                  "Falta el nombre: es lo que el cajero busca en la lista.",
+                                  "En un domicilio hace falta a nombre de quién va el pedido.",
                                 );
                                 document.getElementById("customerName")?.focus();
                                 return;
@@ -1659,8 +1683,10 @@ export function ModuloPosInteractive({
                           <Button
                             type="button"
                             onClick={() => {
-                              if (!customerName.trim()) {
-                                setErrorGlobal("Escribí el nombre del cliente antes de cobrar.");
+                              if (faltaNombre) {
+                                setErrorGlobal(
+                                  "En un domicilio hace falta a nombre de quién va el pedido.",
+                                );
                                 document.getElementById("customerName")?.focus();
                                 return;
                               }
@@ -1697,9 +1723,9 @@ export function ModuloPosInteractive({
                             type="button"
                             variant="outline"
                             onClick={() => {
-                              if (!customerName.trim()) {
+                              if (faltaNombre) {
                                 setErrorGlobal(
-                                  "Falta el nombre: es lo que el cajero busca en la lista.",
+                                  "En un domicilio hace falta a nombre de quién va el pedido.",
                                 );
                                 document.getElementById("customerName")?.focus();
                                 return;

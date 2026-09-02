@@ -253,6 +253,8 @@ model Business {
   email     String?
   logoUrl   String?
 
+  logosDeTirilla LogoDeTirilla[]
+
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
@@ -306,6 +308,33 @@ model Business {
 /// Parámetros de operación. Ningún valor de negocio vive como constante global:
 /// todo lo que un dueño podría querer distinto está acá, con el valor por defecto
 /// colombiano.
+/// El logo del negocio ya convertido al mapa de bits de la impresora térmica.
+///
+/// Se precalcula al subir el archivo y NO al imprimir, por una razón dura: el
+/// recibo se encola DENTRO de la transacción que cierra la venta, y una llamada
+/// de red ahí es un lock de base esperando a Cloudinary. Acá es una lectura más
+/// sobre la misma conexión.
+///
+/// Va en su propia tabla y no en una columna de `Business` o `BusinessSettings`
+/// porque son ~10 KB por fila: en `BusinessSettings` viajarían solos al navegador
+/// —la pantalla de Configuración pasa `settings` entero con un spread— y en
+/// `Business` los cargaría cada pantalla del producto.
+///
+/// Una fila por ancho de cabezal (384 puntos para el rollo de 58 mm, 576 para el
+/// de 80): un mapa de bits no se puede reescalar sin volver a rasterizar, así que
+/// se guardan los dos al subir y cambiar de rollo no exige volver a cargar nada.
+model LogoDeTirilla {
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  anchoPuntos Int
+  alto        Int
+  /// Fila por fila, `anchoPuntos / 8` bytes cada una. Bit en 1 = punto quemado.
+  datos       Bytes
+  creadoEn    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([businessId, anchoPuntos])
+}
+
 model BusinessSettings {
   id         String   @id @default(cuid())
   businessId String   @unique
@@ -382,6 +411,13 @@ model BusinessSettings {
   turneroImageIntervalSeconds Int     @default(10)
   turneroYoutubeUrl           String?
   turneroBadgePosition        String  @default("TOP_RIGHT")
+  /// Si el televisor muestra el logo del negocio en vez del de Platlia.
+  ///
+  /// Arranca APAGADO a propósito: sin logo cargado, un hueco donde iba una marca
+  /// se lee como pantalla rota, mientras que el logotipo de Platlia es una marca
+  /// de verdad y sostiene la composición. El negocio lo enciende cuando tiene el
+  /// suyo, y no antes.
+  turneroMostrarLogo          Boolean @default(false)
 
   /// Si el negocio fía. Apagado de fábrica: fiar es una decisión del dueño, no un
   /// método de pago que aparece solo. Apagado, "Crédito" no se ofrece al cobrar y

@@ -22,6 +22,16 @@ type TurneroProps = {
   imageIntervalSeconds: number;
   youtubeUrl: string | null;
   badgePosition: string; // "TOP_LEFT" | "TOP_RIGHT"
+  /**
+   * El logo del negocio, o `null` si eligió mostrar el de Platlia.
+   *
+   * La página resuelve las DOS condiciones —el interruptor y que haya logo
+   * cargado— y manda una sola cosa: acá no se decide nada. Si llegara el
+   * interruptor por separado, esta pantalla tendría que acordarse de que
+   * encendido sin logo es un hueco, y ese olvido se ve como un televisor roto
+   * colgado en la pared de un local lleno.
+   */
+  logoDelNegocio: string | null;
 };
 
 /** Extrae el ID de un video de YouTube desde cualquier formato de URL */
@@ -93,6 +103,7 @@ export function PantallaTurnero({
   imageIntervalSeconds,
   youtubeUrl,
   badgePosition,
+  logoDelNegocio,
 }: TurneroProps) {
   const images = parseImageUrls(imagesRaw);
   const youtubeId = extractYoutubeId(youtubeUrl);
@@ -316,7 +327,16 @@ export function PantallaTurnero({
           
           {/* Header con Logotipo y Nombre del Negocio */}
           <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-            <Logotipo className="h-7 opacity-90" />
+            {logoDelNegocio ? (
+               
+              <img
+                src={logoDelNegocio}
+                alt=""
+                className="h-7 w-auto max-w-[140px] object-contain opacity-90"
+              />
+            ) : (
+              <Logotipo className="h-7 opacity-90" />
+            )}
             <span className="truncate text-sm font-semibold tracking-wider text-foreground uppercase">
               {businessName}
             </span>

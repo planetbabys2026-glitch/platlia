@@ -5,6 +5,7 @@ import {
   getAlertasInventario,
   getAnulaciones,
   getCostoYMargen,
+  getGastosDeCaja,
   getHorasPico,
   getPorMetodoDePago,
   getPorTarifa,
@@ -114,6 +115,7 @@ export default async function InformesPage({
     margen,
     horas,
     cocina,
+    gastos,
   ] = await Promise.all([
     getResumenDeJornada(ctx.business.id, periodo),
     getResumenDeJornada(ctx.business.id, previo),
@@ -125,7 +127,21 @@ export default async function InformesPage({
     getCostoYMargen(ctx.business.id, periodo),
     getHorasPico(ctx.business.id, periodo, settings.timeZone),
     getTiemposDeCocina(ctx.business.id, periodo),
+    getGastosDeCaja(ctx.business.id, periodo),
   ]);
+
+  /**
+   * El puente de la venta a la ganancia.
+   *
+   * `ventasCop` es `totalCop`, o sea que trae adentro el impuesto y la propina, y
+   * ninguna de las dos cosas es plata del negocio: el impuesto se cobra para
+   * entregarlo y la propina es del equipo. Restarlas deja base gravable más
+   * domicilios, que es lo que de verdad entra —el mismo criterio con el que
+   * `getCostoYMargen` mide el margen contra `lineSubtotalCop` y no contra el
+   * total, para no inflar la ganancia con plata ajena.
+   */
+  const ingresoDelNegocioCop = resumen.ventasCop - resumen.impuestoCop - resumen.propinasCop;
+  const gananciaEstimadaCop = ingresoDelNegocioCop - gastos.gastosCop;
 
   const variacion = variacionPorcentual(resumen.ventasCop, resumenAnterior.ventasCop);
   const ticket = promedioCop(resumen.ventasCop, resumen.pedidos);
@@ -261,6 +277,149 @@ export default async function InformesPage({
                       <span>Base gravable neta:</span>
                       <span className="numeral">{formatCop(t.baseCop)}</span>
                     </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      )}
+
+      {/* Lo que salió por la caja, y la ganancia que queda.
+          Va en Ventas y no en Costos a propósito: Costos vive del inventario y no
+          existe sin él, y este informe es justamente para el negocio que no lo
+          lleva —sin costeo por receta, cruzar la venta contra lo que se pagó por
+          la caja es lo único que queda para saber si la noche dejó algo. */}
+      {seccion === "ventas" && (
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border-border/80 bg-card">
+          <CardContent className="space-y-4 pt-5">
+            <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+              <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                Ganancia Estimada
+              </h2>
+              <span className="font-mono text-rotulo text-muted-foreground">ENTRADAS − SALIDAS</span>
+            </div>
+
+            <ul className="divide-border/60 divide-y divide-dashed text-sm">
+              <li className="flex items-center justify-between py-2.5 first:pt-0">
+                <span className="font-medium text-foreground">Ventas facturadas</span>
+                <span className="numeral font-mono font-bold text-foreground">
+                  {formatCop(resumen.ventasCop)}
+                </span>
+              </li>
+              <li className="flex items-center justify-between py-2.5">
+                <span className="text-muted-foreground">Impuesto, que se entrega</span>
+                <span className="numeral font-mono text-destructive-soft">
+                  −{formatCop(resumen.impuestoCop)}
+                </span>
+              </li>
+              <li className="flex items-center justify-between py-2.5">
+                <span className="text-muted-foreground">Propinas, que son del equipo</span>
+                <span className="numeral font-mono text-destructive-soft">
+                  −{formatCop(resumen.propinasCop)}
+                </span>
+              </li>
+              <li className="flex items-center justify-between py-2.5">
+                <span className="font-medium text-foreground">Ingreso del negocio</span>
+                <span className="numeral font-mono font-bold text-foreground">
+                  {formatCop(ingresoDelNegocioCop)}
+                </span>
+              </li>
+              <li className="flex items-center justify-between py-2.5">
+                <span className="text-muted-foreground">
+                  Gastos pagados por caja
+                  {gastos.movimientos > 0 && (
+                    <span className="ml-2 font-mono text-xs">
+                      ({gastos.movimientos}{" "}
+                      {gastos.movimientos === 1 ? "movimiento" : "movimientos"})
+                    </span>
+                  )}
+                </span>
+                <span className="numeral font-mono text-destructive-soft">
+                  −{formatCop(gastos.gastosCop)}
+                </span>
+              </li>
+            </ul>
+
+            <div className="flex items-center justify-between border-t-2 border-border pt-3">
+              <span className="font-display font-black uppercase tracking-tight text-lg text-foreground">
+                Ganancia estimada
+              </span>
+              <span
+                className={cn(
+                  "numeral font-mono text-xl font-bold",
+                  gananciaEstimadaCop >= 0 ? "text-success-soft" : "text-destructive-soft",
+                )}
+              >
+                {formatCop(gananciaEstimadaCop)}
+              </span>
+            </div>
+
+            {/* Las tres cosas que este número NO es. Sin decirlas, alguien toma
+                una decisión de plata con una cifra que entendió al revés. */}
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              {gastos.retirosCop > 0 && (
+                <p>
+                  No se descuentan{" "}
+                  <span className="numeral font-mono">{formatCop(gastos.retirosCop)}</span> en
+                  retiros: sacar la plata del cajón la mueve de lugar, no la gasta.
+                </p>
+              )}
+              {settings.inventoryEnabled ? (
+                <p>
+                  Es una estimación de caja, no el margen: lo que compraste por factura de
+                  compra no sale por acá.{" "}
+                  <Link href="/informes?vista=costos" className="text-brand font-semibold">
+                    Ver costo y margen
+                  </Link>
+                </p>
+              ) : (
+                <p>
+                  Es una estimación de caja: descuenta lo que pagaste por la caja, no el costo
+                  de la mercancía. Para eso hace falta el inventario.
+                </p>
+              )}
+              {settings.creditoEnabled && (
+                <p>
+                  Lo fiado cuenta como venta el día que se fió, aunque esa plata todavía no
+                  haya entrado.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/80 bg-card">
+          <CardContent className="space-y-4 pt-5">
+            <div className="flex items-center justify-between border-b border-dashed border-border/80 pb-2">
+              <h2 className="font-display font-black text-xl uppercase tracking-tight text-foreground">
+                En Qué Se Fue
+              </h2>
+              <span className="font-mono text-rotulo text-muted-foreground">
+                {formatCop(gastos.efectivoCop)} EFECTIVO / {formatCop(gastos.bancoCop)} BANCOS
+              </span>
+            </div>
+
+            {gastos.conceptos.length === 0 ? (
+              <Vacio />
+            ) : (
+              <ul className="divide-border/60 divide-y divide-dashed text-sm">
+                {gastos.conceptos.map((g) => (
+                  <li key={g.concepto} className="flex items-center justify-between py-2.5 first:pt-0">
+                    <div className="min-w-0 pr-3">
+                      <span className="font-medium text-foreground">{g.concepto}</span>
+                      {g.cantidad > 1 && (
+                        <span className="text-muted-foreground ml-2 font-mono text-xs">
+                          ({g.cantidad} veces)
+                        </span>
+                      )}
+                    </div>
+                    <span className="numeral font-mono font-bold text-foreground text-sm">
+                      {formatCop(g.totalCop)}
+                    </span>
                   </li>
                 ))}
               </ul>

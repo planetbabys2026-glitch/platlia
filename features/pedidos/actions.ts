@@ -1731,10 +1731,9 @@ export const procesarVentaPosCompleta = defineAction({
   roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
   async handler({ input, ctx, db }) {
-    if (!input.customerName || !input.customerName.trim()) {
-      throw new ErrorDeUsuario("El nombre del cliente es obligatorio para facturar e imprimir.");
-    }
-
+    // El nombre ya no se exige acá: lo pide el esquema y SOLO en domicilio, que
+    // es donde hay un paquete que alguien tiene que recibir. Un pedido de
+    // mostrador se identifica por su turno, que se reparte al crearlo.
     const settings = await getSettings(ctx.business.id);
     const businessDate = currentBusinessDate(settings);
 

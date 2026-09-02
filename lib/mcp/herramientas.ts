@@ -2,6 +2,7 @@ import "server-only";
 import {
   getAlertasInventario,
   getCostoYMargen,
+  getGastosDeCaja,
   getHorasPico,
   getPorMetodoDePago,
   getProductosMasVendidos,
@@ -227,6 +228,63 @@ export const HERRAMIENTAS: Herramienta[] = [
             `- ${k.cocinero}: ${k.renglones} platos · espera ${formatDuracion(k.esperaPromedioMs)} · preparación ${formatDuracion(k.preparacionPromedioMs)}${k.relevados > 0 ? ` · ${k.relevados} los terminó otra persona` : ""}`,
         ),
       ].join("\n");
+    },
+  },
+  {
+    nombre: "gastos_y_ganancia",
+    descripcion:
+      "Qué se gastó por la caja en un período y qué ganancia estimada queda: ventas menos impuesto y propinas, menos los gastos. Sirve sobre todo en negocios que no llevan inventario, donde no hay costo por receta. Los retiros no se descuentan.",
+    esquema: ESQUEMA_PERIODO,
+    async ejecutar(businessId, args) {
+      const { periodo, etiqueta } = await periodoDe(businessId, args);
+      const [r, g] = await Promise.all([
+        getResumenDeJornada(businessId, periodo),
+        getGastosDeCaja(businessId, periodo),
+      ]);
+
+      if (r.pedidos === 0 && g.movimientos === 0) {
+        return `No hay ventas ni gastos registrados en ${etiqueta}.`;
+      }
+
+      // La misma aritmética que la pantalla, y a propósito: si acá se calculara
+      // distinto, el dueño tendría dos ganancias y ninguna confiable.
+      const ingresoCop = r.ventasCop - r.impuestoCop - r.propinasCop;
+      const gananciaCop = ingresoCop - g.gastosCop;
+
+      const lineas = [
+        `Ganancia estimada de ${etiqueta}:`,
+        `- Ventas facturadas: ${formatCop(r.ventasCop)}`,
+        `- Menos impuesto (se entrega): ${formatCop(r.impuestoCop)}`,
+        `- Menos propinas (son del equipo): ${formatCop(r.propinasCop)}`,
+        `- Ingreso del negocio: ${formatCop(ingresoCop)}`,
+        `- Menos gastos pagados por caja: ${formatCop(g.gastosCop)} en ${g.movimientos} ${g.movimientos === 1 ? "movimiento" : "movimientos"}`,
+        `- GANANCIA ESTIMADA: ${formatCop(gananciaCop)}`,
+        `  (${formatCop(g.efectivoCop)} de esos gastos salieron en efectivo y ${formatCop(g.bancoCop)} por bancos)`,
+      ];
+
+      if (g.retirosCop > 0) {
+        lineas.push(
+          `- Retiros del período: ${formatCop(g.retirosCop)}. NO se descuentan de la ganancia: sacar la plata del cajón la mueve de lugar, no la gasta.`,
+        );
+      }
+
+      if (g.conceptos.length > 0) {
+        lineas.push("", "En qué se fue:");
+        for (const c of g.conceptos) {
+          lineas.push(
+            `- ${c.concepto}: ${formatCop(c.totalCop)}${c.cantidad > 1 ? ` en ${c.cantidad} veces` : ""}`,
+          );
+        }
+      }
+
+      // Que el modelo sepa qué NO es esta cifra, o va a llamarla "utilidad" y
+      // alguien va a tomar una decisión de plata con eso.
+      lineas.push(
+        "",
+        "Es una estimación de caja, no una utilidad contable: descuenta lo que se pagó POR LA CAJA, no el costo de la mercancía vendida ni los gastos pagados por fuera del sistema.",
+      );
+
+      return lineas.join("\n");
     },
   },
   {

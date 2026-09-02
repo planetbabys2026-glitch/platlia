@@ -1,7 +1,7 @@
 import "server-only";
 import { PrintJobStatus, PrinterRole } from "@/generated/prisma/enums";
 import type { TenantDb } from "@/lib/db/tenant";
-import { aBase64, componerEscPos } from "@/lib/printing/escpos";
+import { aBase64, componerEscPos, type RasterDeLogo } from "@/lib/printing/escpos";
 import { publicarImpresion } from "@/lib/redis";
 
 /**
@@ -35,6 +35,8 @@ export type TrabajoParaEncolar = {
   /** Todo el trabajo a doble alto. Es lo que usa la comanda de cocina. */
   dobleAlto?: boolean;
   abrirCajon?: boolean;
+  /** El logo ya rasterizado. Solo lo manda el recibo; la comanda no lo lleva. */
+  logo?: RasterDeLogo | null;
 };
 
 /**
@@ -53,6 +55,7 @@ export async function encolarImpresion(
     lineasDestacadas: trabajo.lineasDestacadas ?? 0,
     dobleAlto: trabajo.dobleAlto ?? false,
     abrirCajon: trabajo.abrirCajon ?? false,
+    logo: trabajo.logo ?? null,
   });
 
   const job = await db.printJob.create({

@@ -532,7 +532,7 @@ pegado por error en un repositorio lo detecten los escáneres de secretos.
 atrapó al agregarlo, que es exactamente para lo que existe: sin esa línea, `tenantDb` no le habría
 puesto el `businessId` al `where` y un negocio podría revocar las llaves de otro.
 
-**Las siete herramientas son de solo lectura, y eso es una decisión de seguridad, no una etapa.** El
+**Todas las herramientas son de solo lectura, y eso es una decisión de seguridad, no una etapa.** El
 radio de daño de un asistente confundido —o de un token filtrado— tiene que ser "alguien vio mis
 números", nunca "alguien me anuló la noche". Un agente que se equivoca al leer da una respuesta mala;
 uno que se equivoca al escribir arruina una caja.
@@ -541,6 +541,11 @@ uno que se equivoca al escribir arruina una caja.
 información es de terceros que se la dieron al restaurante, no al proveedor de IA que el restaurante
 eligió; mandarla afuera sin consentimiento es justamente lo que la ley de habeas data no permite.
 Todo lo que sale es agregado.
+
+`gastos_y_ganancia` devuelve el mismo puente que la pantalla —venta, menos impuesto, menos
+propinas, menos gastos de caja— y **dice en el texto que no es una utilidad contable**: quien lo
+lee es un modelo que va a repetirlo, y si lo llama "utilidad" alguien toma una decisión de plata
+con eso. También aclara que el retiro no se descuenta, por la misma razón.
 
 **No hay SQL nuevo**: las herramientas llaman a las mismas funciones de `features/informes/queries.ts`
 que pintan la pantalla de Informes. Si "ventas" se calculara distinto acá, el dueño tendría dos cifras
@@ -1187,6 +1192,81 @@ saldría con un `?` en el papel y en ningún otro lado.
 puede pasarse del ancho en caracteres**, en los dos rollos. Si se pasa, lo que se pierde es
 siempre la columna de la derecha, que es la de la plata.
 
+### El logo del negocio: una imagen, tres destinos y un mapa de bits
+
+`Business.logoUrl` existía desde el principio y **nunca se escribía**. La leía el menú QR y no
+había pantalla para cargarla, así que un negocio no tenía forma de poner su marca en ningún lado.
+Ahora se sube en **Datos del negocio** y de ahí sale para la tirilla, el turnero y el escaparate.
+
+**El control vive FUERA del `<form>` y se guarda solo.** Subir un archivo es su propia acción
+—tiene que viajar el binario—, y meterlo adentro obligaría a que el formulario entero fuera
+`multipart` y a que cambiar el teléfono arrastrara una imagen de 5 MB. Por eso también avisa por su
+cuenta cuando terminó: ahí no manda la `BarraGuardar`.
+
+**Una térmica no imprime un PNG.** Recibe un mapa de bits de UN bit por punto y lo quema punto por
+punto: no hay grises, ni color, ni escalado. Todo eso se hace de este lado, en `lib/printing/logo.ts`.
+
+**Y se hace al SUBIR, no al imprimir.** El recibo se encola dentro de la transacción que cierra la
+venta, así que bajar y convertir una imagen ahí sería un lock de base esperando a Cloudinary —el
+mismo error que la llamada a Factus adentro de una transacción—. El resultado va a `LogoDeTirilla`,
+tabla propia y no columna de `Business` o `BusinessSettings`: son ~8 KB por fila, que en
+`BusinessSettings` viajarían solos al navegador —Configuración pasa `settings` entero con un
+spread— y en `Business` los cargaría cada pantalla del producto.
+
+**Una fila por ancho de cabezal, y se guardan los dos.** El ancho no es el del papel ni el de
+caracteres: es la resolución real —384 puntos el rollo de 58 mm, 576 el de 80—. Un mapa de bits no
+se reescala, así que mandarlo con el ancho del otro rollo no lo agranda: la impresora lee el chorro
+de bytes con el largo equivocado y escupe ruido durante varios centímetros. Se calculan los dos al
+subir porque cambiar de impresora no puede exigir volver a cargar el logo: nadie relacionaría una
+cosa con la otra, y el síntoma sería *"desde que cambiamos la impresora no sale el logo"*.
+
+Cuatro cosas del conversor que no se ven leyendo el código, solo en el papel:
+
+1. **`flatten` sobre blanco va primero.** Un PNG con fondo transparente —que es como viene casi
+   todo logo— tiene esos píxeles en negro con alfa 0: sin aplanarlos, el logo sale como un
+   rectángulo negro sólido con la marca en blanco adentro. Hay un test con un PNG transparente.
+2. **Umbral ordenado de Bayer 4×4, no un umbral fijo.** Un umbral fijo convierte cualquier foto en
+   una mancha, y difuminar siempre ensucia el arte plano que es la mayoría de los logos. Bayer
+   resuelve las dos: el negro y el blanco puros caen del mismo lado con cualquier umbral —así que
+   un logo de dos tintas sale idéntico— y solo los medios tonos se reparten.
+3. **El ancho del raster es múltiplo de 8**, porque cada byte del comando lleva ocho puntos.
+4. **El alto está topeado en 180 puntos** (~22 mm). No es estética: cada milímetro de logo es papel
+   que se gasta en CADA venta de cada noche, y un logo cuadrado sin tope se comería 7 cm por tiquete.
+
+**`GS v 0` manda el ancho en BYTES y el alto en PUNTOS**, cada uno en dos bytes little endian.
+Confundir las unidades no da error, da papel arruinado, así que `tests/unit/logo-impresion.test.ts`
+afirma los bytes. El comando y el tipo viven en `escpos.ts` —puro, es "cómo se le manda a la
+máquina"— y `logo.ts` se queda con `sharp`, que es "cómo se convierte una imagen".
+
+**El logo se centra con `ESC a 1` y se vuelve a alinear enseguida.** La alineación es estado de la
+impresora: dejarla puesta correría el texto entero del tiquete, que está compuesto a la izquierda
+con relleno de espacios.
+
+**Y no reemplaza al encabezado.** El nombre, el NIT y la dirección se siguen imprimiendo en texto.
+Un logo es una marca, no un dato fiscal, y quien reclame una garantía necesita el NIT legible
+aunque el dibujo salga flojo.
+
+**`logo.ts` no importa `server-only`**, por la misma razón que `lib/email/enviar.ts`: los tests
+corren en jsdom y ese módulo lanza fuera de la condición `react-server`, así que con él la
+conversión —justo la parte que no se puede verificar mirando la pantalla— no se podría probar. La
+guarda real es `sharp`: es un binario nativo y no sobrevive a un bundle de navegador, así que un
+import desde un componente cliente revienta en el build y no en producción.
+
+### El turnero muestra el de Platlia hasta que haya otro
+
+`BusinessSettings.turneroMostrarLogo` arranca **apagado**. Sin logo cargado, un hueco donde iba una
+marca se lee como pantalla rota —y esto es un televisor colgado en la pared de un local lleno—,
+mientras que el logotipo de Platlia es una marca de verdad y sostiene la composición.
+
+**Las dos condiciones —el interruptor y que haya logo— se resuelven en la página, no en la
+pantalla**, que recibe un solo `logoDelNegocio: string | null`. Si le llegara el interruptor por
+separado, el componente tendría que acordarse de que encendido sin logo es un hueco, y ese olvido
+es exactamente el que nadie ve hasta que está proyectado. Por lo mismo la pantalla de Configuración
+no ofrece un interruptor mudo: cuando no hay logo, lo dice y manda a Datos del negocio.
+
+El logo se consulta **solo si el interruptor está encendido**: `ctx.business` del DAL no lo trae y
+esa pantalla se recarga sola cada pocos segundos, toda la noche.
+
 ### La comanda se lee de pie, a un metro y con las manos ocupadas
 
 Tres cosas que la hacen legible en una plancha, y ninguna es estética:
@@ -1375,6 +1455,23 @@ entregado alcanzara; y con `p.tipCop > 0` no había forma de **quitar** una prop
 exige caja siempre, la exija el negocio o no: `requireOpenCashSession` decide si se pueden *tomar*
 pedidos sin turno, que es otra cosa.
 
+### El nombre del comensal solo hace falta cuando hay una puerta
+
+El POS lo exigía en toda venta —esquema, guarda del servidor y cuatro chequeos en la pantalla—
+con el argumento de que es lo que se canta al entregar. No lo es: **todo pedido sin mesa recibe
+`turnNumber` al crearse**, y el turno es lo que se canta, lo que sale a doble ancho en la comanda
+y lo que muestra el turnero. Pedir además un nombre para una gaseosa de mostrador es una tecleada
+por venta en la pantalla más rápida del producto.
+
+En **domicilio** sí, y por una razón distinta: ahí no hay turno que cantar sino un paquete que
+alguien tiene que recibir en una puerta. Va con la dirección y el celular, que ya se exigían por
+lo mismo, y con el mismo `refine` condicionado por `type`.
+
+La condición vive en **una sola constante** (`faltaNombre`) y no repetida en cada botón: eran
+cuatro lugares que tenían que decidir igual —los tres botones de la barra y `ejecutarProcesarPos`—
+y con uno olvidado el POS frena una venta que el servidor habría aceptado. El guarda que estaba
+escrito a mano en la acción se fue: lo pide el esquema, que es donde se ve.
+
 ### La cocina firma cada plato, y esa firma es el informe
 
 `OrderItem` no tenía marca de "empezado". Con `sentToKitchenAt` y `readyAt` solamente,
@@ -1447,6 +1544,46 @@ traer a JS):
 
 Y **el total no promedia promedios**: cada tramo vuelve con su cuenta y la ponderación se hace en JS.
 Un cocinero con dos platos no puede pesar lo mismo que uno con doscientos.
+
+### La ganancia estimada sale de la caja, y el retiro no es un gasto
+
+Informes medía el margen contra `OrderItem.lineCostCop`, que **solo existe con inventario
+encendido**. El negocio que no costea por receta —que son casi todos los bares— no tenía en el
+producto ni un número que dijera si la noche dejó algo: veía cuánto vendió y, aparte y sin
+cruzar, cuánto sacó por la caja.
+
+`getGastosDeCaja` cruza las dos cosas en la vista de **Ventas** (no en Costos: esa sección vive
+del inventario y no existe sin él, que es justo el caso que esto atiende). Toda la aritmética
+está en `resumirGastos` (`features/caja/reglas.ts`, puro y con tests); la consulta solo va a la
+base. Las tres decisiones que la hacen correcta no son consultables —son criterio, y el criterio
+se rompe en silencio—:
+
+1. **El RETIRO no es un gasto** (`esGastoOperativo`, más angosto que `esSalidaDeDinero`). Llevar
+   el efectivo al banco o que el dueño saque su plata mueve el dinero de lugar; no lo consume.
+   Restarlo haría que una noche buena —en la que justamente se retira más— se informara como una
+   noche mala. Se muestra aparte, porque sin el número nadie entiende por qué no se resta.
+2. **El AJUSTE negativo sí cuenta.** Es la puerta de al lado del gasto y el producto ya lo trata
+   así: `esSalidaDeDinero` le pide la misma clave, precisamente porque quien no quiere escribir
+   el gasto registra el faltante como ajuste y saca la plata igual.
+3. **El INGRESO no entra por el otro lado.** Un abono de cartera es un `CashMovement` de tipo
+   INGRESO, pero esa venta ya se reconoció el día que se fió: sumarlo la contaría dos veces. Es
+   la misma razón por la que el resto de Informes nunca sumó movimientos de caja.
+
+**La ganancia se calcula sobre lo que es del negocio, no sobre el total.**
+`ventasCop − impuestoCop − propinasCop` deja base gravable más domicilios: el impuesto se cobra
+para entregarlo y la propina es del equipo. Es el mismo criterio con el que `getCostoYMargen`
+mide contra `lineSubtotalCop`; usar el total inflaría la ganancia con plata ajena. La pantalla
+muestra el puente entero —venta, las dos restas, ingreso, gastos, ganancia— porque un solo
+número al final no se puede auditar ni discutir.
+
+**La jornada sale de la sesión de caja, no de `createdAt`.** `CashMovement` no tiene
+`businessDate`: cuelga de `CashSession`, que sí lo tiene. Filtrar por la hora del movimiento
+metería el gasto de las 2 a.m. en el día siguiente, que es exactamente lo que el día de negocio
+existe para evitar.
+
+Y el concepto es texto libre, así que "Hielo", "hielo " y "HIELO" se agrupan por su forma
+normalizada y se muestra la primera que se escribió. Sin eso, "en qué se fue la plata" es una
+lista de veinte renglones que son cuatro gastos.
 
 ### Caja: lo cobrado no desaparece
 
@@ -1588,6 +1725,40 @@ en el mostrador. Su pantalla es la caja: abrir el turno es lo primero que hace a
 dueño y no el mesero porque casi todos esos flujos sientan una mesa **y** la cobran: con el mesero
 habría que volver a entrar como cajero a la mitad de cada prueba. Que cada rol vea lo que le toca lo
 fija `tests/unit/permisos-roles.test.ts`, que puede probarlo sin navegador.
+
+### En el riel, el icono ES el destino
+
+La barra de escritorio colapsada es un riel de iconos y la barra inferior del teléfono también:
+ahí no hay texto que supla al dibujo. Tres colisiones convivían sin que fallara nada —ni el build,
+ni el tipo, ni el lint—:
+
+- **Configuración y Modificadores** compartían `SlidersHorizontal`.
+- **Administración y Configuración** compartían `Settings`.
+- **Configuración tenía un icono para el propietario y otro para quien no lo es**: la misma
+  pantalla cambiaba de dibujo según quién la mirara.
+
+Y dos que no chocaban pero mentían: el POS con `BookMarked` —un libro con marcador se lee como "la
+carta guardada", que es otra pantalla— y la **Caja con `CreditCard`**, que la anunciaba como si
+fuera uno solo de sus medios de pago cuando ahí se cuenta efectivo, se arquean dos saldos, se
+pagan proveedores y se fía.
+
+| | Antes | Ahora | Por qué |
+|---|---|---|---|
+| POS | `BookMarked` | `ShoppingCart` | acá se arma una venta |
+| Caja | `CreditCard` | `Banknote` | no es el datáfono, es el cajón entero |
+| Turnero | `MonitorPlay` | `Tv` | es literalmente el televisor del salón |
+| Configuración | `SlidersHorizontal` / `Settings` | `Settings` | uno solo, lo mire quien lo mire |
+| Administración | `Settings` | `PencilRuler` | acá se ARMA el negocio; el engranaje son los parámetros |
+
+**`ICONO_ADMINISTRACION` vive en `navegacion.ts` aunque solo lo pinte el shell.** El shell lo
+escribía a mano en sus dos lugares —el riel colapsado y la barra desplegada—, que es exactamente
+cómo se desincronizan; y estando en `navegacion.ts` queda cubierto por el test.
+
+`tests/unit/navegacion-iconos.test.ts` fija que **dos destinos con nombres distintos no compartan
+icono**. Se compara por título porque el título es el destino, y la única repetición legítima es la
+de dos entradas con el mismo nombre —"Salón" en Operación y en Administración son la misma cosa
+vista desde dos lados—. El test nombra la colisión en el mensaje, verificado reintroduciendo las
+dos que había.
 
 ### Las categorías se pliegan
 

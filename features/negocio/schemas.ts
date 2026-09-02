@@ -115,6 +115,7 @@ export const turneroSchema = z.object({
   ),
   turneroYoutubeUrl: textoOpcional(500),
   turneroBadgePosition: z.enum(["TOP_LEFT", "TOP_RIGHT"]),
+  turneroMostrarLogo: casilla,
 });
 
 export const qrMenuSchema = z.object({

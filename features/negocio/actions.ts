@@ -17,6 +17,7 @@ import { mergeExtraSettings } from "@/features/negocio/extra-settings";
 import { cuentaDelPropietario } from "@/lib/billing/cuenta";
 import { puedeCrearSede } from "@/lib/billing/sedes";
 import { subirImagen } from "@/lib/images/cloudinary";
+import { rasterizarParaTodosLosRollos } from "@/lib/printing/logo";
 import { assertTimeZone } from "@/lib/time";
 // eslint-disable-next-line no-restricted-imports -- Crear sucursal adicional requiere crear la fila de Business inicial
 import { rootDb } from "@/lib/db/root";
@@ -220,6 +221,7 @@ export const guardarTurneroSettings = defineAction({
         turneroImageIntervalSeconds: input.turneroImageIntervalSeconds,
         turneroYoutubeUrl: input.turneroYoutubeUrl ?? null,
         turneroBadgePosition: input.turneroBadgePosition,
+        turneroMostrarLogo: input.turneroMostrarLogo,
       },
     });
 
@@ -262,6 +264,79 @@ export const guardarQrMenuSettings = defineAction({
 
     revalidatePath("/administracion/configuracion");
     // La carta pública tiene que reflejar el cambio al instante.
+    revalidatePath(`/m/${ctx.business.slug}`);
+  },
+});
+
+/**
+ * El logo del negocio: el que sale en la tirilla, en el turnero y en la carta QR.
+ *
+ * Es UNO solo y vive en `Business.logoUrl`. La columna existía desde el principio
+ * y **nunca se escribía**: la leía el menú QR y no había pantalla para cargarla,
+ * así que un negocio no tenía forma de poner su marca en ningún lado. El menú QR
+ * mantiene su propio `qrMenuLogoUrl` para quien quiera una versión distinta en el
+ * escaparate —fondo claro, otra proporción—, pero ahora tiene de dónde heredar.
+ *
+ * **El raster para la térmica se calcula acá y no al imprimir**, porque el recibo
+ * se encola dentro de la transacción que cierra la venta: bajar y convertir una
+ * imagen ahí sería un lock de base esperando a Cloudinary. Se hace después de
+ * subir y fuera de toda transacción.
+ *
+ * Si la conversión falla, **el logo se guarda igual**: la tirilla del navegador
+ * solo necesita la URL, y perder la subida entera porque una térmica que quizá
+ * no existe no pudo recibir su mapa de bits sería el peor canje posible.
+ */
+export const subirLogoNegocio = defineAction({
+  schema: z.object({
+    file: z.instanceof(File, { message: "Seleccioná un archivo de imagen." }),
+  }),
+  roles: ADMINISTRAN,
+  async handler({ input, ctx, db }) {
+    if (input.file.size > 5 * 1024 * 1024) {
+      throw new ErrorDeUsuario("La imagen debe pesar menos de 5 MB.");
+    }
+
+    const buffer = Buffer.from(await input.file.arrayBuffer());
+    const url = await subirImagen(buffer, `platlia/${ctx.business.slug}/logo`);
+
+    await db.business.updateMany({
+      where: { id: ctx.business.id },
+      data: { logoUrl: url },
+    });
+
+    try {
+      const rasters = await rasterizarParaTodosLosRollos(buffer);
+      await db.logoDeTirilla.deleteMany({});
+      await db.logoDeTirilla.createMany({
+        data: rasters.map((r) => ({
+          businessId: ctx.business.id,
+          anchoPuntos: r.ancho,
+          alto: r.alto,
+          datos: Buffer.from(r.datos),
+        })),
+      });
+    } catch (error) {
+      console.error("[logo] no se pudo preparar el logo para la térmica:", error);
+    }
+
+    revalidatePath("/administracion/configuracion");
+    revalidatePath(`/m/${ctx.business.slug}`);
+    return { url };
+  },
+});
+
+/** Quitarlo se lleva también el mapa de bits: si no, la térmica seguiría imprimiéndolo. */
+export const quitarLogoNegocio = defineAction({
+  schema: z.object({}),
+  roles: ADMINISTRAN,
+  async handler({ ctx, db }) {
+    await db.business.updateMany({
+      where: { id: ctx.business.id },
+      data: { logoUrl: null },
+    });
+    await db.logoDeTirilla.deleteMany({});
+
+    revalidatePath("/administracion/configuracion");
     revalidatePath(`/m/${ctx.business.slug}`);
   },
 });

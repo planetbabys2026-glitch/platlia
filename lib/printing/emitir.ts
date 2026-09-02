@@ -2,6 +2,7 @@ import "server-only";
 import type { TenantDb } from "@/lib/db/tenant";
 import { componerComanda, LINEAS_DESTACADAS_COMANDA } from "@/lib/printing/comanda";
 import { componerRecibo } from "@/lib/printing/recibo";
+import { puntosDelCabezal } from "@/lib/printing/escpos";
 import { anchoEnCaracteres } from "@/lib/printing/ticket";
 import {
   encolarImpresion,
@@ -133,6 +134,16 @@ export async function encolarRecibo(
       turnNumberMax: settings?.turnNumberMax ?? 99,
     });
 
+    // El logo llega ya rasterizado desde la subida: acá es una lectura más sobre
+    // la misma conexión, no una salida a la red adentro de la transacción.
+    // El ancho es el del CABEZAL de esta impresora, no el del rollo configurado:
+    // un mapa de bits mandado con el ancho de otro rollo no se reescala, se
+    // imprime corrido y sale ruido durante varios centímetros.
+    const logo = await db.logoDeTirilla.findFirst({
+      where: { anchoPuntos: puntosDelCabezal(impresora.width) },
+      select: { anchoPuntos: true, alto: true, datos: true },
+    });
+
     await encolarImpresion(db, businessId, {
       printerId: impresora.id,
       orderId,
@@ -140,6 +151,9 @@ export async function encolarRecibo(
       lineas,
       lineasDestacadas: 1,
       abrirCajon: impresora.abreCajon,
+      logo: logo
+        ? { ancho: logo.anchoPuntos, alto: logo.alto, datos: new Uint8Array(logo.datos) }
+        : null,
     });
 
     return 1;

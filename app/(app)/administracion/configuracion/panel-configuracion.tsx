@@ -56,6 +56,7 @@ type PanelConfiguracionProps = {
     address: string | null;
     phone: string | null;
     email: string | null;
+    logoUrl: string | null;
   };
   settings: {
     deliveryEnabled: boolean;
@@ -70,6 +71,7 @@ type PanelConfiguracionProps = {
     turneroImageIntervalSeconds: number;
     turneroYoutubeUrl: string | null;
     turneroBadgePosition: string;
+    turneroMostrarLogo: boolean;
     timeZone: string;
     businessDayStartMinutes: number;
     pricesIncludeTax: boolean;
@@ -240,6 +242,8 @@ export function PanelConfiguracion({
                 turneroImageIntervalSeconds: settings.turneroImageIntervalSeconds,
                 turneroYoutubeUrl: settings.turneroYoutubeUrl,
                 turneroBadgePosition: settings.turneroBadgePosition,
+                turneroMostrarLogo: settings.turneroMostrarLogo,
+                logoUrl: negocio.logoUrl,
               }}
             />
           </CardContent>

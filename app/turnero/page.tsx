@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppModule } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { getTurnero } from "@/features/turnero/queries";
+import { tenantDb } from "@/lib/db/tenant";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth/dal";
 import { usaKds } from "@/features/caja/reglas";
@@ -39,6 +40,21 @@ export default async function TurneroPage() {
     currentBusinessDate(settings),
   );
 
+  /**
+   * El logo se pregunta SOLO si el interruptor está encendido.
+   *
+   * `ctx.business` del DAL no lo trae —es la fila mínima para el shell— y esta
+   * pantalla se recarga sola cada pocos segundos en un televisor: una consulta
+   * más por refresco, toda la noche, por un dato que la mayoría no usa.
+   */
+  const logoDelNegocio = settings.turneroMostrarLogo
+    ? (
+        await tenantDb(ctx.business.id).business.findFirstOrThrow({
+          select: { logoUrl: true },
+        })
+      ).logoUrl
+    : null;
+
   return (
     <PantallaTurnero
       businessName={ctx.business.name}
@@ -49,6 +65,12 @@ export default async function TurneroPage() {
       imageIntervalSeconds={settings.turneroImageIntervalSeconds}
       youtubeUrl={settings.turneroYoutubeUrl}
       badgePosition={settings.turneroBadgePosition}
+      /* Las dos condiciones se resuelven acá y no en la pantalla: el interruptor
+         encendido sin logo cargado dejaría un hueco donde iba una marca, que en
+         un televisor colgado se lee como pantalla rota. Hasta que las dos se
+         cumplan, va el logotipo de Platlia, que es una marca de verdad y sostiene
+         la composición. */
+      logoDelNegocio={logoDelNegocio}
     />
   );
 }

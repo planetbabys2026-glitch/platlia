@@ -126,6 +126,7 @@ export async function getPedidoParaTiquete(businessId: string, orderId: string) 
           taxId: true,
           address: true,
           phone: true,
+          logoUrl: true,
           settings: {
             select: {
               timeZone: true,

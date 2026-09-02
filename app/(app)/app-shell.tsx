@@ -7,7 +7,6 @@ import {
   ChevronDown,
   LogOut,
   Menu,
-  Settings,
   Store,
   X,
 } from "lucide-react";
@@ -23,6 +22,7 @@ import {
   construirNavegacion,
   esRutaActiva,
   hrefDeSeccion,
+  ICONO_ADMINISTRACION,
   itemsDeBarraInferior,
   type ItemNav,
 } from "./navegacion";
@@ -570,7 +570,7 @@ function Shell({
               key: "administracion",
               titulo: "Administración",
               href: administracion[0].href,
-              icono: Settings,
+              icono: ICONO_ADMINISTRACION,
               panel: administracion.map((sub) => ({ titulo: sub.titulo, href: sub.href })),
               activo: administracion.some((sub) => esRutaActiva(pathname, sub.href)),
             },
@@ -694,7 +694,7 @@ function Shell({
         ) : null}
 
         <span className="flex min-w-0 items-center gap-3 truncate">
-          <Settings
+          <ICONO_ADMINISTRACION
             className={cn(
               "size-[18px] shrink-0",
               esAdminActivo ? "text-brand" : "text-muted-foreground",

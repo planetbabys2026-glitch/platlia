@@ -157,6 +157,33 @@ export function esSalidaDeDinero(type: string, amountCop: number): boolean {
   return false;
 }
 
+/**
+ * Un GASTO: plata que salió de la caja y no vuelve al negocio.
+ *
+ * Es más angosto que `esSalidaDeDinero`, y la diferencia es toda la razón por la
+ * que existe esta función aparte: **el RETIRO no es un gasto.** Sacar el efectivo
+ * del cajón para llevarlo al banco, o que el dueño se lleve su plata, mueve el
+ * dinero de lugar pero no lo consume; restarlo de la ganancia haría que una noche
+ * buena —en la que justamente se retira más— se informara como una noche mala. Es
+ * el error que un informe de caja hace en silencio, porque el número sigue
+ * pareciendo razonable.
+ *
+ * El **AJUSTE negativo sí cuenta**, y no por prolijidad contable: es la puerta de
+ * al lado del gasto y el producto ya lo trata así —por eso `esSalidaDeDinero` le
+ * pide la misma clave—. Quien no quiere escribir el gasto registra el faltante
+ * como ajuste y saca la plata igual; dejarlo afuera sería informar una ganancia
+ * que nadie tiene.
+ *
+ * Y el INGRESO no entra por el otro lado. Un abono de cartera es un `CashMovement`
+ * de tipo INGRESO, pero esa venta ya se reconoció el día que se fió: sumarlo como
+ * ingreso la contaría dos veces.
+ */
+export function esGastoOperativo(type: string, amountCop: number): boolean {
+  if (type === "EGRESO") return true;
+  if (type === "AJUSTE") return amountCop < 0;
+  return false;
+}
+
 /** Un turno abierto, con lo mínimo para decidir cuál cobra. */
 export type SesionAbierta = {
   id: string;
@@ -197,4 +224,92 @@ export function sesionDeCobro(
   if (abiertas.length === 1) return { ok: true, cashSessionId: abiertas[0].id };
 
   return { ok: false, motivo: "VARIAS_Y_NINGUNA_TUYA" };
+}
+
+/* ── Resumen de gastos, para el informe de ganancia estimada ────────────────── */
+
+export type MovimientoAResumir = {
+  type: string;
+  account: string;
+  amountCop: number;
+  concept: string;
+};
+
+export type GastoPorConcepto = {
+  concepto: string;
+  cantidad: number;
+  totalCop: number;
+  efectivoCop: number;
+  bancoCop: number;
+};
+
+export type ResumenDeGastos = {
+  gastosCop: number;
+  efectivoCop: number;
+  bancoCop: number;
+  movimientos: number;
+  /** No se resta de la ganancia; viaja para poder decir por qué no. */
+  retirosCop: number;
+  conceptos: GastoPorConcepto[];
+};
+
+/**
+ * Los movimientos de un período reducidos a "cuánto salió y en qué se fue".
+ *
+ * Puro y aparte de la consulta a propósito: acá viven las tres decisiones que un
+ * `groupBy` de SQL no puede tomar —que el retiro no es gasto, que el ajuste
+ * depende del SIGNO del monto, y que "Hielo" y "hielo " son el mismo concepto—.
+ * Metidas en la consulta no habría forma de probarlas sin una base.
+ */
+export function resumirGastos(movimientos: readonly MovimientoAResumir[]): ResumenDeGastos {
+  const porConcepto = new Map<string, GastoPorConcepto>();
+  const total = {
+    gastosCop: 0,
+    efectivoCop: 0,
+    bancoCop: 0,
+    movimientos: 0,
+    retirosCop: 0,
+  };
+
+  for (const m of movimientos) {
+    if (m.type === "RETIRO") {
+      total.retirosCop += Math.abs(m.amountCop);
+      continue;
+    }
+    if (!esGastoOperativo(m.type, m.amountCop)) continue;
+
+    // El ajuste negativo llega con el signo puesto y el egreso en positivo; los
+    // dos son plata que salió, así que se acumulan por su magnitud.
+    const montoCop = Math.abs(m.amountCop);
+    const enEfectivo = m.account === "EFECTIVO";
+
+    total.gastosCop += montoCop;
+    total.movimientos += 1;
+    if (enEfectivo) total.efectivoCop += montoCop;
+    else total.bancoCop += montoCop;
+
+    // El concepto es texto libre: se agrupa por la forma normalizada y se muestra
+    // la primera que se escribió, que se lee mejor que la versión en mayúsculas.
+    const clave = m.concept.trim().replace(/\s+/g, " ").toUpperCase();
+    const previo = porConcepto.get(clave);
+    if (previo) {
+      previo.cantidad += 1;
+      previo.totalCop += montoCop;
+      previo.efectivoCop += enEfectivo ? montoCop : 0;
+      previo.bancoCop += enEfectivo ? 0 : montoCop;
+    } else {
+      porConcepto.set(clave, {
+        concepto: m.concept.trim() || "Sin concepto",
+        cantidad: 1,
+        totalCop: montoCop,
+        efectivoCop: enEfectivo ? montoCop : 0,
+        bancoCop: enEfectivo ? 0 : montoCop,
+      });
+    }
+  }
+
+  return {
+    ...total,
+    conceptos: [...porConcepto.values()].sort((a, b) => b.totalCop - a.totalCop),
+  };
 }
