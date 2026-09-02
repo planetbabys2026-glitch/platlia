@@ -4,6 +4,7 @@ import { createContext, useContext, useOptimistic } from "react";
 import { formatCop, formatRateBp } from "@/lib/money";
 import { computeTaxLine, sumTaxLines } from "@/lib/tax";
 import { AnularRenglon, ControlCantidad, NotaRenglon, QuitarRenglon } from "./acciones";
+import { sePuedeQuitar } from "@/features/pedidos/reglas-anulacion";
 
 /**
  * La cuenta que se ve, con lo que se acaba de tocar ya adentro.
@@ -40,6 +41,16 @@ export type RenglonDeLaCuenta = {
   taxRateBpSnapshot: number;
   notes: string | null;
   status: string;
+  /**
+   * Cuándo salió a la plancha. `null` es "todavía está en el carrito".
+   *
+   * Es lo que decide si el renglón se puede QUITAR o hay que ANULARLO, y no el
+   * `status`: un plato que ya salió a cocina sigue en PENDIENTE hasta que un
+   * cocinero toca "Empezar" —y en un negocio que trabaja solo con papel nadie lo
+   * toca nunca—. Mirando el estado, el mesero podía sacar de la cuenta, sin
+   * motivo y sin rastro, un plato que ya estaba cocinado y servido.
+   */
+  sentToKitchenAt: Date | string | null;
   modifiers: ModificadorDeRenglon[];
   /** Todavía no lo confirmó el servidor: se pinta atenuado y sin controles. */
   optimista?: boolean;
@@ -156,6 +167,8 @@ export function CuentaEnVivo({
           taxRateBpSnapshot: nuevo.taxRateBp,
           notes: null,
           status: "PENDIENTE",
+          // Un renglón optimista todavía no salió a ningún lado.
+          sentToKitchenAt: null,
           modifiers: nuevo.modificadores.map((m, i) => ({
             id: `optimista-mod-${i}`,
             optionNameSnapshot: m.nombre,
@@ -204,10 +217,11 @@ export function SegunConsumo({
 
 export function ListaDeRenglones({
   editable,
-  puedeCobrar,
+  pideClave,
 }: {
   editable: boolean;
-  puedeCobrar: boolean;
+  /** Si el negocio configuró clave de anulación, para pedirla en el formulario. */
+  pideClave: boolean;
 }) {
   const { renglones } = useCuentaObligatoria();
 
@@ -264,11 +278,15 @@ export function ListaDeRenglones({
               ) : (
                 item.notes && <p className="text-muted-foreground text-xs italic">{item.notes}</p>
               )}
+              {/* Quitar es para el carrito; lo que salió a cocina se anula, con
+                  motivo y dejando rastro. Antes esto miraba `status`, y entre que
+                  la comanda se imprime y que un cocinero la toma el renglón se
+                  podía sacar de la cuenta sin que quedara nada escrito. */}
               {editable &&
-                (item.status === "PENDIENTE" ? (
+                (sePuedeQuitar(item) ? (
                   <QuitarRenglon itemId={item.id} />
                 ) : (
-                  puedeCobrar && <AnularRenglon itemId={item.id} />
+                  <AnularRenglon itemId={item.id} pideClave={pideClave} />
                 ))}
             </>
           )}

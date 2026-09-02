@@ -152,6 +152,14 @@ export const anularItemSchema = z.object({
     .trim()
     .min(3, "Escribí por qué se anula.")
     .max(200, "El motivo es demasiado largo."),
+  /**
+   * La clave de anulación, si el negocio configuró una.
+   *
+   * Opcional en el esquema y exigida en la acción, que es donde se sabe si hay
+   * clave puesta: un `required` acá obligaría a mandar algo a los negocios que
+   * no la usan, que son la mayoría.
+   */
+  clave: textoOpcional(100),
 });
 
 export const pedidoSchema = z.object({ orderId: id });
@@ -227,6 +235,14 @@ export const anularPedidoSchema = z.object({
     .trim()
     .min(3, "Escribí por qué se anula.")
     .max(200, "El motivo es demasiado largo."),
+  /**
+   * La clave de anulación, si el negocio configuró una.
+   *
+   * Opcional en el esquema y exigida en la acción, que es donde se sabe si hay
+   * clave puesta: un `required` acá obligaría a mandar algo a los negocios que
+   * no la usan, que son la mayoría.
+   */
+  clave: textoOpcional(100),
 });
 
 export const propinaSchema = z.object({
@@ -299,18 +315,17 @@ const ventaPosCompleta = z
     /**
      * Qué se hace con el carrito.
      *
-     * `ENVIAR_CAJA` es la puerta explícita: guarda el pedido, lo manda a cocina y
-     * lo deja en `CUENTA_PEDIDA` para que la caja lo vea. Sin ella, un pedido del
-     * POS no llega nunca a la caja —que es justamente el punto: mandar la comanda
-     * a la plancha no es mandar la cuenta a cobrar—.
+     * Existía además `ENVIAR_CAJA`, la puerta explícita del POS. **Se fue**:
+     * desde que la caja lista toda comanda que salió a cocina, mandarla era un
+     * trámite que le escondía al cajero la mitad de su trabajo hasta que alguien
+     * se acordara de tocar el botón.
      */
-    accion: z.enum(["PAGAR_DIRECTO", "ENVIAR_COCINA", "PARQUEAR", "ENVIAR_CAJA"]),
+    accion: z.enum(["PAGAR_DIRECTO", "ENVIAR_COCINA", "PARQUEAR"]),
     /**
      * La propina elegida al mandar la cuenta a la caja.
      *
-     * Va suelta y no dentro de `pago` porque en `ENVIAR_CAJA` no hay pago: es el
-     * mismo momento que `pedirCuenta`, cuando se le pregunta al cliente. `0` es
-     * válido y significa que la deseleccionaron.
+     * Queda para el pago directo, que la manda dentro de `pago`. `0` es válido y
+     * significa que la deseleccionaron.
      */
     tipCop: z.preprocess(
       (v) => (v === "" || v === undefined ? undefined : Number(v)),
@@ -359,3 +374,23 @@ const ventaPosCompleta = z
   });
 
 export const procesarVentaPosCompletaSchema = exigirDatosFiscales(ventaPosCompleta);
+
+/** La clave de anulación: la pone y la cambia solo el propietario. */
+export const claveAnulacionSchema = z
+  .object({
+    claveActual: textoOpcional(72),
+    clave: z
+      .string()
+      .trim()
+      .min(6, "La clave tiene que tener al menos 6 caracteres.")
+      .max(72, "La clave es demasiado larga."),
+    claveRepetida: z.string().trim().min(1, "Repetí la clave."),
+  })
+  .refine((v) => v.clave === v.claveRepetida, {
+    error: "Las dos claves no coinciden.",
+    path: ["claveRepetida"],
+  });
+
+export const quitarClaveAnulacionSchema = z.object({
+  claveActual: z.string().trim().min(1, "Escribí la clave actual."),
+});

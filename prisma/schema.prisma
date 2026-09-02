@@ -490,6 +490,18 @@ model BusinessSettings {
   /// entre a poner una clave que nadie le pidió.
   expensePinHash String?
 
+  /// Clave opcional para anular un pedido o un renglón que ya tiene consumo.
+  ///
+  /// Reemplaza a la regla vieja "con consumo solo anula un administrador", que
+  /// dejaba al mesero sin salida: un pedido tomado por error se quedaba abierto
+  /// hasta que apareciera alguien con más rango, y mientras tanto la mesa no se
+  /// liberaba ni la caja podía cerrar. Anular es una decisión, no un rango.
+  ///
+  /// Como la de gastos: sin clave configurada la anulación funciona igual —con
+  /// motivo obligatorio y `AuditLog`, que es lo que de verdad la audita— y
+  /// Configuración lo avisa. Solo la pone y la cambia el propietario.
+  anulacionPinHash String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 }

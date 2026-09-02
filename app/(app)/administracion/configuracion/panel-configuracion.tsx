@@ -143,6 +143,7 @@ type PanelConfiguracionProps = {
   /** Null para quien no es propietario: las cajas y la clave de salidas son suyas. */
   cajas: CajaConfig[] | null;
   claveSalidasPuesta: boolean;
+  claveAnulacionPuesta: boolean;
 };
 
 type TabId =
@@ -174,6 +175,7 @@ export function PanelConfiguracion({
   cantidadDeSedes,
   cajas,
   claveSalidasPuesta,
+  claveAnulacionPuesta,
 }: PanelConfiguracionProps) {
   // La sección vive en la URL: es lo que permite que el menú lateral enlace
   // "Menú digital QR" en vez de dejar al usuario buscarla adentro. Sin la tira de
@@ -365,11 +367,16 @@ export function PanelConfiguracion({
       {tabActiva === "cajas" && esPropietario && cajas && (
         <Card className="shadow-sm overflow-visible">
           <CardContent className="space-y-4 pt-6">
-            <EncabezadoPanel titulo="Cajas y salidas de dinero">
-              Los puntos de cobro físicos del local y la clave que autoriza sacar
-              plata. Las dos cosas las decide el propietario.
+            <EncabezadoPanel titulo="Cajas y claves">
+              Los puntos de cobro físicos del local y las dos claves que autorizan
+              lo que resta plata: sacarla de la caja y anular una venta. Todo esto
+              lo decide el propietario y nadie más.
             </EncabezadoPanel>
-            <FormularioCajas cajas={cajas} claveSalidasPuesta={claveSalidasPuesta} />
+            <FormularioCajas
+              cajas={cajas}
+              claveSalidasPuesta={claveSalidasPuesta}
+              claveAnulacionPuesta={claveAnulacionPuesta}
+            />
           </CardContent>
         </Card>
       )}

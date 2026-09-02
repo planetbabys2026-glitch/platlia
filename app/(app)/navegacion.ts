@@ -286,7 +286,7 @@ export function construirNavegacion({
           { titulo: "Facturación DIAN", vista: "factus" },
           // Las cajas físicas y la clave de salidas. Van juntas y son del
           // propietario: dónde entra la plata y quién autoriza que salga.
-          { titulo: "Cajas y salidas de dinero", vista: "cajas" },
+          { titulo: "Cajas y claves", vista: "cajas" },
           ...(puedeFacturar ? [{ titulo: "Licencia y sucursales", vista: "licencia" }] : []),
         ],
       }

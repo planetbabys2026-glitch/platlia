@@ -1047,14 +1047,14 @@ sus tests, `ponerPropina` era una Server Action completa y `Order.tipCop` ya ent
 Configuración era decorativo, `pagoSchema` no tenía el campo, y en 27 pedidos la suma de propinas era
 cero. Informes mostraba "PROPINAS SUGERIDAS $0" para siempre.
 
-**Se decide en el momento en que se le pregunta al cliente, no en la caja.** Son cuatro puertas:
+**Se decide en el momento en que se le pregunta al cliente, no en la caja.** Son tres puertas —eran
+cuatro hasta que el POS dejó de tener su botón de *Enviar a caja*—:
 
 | Dónde | Quién elige | Con qué acción |
 |---|---|---|
 | `/pedido/[id]`, al **Pedir la cuenta** | el mesero, en la mesa | `pedirCuenta` |
 | Menú QR, al confirmar el pedido | el propio comensal | `crearPedidoClienteQR` |
 | POS, en el modal de cobro | el cajero de mostrador | `procesarVentaPosCompleta` |
-| POS, al **Enviar a caja** | quien atiende, antes de mandarla | `procesarVentaPosCompleta` (`ENVIAR_CAJA`) |
 
 La cuarta es la misma decisión que la primera vista desde el POS: mandar la cuenta a la caja es el
 momento en que se le pregunta. Por eso `tipCop` viaja **suelto** en el esquema del POS y no dentro de
@@ -1471,6 +1471,77 @@ La condición vive en **una sola constante** (`faltaNombre`) y no repetida en ca
 cuatro lugares que tenían que decidir igual —los tres botones de la barra y `ejecutarProcesarPos`—
 y con uno olvidado el POS frena una venta que el servidor habría aceptado. El guarda que estaba
 escrito a mano en la acción se fue: lo pide el esquema, que es donde se ve.
+
+### El POS no empuja a otra pantalla, y ya no manda cuentas a la caja
+
+Tres cosas que estaban mal en la misma pantalla:
+
+**El 404.** Después de cualquier acción exitosa el POS hacía `router.push("/salon")` cuando el
+negocio usa mesas. Pero `salon_pos` viene **apagado de fábrica para CAJERO y ADMINISTRADOR** —el
+salón es la pantalla del mesero—, así que mandar una comanda a cocina terminaba en "no encontramos
+esta página" **aunque la comanda hubiera salido perfecta**. El síntoma engaña: parece que falló la
+acción, y lo que falló fue la navegación de después. Ahora se queda y hace `router.refresh()`, que
+además es lo correcto aun con permiso: quien acaba de mandar una comanda va a tomar el pedido
+siguiente, no a mirar el plano de mesas.
+
+**`ENVIAR_CAJA` se fue.** Era la puerta explícita del POS para mandar la cuenta a cobrar, y dejó de
+tener sentido cuando la caja pasó a listar toda comanda que salió a cocina: mandarla era un trámite
+que le escondía al cajero la mitad de su trabajo hasta que alguien se acordara de tocar el botón. Se
+fueron los dos botones, el modal y la rama del servidor. Lo que **no** se fue —y hay que cuidar en
+cualquier corte parecido— es el "si a una cuenta que la caja ya está viendo se le agrega algo, vuelve
+a `ABIERTA`": vivía en el `else` del mismo bloque.
+
+Con eso, la propina del POS ya no se elige al mandar a caja sino **al cobrar**, dentro de `pago`. Las
+cuatro puertas de la propina pasaron a ser tres; para el mostrador es el mismo momento, porque quien
+pide está parado ahí.
+
+**Y con mesas ahora también se cobra.** El POS ofrecía cocina / caja / espera y ningún cobro, así que
+un negocio con salón que además vende de mostrador tenía que mandar la cuenta a la caja y cobrarla en
+otra pantalla, para una gaseosa que el cliente paga parado ahí.
+
+### Un renglón que ya salió a cocina no se quita: se anula
+
+`quitarItem` miraba `status !== "PENDIENTE"`, y **un plato que ya salió a la plancha sigue en
+PENDIENTE hasta que un cocinero toca "Empezar"** —que en un negocio con `comandaDestino: IMPRESA` no
+pasa nunca—. En esa ventana, el mesero podía sacar de la cuenta un plato ya cocinado y probablemente
+servido: la cuenta bajaba, no quedaba motivo, no quedaba rastro, y el consumo no volvía a aparecer en
+ningún lado. La condición correcta es `sentToKitchenAt`.
+
+Vive en `features/pedidos/reglas-anulacion.ts` (`sePuedeQuitar`), puro y con tests, y **lo usan la
+acción y la pantalla**. Cuando cada una lo decidía por su cuenta, las dos miraban `status` y las dos
+se equivocaban igual, que es peor que discrepar: no hay nada que lo delate.
+
+### Anular es una decisión, no un rango
+
+`anularPedido` exigía `COBRAN` y, con consumo, **ADMINISTRADOR**. El resultado: un mesero que tomaba
+un pedido por error no tenía ninguna salida. El pedido se quedaba abierto, la mesa sin liberar y la
+caja sin poder cerrar, hasta que apareciera alguien con más rango. Pasó de verdad, con dos pedidos
+trabados.
+
+Ahora anulan los tres roles que atienden y **el control es una clave opcional**
+(`BusinessSettings.anulacionPinHash`), con el criterio exacto de la clave de salidas de dinero:
+
+- **Sin clave configurada, anular funciona igual** —con motivo obligatorio y `AuditLog`, que es lo
+  que de verdad la audita—. Frenarla de entrada dejaría trabado a todo negocio que ya venía
+  trabajando, hasta que su dueño ponga una clave que nadie le pidió. Configuración lo avisa.
+- **La pone y la cambia solo el propietario**, en una acción aparte y nunca dentro del guardado
+  masivo de Configuración: ese formulario lo alcanza un administrador, y uno que puede cambiar esta
+  clave es uno que puede borrar ventas sin que el dueño se entere.
+- **Un pedido VACÍO no la pide** aunque esté puesta. Es una mesa abierta por error, y pedirle una
+  clave a quien se equivocó de mesa es la forma más rápida de que las mesas fantasma se queden
+  abiertas toda la noche, que es justo lo que la anulación viene a resolver.
+- **El intento fallido queda en `AuditLog`**, como el de la caja: quien prueba claves para borrar
+  ventas tiene que dejar rastro.
+
+**La clave se verifica FUERA de la transacción.** Es argon2, que tarda a propósito; una transacción
+abierta esperando ese cálculo es un lock de base por cada intento, fallidos incluidos. Adentro queda
+solo la comprobación de que el pedido con consumo la haya exigido de verdad —entre el conteo y el
+commit alguien pudo agregar un renglón—.
+
+`ClaveDeSeguridad` es **un solo componente para las dos claves**. Copiarlo garantizaba que a la
+segunda se le olvidara alguna de las tres cosas que lo hacen seguro: exigir la vigente para cambiarla,
+exigirla otra vez para quitarla, y decir en pantalla qué queda desprotegido mientras no haya ninguna.
+Por eso la sección se llama **"Cajas y claves"** y no "Cajas y salidas de dinero".
 
 ### La cocina firma cada plato, y esa firma es el informe
 

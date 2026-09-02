@@ -326,7 +326,7 @@ export function Movimiento({ clavePuesta }: { clavePuesta: boolean }) {
         ) : (
           <p className="text-xs text-warning-soft">
             Este negocio todavía no tiene clave de salidas. El propietario puede
-            ponerla en Configuración → Cajas y salidas de dinero.
+            ponerla en Configuración → Cajas y claves.
           </p>
         ))}
 

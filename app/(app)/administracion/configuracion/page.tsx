@@ -148,7 +148,7 @@ export default async function ConfiguracionPage() {
    * este mismo motivo— y deja de estarlo con `expensePinHash` adentro. Se saca
    * explícitamente y a la pantalla va un booleano.
    */
-  const { expensePinHash, ...settingsSinSecretos } = settings;
+  const { expensePinHash, anulacionPinHash, ...settingsSinSecretos } = settings;
 
   return (
     <div className="space-y-6">
@@ -189,6 +189,7 @@ export default async function ConfiguracionPage() {
         cantidadDeSedes={sedesDeLaCuenta}
         cajas={cajas}
         claveSalidasPuesta={Boolean(expensePinHash)}
+        claveAnulacionPuesta={Boolean(anulacionPinHash)}
         urlMcp={`${env.APP_URL}/api/mcp`}
       />
     </div>

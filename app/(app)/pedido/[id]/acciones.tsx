@@ -152,11 +152,17 @@ export function QuitarRenglon({ itemId }: { itemId: string }) {
   );
 }
 
-export function AnularRenglon({ itemId }: { itemId: string }) {
+export function AnularRenglon({
+  itemId,
+  pideClave = false,
+}: {
+  itemId: string;
+  pideClave?: boolean;
+}) {
   const [estado, accion, isPending] = useActionState(anularItem, ESTADO_INICIAL);
 
   return (
-    <form action={accion} className="flex items-center gap-1 pt-1">
+    <form action={accion} className="flex flex-wrap items-center gap-1 pt-1">
       <input type="hidden" name="itemId" value={itemId} />
       <Input
         name="motivo"
@@ -166,6 +172,17 @@ export function AnularRenglon({ itemId }: { itemId: string }) {
         aria-label="Motivo de la anulación"
         className="h-7 w-36 text-xs rounded-xl"
       />
+      {pideClave && (
+        <Input
+          name="clave"
+          type="password"
+          required
+          autoComplete="off"
+          placeholder="Clave"
+          aria-label="Clave de anulación"
+          className="h-7 w-24 text-xs rounded-xl"
+        />
+      )}
       <Enviar variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:bg-destructive/10" isPending={isPending}>
         Anular
       </Enviar>
@@ -175,14 +192,31 @@ export function AnularRenglon({ itemId }: { itemId: string }) {
 }
 
 /** Anula el pedido entero con motivo justificado. */
+/**
+ * Anular el pedido entero.
+ *
+ * Lo puede hacer el MESERO —antes solo el cajero o el administrador, y eso dejaba
+ * un pedido tomado por error abierto hasta que apareciera alguien con más rango,
+ * con la mesa sin liberar y la caja sin poder cerrar—. El control pasó a ser la
+ * clave que el propietario configure, no el rango de quien está parado ahí.
+ */
 export function AnularPedido({
   orderId,
   vacio,
   esMesa,
+  pideClave = false,
 }: {
   orderId: string;
   vacio: boolean;
   esMesa: boolean;
+  /**
+   * Si hay que pedir la clave.
+   *
+   * Solo cuando el pedido tiene consumo: uno vacío es una mesa abierta por error
+   * y el servidor no la exige, así que mostrar el campo sería pedir algo que no
+   * hace falta.
+   */
+  pideClave?: boolean;
 }) {
   const [estado, accion, isPending] = useActionState(anularPedido, ESTADO_INICIAL);
 
@@ -204,6 +238,17 @@ export function AnularPedido({
           aria-label="Motivo de la anulación del pedido"
           className="h-8 text-xs rounded-xl"
         />
+        {pideClave && !vacio && (
+          <Input
+            name="clave"
+            type="password"
+            required
+            autoComplete="off"
+            placeholder="Clave"
+            aria-label="Clave de anulación"
+            className="h-8 w-24 text-xs rounded-xl shrink-0"
+          />
+        )}
         <Enviar
           variant="outline"
           size="sm"

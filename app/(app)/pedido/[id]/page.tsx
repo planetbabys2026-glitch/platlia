@@ -94,6 +94,13 @@ export default async function PedidoPage({
   ).length;
   const nombreDeCuenta = pedido.customerName?.trim() || null;
   const puedeCobrar = tieneRol(ctx.role, [Role.CAJERO, Role.ADMINISTRADOR]);
+  /**
+   * Si el negocio configuró clave de anulación.
+   *
+   * Va el booleano, nunca el hash: `settings` entero cruza a componentes cliente
+   * en varias pantallas, y un hash de argon2 en el HTML es un hash regalado.
+   */
+  const pideClave = Boolean(settings.anulacionPinHash);
 
   // Las mesas a las que se puede mudar esta cuenta. Se consulta solo en la rama
   // de mesa: en el mostrador no hay a dónde trasladar nada.
@@ -129,7 +136,7 @@ export default async function PedidoPage({
             </span>
           </div>
 
-          <ListaDeRenglones editable={editable} puedeCobrar={puedeCobrar} />
+          <ListaDeRenglones editable={editable} pideClave={pideClave} />
           <TotalesEnVivo />
         </CardContent>
       </Card>
@@ -160,13 +167,23 @@ export default async function PedidoPage({
       {editable && (
         <SegunConsumo
           conConsumo={
-            puedeCobrar ? (
+            /* Sin `puedeCobrar`: el MESERO también anula. Antes esta tarjeta solo
+               existía para el cajero y el administrador, así que quien tomó el
+               pedido por error no tenía ninguna salida —la mesa quedaba ocupada y
+               la caja no podía cerrar— y había que ir a buscar a alguien con más
+               rango. El control es la clave, no el rango. */
+            (
               <Card className="rounded-2xl border-border/80">
                 <CardContent className="p-3">
-                  <AnularPedido orderId={pedido.id} vacio={false} esMesa={pedido.type === "MESA"} />
+                  <AnularPedido
+                    orderId={pedido.id}
+                    vacio={false}
+                    esMesa={pedido.type === "MESA"}
+                    pideClave={pideClave}
+                  />
                 </CardContent>
               </Card>
-            ) : null
+            )
           }
           sinConsumo={
             <Card className="border-dashed rounded-2xl">

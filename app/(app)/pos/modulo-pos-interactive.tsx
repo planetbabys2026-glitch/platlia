@@ -15,7 +15,6 @@ import {
   PauseCircle,
   Plus,
   Printer,
-  ReceiptText,
   Search,
   ShoppingBag,
   ShoppingCart,
@@ -139,7 +138,7 @@ export type PosPedidoDetalle = {
 };
 
 /** Las cuatro cosas que se pueden hacer con lo que hay en pantalla. */
-type AccionPos = "PAGAR_DIRECTO" | "ENVIAR_COCINA" | "ENVIAR_CAJA" | "PARQUEAR";
+type AccionPos = "PAGAR_DIRECTO" | "ENVIAR_COCINA" | "PARQUEAR";
 
 type RenglonDePedido = PosPedidoDetalle["items"][number];
 
@@ -434,7 +433,6 @@ export function ModuloPosInteractive({
   const [productoAElegir, setProductoAElegir] = useState<PosProducto | null>(null);
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
   /** El panel donde se elige la propina antes de mandar la cuenta a la caja. */
-  const [modalCajaAbierto, setModalCajaAbierto] = useState(false);
   const [modalParqueadosAbierto, setModalParqueadosAbierto] = useState(false);
   const [modalAlertasStockAbierto, setModalAlertasStockAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState<"EFECTIVO" | "TARJETA_DEBITO" | "TARJETA_CREDITO" | "NEQUI" | "DAVIPLATA" | "TRANSFERENCIA">("EFECTIVO");
@@ -708,7 +706,7 @@ export function ModuloPosInteractive({
     router.push(usaMesas ? "/salon" : "/pos");
   };
 
-  // ── Procesar Acción (PAGAR_DIRECTO, ENVIAR_COCINA, ENVIAR_CAJA, PARQUEAR) ──
+  // ── Procesar Acción (PAGAR_DIRECTO, ENVIAR_COCINA, PARQUEAR) ──
   /**
    * El nombre solo hace falta en un domicilio.
    *
@@ -797,9 +795,6 @@ export function ModuloPosInteractive({
         modifierOptionIds: i.opciones.map((o) => o.id),
       })),
       accion,
-      // La propina de "Enviar a caja" viaja suelta: ahí no hay pago todavía, y es
-      // el mismo momento en que `pedirCuenta` la pregunta en la mesa.
-      ...(accion === "ENVIAR_CAJA" ? { tipCop: propinaCop } : {}),
       ...(accion === "PAGAR_DIRECTO"
         ? {
             pago: {
@@ -843,13 +838,7 @@ export function ModuloPosInteractive({
       } else if (accion === "ENVIAR_COCINA") {
         setMensajeExito({
           titulo: "Comanda enviada a cocina",
-          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Queda en espera: mandalo a caja cuando el cliente pida la cuenta.`,
-          orderId: data.orderId,
-        });
-      } else if (accion === "ENVIAR_CAJA") {
-        setMensajeExito({
-          titulo: "Cuenta enviada a caja",
-          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Ya aparece en Caja para cobrar.`,
+          detalle: `Pedido ${data.code} · Turno ${data.turnNumber ?? data.code}. Ya aparece en Caja para cobrar cuando el cliente pida la cuenta.`,
           orderId: data.orderId,
         });
       } else {
@@ -863,11 +852,17 @@ export function ModuloPosInteractive({
       vaciarCarrito();
       setNumeroComprobante("");
       setMontoRecibido("");
-      if (usaMesas) {
-        router.push("/salon");
-      } else {
-        router.refresh();
-      }
+      /**
+       * Se queda en el POS. Antes empujaba a `/salon` cuando el negocio usa
+       * mesas, y eso era un **404 en la cara del cajero**: `salon_pos` viene
+       * apagado de fábrica para CAJERO y ADMINISTRADOR —el salón es la pantalla
+       * del mesero—, así que mandar comanda a cocina terminaba en "no
+       * encontramos esta página" aunque la comanda hubiera salido perfecta.
+       *
+       * Y aun con permiso estaba mal: quien acaba de mandar una comanda desde el
+       * mostrador va a tomar el pedido siguiente, no a mirar el plano de mesas.
+       */
+      router.refresh();
     } catch (err: unknown) {
       setProcesandoAccion(false);
       const msg =
@@ -1636,19 +1631,16 @@ export function ModuloPosInteractive({
                     <div className="space-y-2 pt-1">
                       {usaMesas ? (
                         <>
+                          {/* Cobrar también está acá, y antes no.
+                              Con mesas, el POS solo ofrecía cocina / caja /
+                              espera: un negocio que usa salón Y vende de
+                              mostrador tenía que mandar la cuenta a la caja y
+                              cobrarla en otra pantalla, para una gaseosa que el
+                              cliente paga parado ahí. Cobrar es la misma acción
+                              en los dos casos; lo que cambia es dónde se sienta
+                              quien pide. */}
                           <Button
                             type="button"
-                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
-                          >
-                            <UtensilsCrossed className="size-4" />
-                            <span>Mandar comanda a cocina</span>
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
                             onClick={() => {
                               if (faltaNombre) {
                                 setErrorGlobal(
@@ -1657,14 +1649,33 @@ export function ModuloPosInteractive({
                                 document.getElementById("customerName")?.focus();
                                 return;
                               }
-                              setErrorGlobal(null);
-                              setModalCajaAbierto(true);
+                              const errorStock = auditarStockCarritoRecetas(
+                                carritoParaAuditar(),
+                                carta,
+                                settings.inventoryEnabled && !settings.permitirVentaSinStock,
+                              );
+                              if (errorStock) {
+                                setErrorGlobal(errorStock);
+                                return;
+                              }
+                              setModalPagoAbierto(true);
                             }}
+                            disabled={!hayPedido || procesandoAccion}
+                            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
+                          >
+                            <CreditCard className="size-4" />
+                            <span>Cobrar y facturar</span>
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
                             disabled={!hayPedido || procesandoAccion}
                             className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
                           >
-                            <ReceiptText className="size-3.5 text-brand" />
-                            <span>Enviar a caja</span>
+                            <UtensilsCrossed className="size-3.5 text-brand" />
+                            <span>Mandar comanda a cocina</span>
                           </Button>
 
                           <Button
@@ -1721,27 +1732,6 @@ export function ModuloPosInteractive({
 
                           <Button
                             type="button"
-                            variant="outline"
-                            onClick={() => {
-                              if (faltaNombre) {
-                                setErrorGlobal(
-                                  "En un domicilio hace falta a nombre de quién va el pedido.",
-                                );
-                                document.getElementById("customerName")?.focus();
-                                return;
-                              }
-                              setErrorGlobal(null);
-                              setModalCajaAbierto(true);
-                            }}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
-                          >
-                            <ReceiptText className="size-3.5 text-brand" />
-                            <span>Enviar a caja</span>
-                          </Button>
-
-                          <Button
-                            type="button"
                             variant="ghost"
                             onClick={() => ejecutarProcesarPos("PARQUEAR")}
                             disabled={!hayPedido || procesandoAccion}
@@ -1758,71 +1748,6 @@ export function ModuloPosInteractive({
               </Card>
             </div>
           </div>
-
-          {/* ── ENVIAR A CAJA: la propina se elige acá, no en la caja ─────────── */}
-          {modalCajaAbierto && (
-            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="w-full max-w-sm bg-card border-border shadow-2xl rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ReceiptText className="size-5 text-brand" />
-                    <h3 className="font-bold text-base text-foreground">Enviar a caja</h3>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="tap-libre size-8 p-0"
-                    aria-label="Cerrar"
-                    onClick={() => setModalCajaAbierto(false)}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-
-                <div className="p-4 space-y-4">
-                  <p className="text-xs text-muted-foreground">
-                    La cuenta queda esperando en Caja. Si el cliente pide algo más, se
-                    agrega desde acá y vuelve a estar en curso.
-                  </p>
-
-                  {/* La propina se pregunta ANTES de que la cuenta llegue a la caja:
-                      si se eligiera allá, el papel que se le mostró al cliente diría
-                      un total y la caja cobraría otro. */}
-                  <SelectorDePropina
-                    habilitado={settings.tipSuggestionEnabled}
-                    sugeridaCop={propinaSugeridaCop}
-                    rateBp={settings.tipSuggestionRateBp}
-                    valorCop={propinaCop}
-                    onCambiar={setPropinaCop}
-                    id="pos-caja"
-                  />
-
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--panel-2)] border border-border">
-                    <span className="text-rotulo font-bold uppercase tracking-wider text-muted-foreground">
-                      Total a cobrar
-                    </span>
-                    <span className="numeral text-xl font-extrabold text-brand">
-                      {formatCop(totalConPropina)}
-                    </span>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setModalCajaAbierto(false);
-                      void ejecutarProcesarPos("ENVIAR_CAJA");
-                    }}
-                    disabled={procesandoAccion}
-                    className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl gap-2"
-                  >
-                    <ReceiptText className="size-4" />
-                    <span>Mandar la cuenta a caja</span>
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          )}
 
           {/* ── MODAL COBRO EXPRESS CON VERIFICACION DE CAMBIO / COMPROBANTE ──── */}
           {modalPagoAbierto && (

@@ -14,6 +14,7 @@ import { elegirSesionDeCobro, mensajeSinSesion } from "@/features/caja/sesion";
 import { anotarFiado, esFiado } from "@/features/cartera/fiar";
 import { mensajeDeTraslado, puedeTrasladarse } from "@/features/salon/reglas-traslado";
 import { mensajeDeUnion, puedenUnirse } from "@/features/pedidos/reglas-union";
+import { pideClaveDeAnulacion, sePuedeQuitar } from "@/features/pedidos/reglas-anulacion";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
 import { cerrarComandaAlDespachar } from "@/features/domicilios/despacho";
 import { avisarAlAgente } from "@/lib/printing/cola";
@@ -38,6 +39,8 @@ import {
   propinaSchema,
   quitarItemSchema,
   renombrarCuentaSchema,
+  claveAnulacionSchema,
+  quitarClaveAnulacionSchema,
 } from "@/features/pedidos/schemas";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { describirAviso } from "@/lib/avisos";
@@ -49,6 +52,8 @@ import {
   publishTurneroUpdate,
 } from "@/lib/redis";
 import { tieneRol } from "@/lib/auth/reglas";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import type { TenantDb } from "@/lib/db/tenant";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
 import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { etiquetaDeCuenta } from "@/lib/salon/mesa";
@@ -623,6 +628,7 @@ export const quitarItem = defineAction({
           orderId: true,
           quantity: true,
           status: true,
+          sentToKitchenAt: true,
           productId: true,
           businessId: true,
           product: { select: { trackStock: true } },
@@ -630,9 +636,19 @@ export const quitarItem = defineAction({
         },
       });
       if (!item) throw new ErrorDeUsuario("Ese renglón no existe.");
-      if (item.status !== "PENDIENTE") {
+      /**
+       * La guarda es `sentToKitchenAt`, no el estado del renglón.
+       *
+       * Miraba `status !== "PENDIENTE"`, y un plato que ya salió a la plancha
+       * sigue en PENDIENTE hasta que un cocinero toca "Empezar": entre que la
+       * comanda se imprime y que alguien la toma —que puede ser toda la noche si
+       * el negocio trabaja solo con papel— el renglón se podía sacar de la cuenta
+       * sin dejar motivo, con el plato ya cocinado y probablemente servido.
+       * Quitar es para el carrito; lo que salió a cocina se anula.
+       */
+      if (!sePuedeQuitar(item)) {
         throw new ErrorDeUsuario(
-          "Cocina ya lo tomó: para sacarlo hay que anularlo con motivo.",
+          "Ese renglón ya salió a cocina: para sacarlo hay que anularlo con motivo.",
         );
       }
       if (item.order.status === "PAGADA" || item.order.status === "ANULADA") {
@@ -662,11 +678,64 @@ export const quitarItem = defineAction({
   },
 });
 
+/**
+ * La clave de anulación, si el negocio configuró una.
+ *
+ * Reemplaza a la regla vieja —"con consumo solo anula un administrador"—, que
+ * dejaba al mesero sin salida: un pedido tomado por error se quedaba abierto
+ * hasta que apareciera alguien con más rango, y mientras tanto la mesa no se
+ * liberaba ni la caja podía cerrar. Anular es una decisión, no un rango.
+ *
+ * Mismo criterio que la clave de salidas de dinero: **sin clave configurada la
+ * anulación funciona igual**, con motivo obligatorio y `AuditLog`, que es lo que
+ * de verdad la audita. Frenarla de entrada dejaría trabado a todo negocio que ya
+ * venía trabajando, hasta que su dueño ponga una clave que nadie le pidió.
+ *
+ * El intento fallido queda registrado, como el de la caja: quien prueba claves
+ * para borrar ventas tiene que dejar rastro.
+ */
+async function exigirClaveDeAnulacion(
+  db: TenantDb,
+  ctx: { business: { id: string }; user: { id: string } },
+  clave: string | undefined,
+  entidad: { entity: string; entityId: string },
+): Promise<void> {
+  const settings = await getSettings(ctx.business.id);
+  if (!settings.anulacionPinHash) return;
+
+  const escrita = clave ?? "";
+  const correcta =
+    escrita.length > 0 && (await verifyPassword(settings.anulacionPinHash, escrita));
+  if (correcta) return;
+
+  await db.auditLog.create({
+    data: {
+      userId: ctx.user.id,
+      action: "pedidos.anulacion-clave-incorrecta",
+      entity: entidad.entity,
+      entityId: entidad.entityId,
+    },
+  });
+  throw new ErrorDeUsuario("La clave de anulación no es correcta.", {
+    clave: ["La clave de anulación no es correcta."],
+  });
+}
+
 export const anularItem = defineAction({
   schema: anularItemSchema,
-  roles: COBRAN,
+  // Igual que anular el pedido entero: si el mesero puede deshacer la cuenta
+  // completa, negarle un solo plato equivocado lo empuja a anularla entera.
+  roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
   async handler({ input, ctx, db }) {
+    // Fuera de la transacción: verificar la clave es argon2, que tarda a
+    // propósito, y una transacción abierta esperando ese cálculo es un lock de
+    // base por cada intento, fallidos incluidos.
+    await exigirClaveDeAnulacion(db, ctx, input.clave, {
+      entity: "OrderItem",
+      entityId: input.itemId,
+    });
+
     const orderId = await db.$transaction(async (tx) => {
       const item = await tx.orderItem.findFirst({
         where: { id: input.itemId },
@@ -1086,11 +1155,37 @@ export const registrarPago = defineAction({
 
 export const anularPedido = defineAction({
   schema: anularPedidoSchema,
-  // El cajero entra acá porque un pedido VACÍO también se anula desde esta
-  // acción, y ese caso es suyo. El chequeo fino está adentro.
-  roles: COBRAN,
+  // El MESERO entra acá: es quien toma el pedido y quien primero se da cuenta de
+  // que hay que deshacerlo. Con `COBRAN` quedaba trabado —el pedido abierto por
+  // error se quedaba así hasta que apareciera un cajero— y ni la mesa se liberaba
+  // ni la caja podía cerrar. El control es la clave, no el rango.
+  roles: ATIENDEN,
   modulo: AppModule.PEDIDOS,
   async handler({ input, ctx, db }) {
+    /**
+     * La clave se verifica ANTES de abrir la transacción.
+     *
+     * Es argon2, que tarda a propósito; una transacción abierta esperando ese
+     * cálculo es un lock de base por cada intento, fallidos incluidos. Por eso
+     * hay que saber acá si el pedido tiene consumo: uno VACÍO no pide clave —es
+     * una mesa abierta por error, y pedírsela a quien se equivocó de mesa es la
+     * forma más rápida de que las mesas fantasma se queden abiertas toda la
+     * noche—.
+     */
+    const settings = await getSettings(ctx.business.id);
+    const conConsumo = await db.orderItem.count({
+      where: { orderId: input.orderId, status: { not: "ANULADO" } },
+    });
+    const hayClave = Boolean(settings.anulacionPinHash);
+    let claveVerificada = false;
+    if (pideClaveDeAnulacion(conConsumo, hayClave)) {
+      await exigirClaveDeAnulacion(db, ctx, input.clave, {
+        entity: "Order",
+        entityId: input.orderId,
+      });
+      claveVerificada = true;
+    }
+
     await db.$transaction(async (tx) => {
       const pedido = await tx.order.findFirst({
         where: { id: input.orderId },
@@ -1116,14 +1211,14 @@ export const anularPedido = defineAction({
         );
       }
 
-      // Anular un pedido CON consumo es una decisión que después se discute, y
-      // la toma un administrador. Uno vacío es una mesa que se abrió por error:
-      // si solo el administrador pudiera borrarla, el cajero no podría cerrar su
-      // turno hasta que alguien apareciera.
-      if (pedido._count.items > 0 && !tieneRol(ctx.role, [Role.ADMINISTRADOR])) {
-        throw new ErrorDeUsuario(
-          "Ese pedido tiene consumo: solo un administrador puede anularlo.",
-        );
+      // La clave ya se verificó afuera de la transacción. Acá solo se comprueba
+      // que el pedido con consumo la haya exigido de verdad: entre aquel conteo y
+      // este commit alguien pudo haber agregado un renglón, y anular con consumo
+      // sin clave es exactamente lo que la clave existe para impedir.
+      if (pideClaveDeAnulacion(pedido._count.items, hayClave) && !claveVerificada) {
+        throw new ErrorDeUsuario("Ese pedido tiene consumo: hace falta la clave de anulación.", {
+          clave: ["Hace falta la clave de anulación."],
+        });
       }
 
       const itemsParaDevolver = await tx.orderItem.findMany({
@@ -1776,11 +1871,7 @@ export const procesarVentaPosCompleta = defineAction({
         : {};
 
     /**
-     * `ENVIAR_CAJA` también manda a la plancha.
-     *
-     * Un renglón que llega a la caja sin haber pasado por la cocina es comida que
-     * nadie prepara, y acá quien atiende está mirando un solo carrito: no tiene
-     * cómo saber que le faltó un paso.
+     * Qué acciones mandan a la plancha.
      *
      * Se define **una sola vez**, acá afuera, porque lo usan la transacción —para
      * sellar `sentToKitchenAt` y encolar la comanda— y el bloque de avisos de
@@ -1789,9 +1880,7 @@ export const procesarVentaPosCompleta = defineAction({
      * mostrar hasta que alguien recargara.
      */
     const debeEnviarACocina =
-      input.accion === "ENVIAR_COCINA" ||
-      input.accion === "PAGAR_DIRECTO" ||
-      input.accion === "ENVIAR_CAJA";
+      input.accion === "ENVIAR_COCINA" || input.accion === "PAGAR_DIRECTO";
 
     const resultado = await conReintento(() =>
       db.$transaction(async (tx) => {
@@ -2128,36 +2217,20 @@ export const procesarVentaPosCompleta = defineAction({
         await recalcularTotales(tx, pedido.id);
 
         /**
-         * 4c. La cuenta entra o sale de la caja, y nunca sola.
+         * 4c. Si a una cuenta que la caja ya está viendo se le agrega algo,
+         * vuelve a `ABIERTA`.
          *
-         * `ENVIAR_CAJA` es el equivalente de `pedirCuenta` para el POS: no puede
-         * ser una acción aparte porque el carrito vive en el navegador y los
-         * renglones no existen en la base hasta este commit. La propina viaja con
-         * ella por la misma razón que viaja con `pedirCuenta`: una propina
-         * guardada que después no se cobra deja el pedido con un total que nadie
-         * pagó.
+         * Es la misma regla de `confirmarPedido`; sin ella la cuenta se queda en
+         * la caja con un total que cambió por debajo mientras el cajero la tenía
+         * abierta.
          *
-         * Y al revés: si al pedido ya en la caja se le agrega algo, vuelve a
-         * `ABIERTA`. Es la misma regla de `confirmarPedido`; sin ella la cuenta se
-         * queda en la caja con un total que cambió por debajo mientras el cajero
-         * la tenía abierta.
+         * Antes acá vivía además `ENVIAR_CAJA`, la puerta explícita del POS para
+         * mandar la cuenta a cobrar. **Ya no hace falta**: desde que la caja lista
+         * toda comanda que salió a cocina, mandarla era un trámite que el cajero
+         * ya no necesitaba y que escondía la mitad de su trabajo hasta que alguien
+         * se acordara de tocar el botón.
          */
-        if (input.accion === "ENVIAR_CAJA") {
-          if (input.tipCop !== undefined) {
-            await tx.order.update({
-              where: { id: pedido.id },
-              data: { tipCop: input.tipCop },
-            });
-            await recalcularTotales(tx, pedido.id);
-          }
-          await tx.order.update({
-            where: { id: pedido.id },
-            data: { status: "CUENTA_PEDIDA", billRequestedAt: ahora },
-          });
-          // El estado de la mesa se deriva de sus cuentas, nunca se escribe a
-          // mano. Es no-op sin mesa, que es el caso normal de esta pantalla.
-          await sincronizarEstadoMesa(tx, pedido.tableId);
-        } else if (
+        if (
           statusPrevio === "CUENTA_PEDIDA" &&
           (input.accion === "ENVIAR_COCINA" || input.accion === "PARQUEAR")
         ) {
@@ -2165,6 +2238,8 @@ export const procesarVentaPosCompleta = defineAction({
             where: { id: pedido.id },
             data: { status: "ABIERTA", billRequestedAt: null },
           });
+          // El estado de la mesa se deriva de sus cuentas, nunca se escribe a
+          // mano. Es no-op sin mesa, que es el caso normal de esta pantalla.
           await sincronizarEstadoMesa(tx, pedido.tableId);
         }
 
@@ -2327,30 +2402,6 @@ export const procesarVentaPosCompleta = defineAction({
       }
     }
 
-    /**
-     * Mandar la cuenta a la caja avisa, venga del salón o del POS.
-     *
-     * Sin esto, la única razón por la que la insignia de Caja se movía desde acá
-     * era de rebote: `ENVIAR_CAJA` también manda a cocina, y el stream del shell
-     * escucha `cocina:`. O sea que el contador andaba por accidente y el cajero
-     * veía un toast que decía "comanda a cocina" cuando lo que le llegó fue una
-     * cuenta para cobrar.
-     */
-    if (input.accion === "ENVIAR_CAJA") {
-      void publicarAviso(
-        ctx.business.id,
-        describirAviso({
-          tipo: "CUENTA_EN_CAJA",
-          orderId: resultado.orderId,
-          code: resultado.code,
-          mesa: resultado.mesa,
-          cuenta: input.customerName ?? null,
-          turno: resultado.turnNumber,
-          productos: resultado.renglones,
-          totalCop: resultado.totalCop,
-        }),
-      );
-    }
 
     // Un domicilio tomado por el POS nunca avisaba al panel de domicilios: se
     // publicaba en cocina y en el turnero, pero no en su propio canal, así que
@@ -2376,5 +2427,85 @@ export const procesarVentaPosCompleta = defineAction({
     }
 
     return resultado;
+  },
+});
+
+/**
+ * La clave de anulación: la pone y la cambia SOLO el propietario.
+ *
+ * Acción aparte y con su propio rol, nunca dentro del guardado masivo de
+ * Configuración —el mismo criterio que la clave de salidas de dinero—: ese
+ * formulario lo alcanza un administrador, y un administrador que puede cambiar
+ * esta clave es uno que puede borrar ventas sin que el dueño se entere. El hash
+ * nunca vuelve a la pantalla; a la pantalla va un booleano.
+ */
+export const guardarClaveAnulacion = defineAction({
+  schema: claveAnulacionSchema,
+  roles: [Role.PROPIETARIO],
+  async handler({ input, ctx, db }) {
+    const settings = await getSettings(ctx.business.id);
+
+    if (settings.anulacionPinHash) {
+      const actual = input.claveActual ?? "";
+      const correcta =
+        actual.length > 0 && (await verifyPassword(settings.anulacionPinHash, actual));
+      if (!correcta) {
+        throw new ErrorDeUsuario("La clave actual no es correcta.", {
+          claveActual: ["La clave actual no es correcta."],
+        });
+      }
+    }
+
+    await db.businessSettings.update({
+      where: { businessId: ctx.business.id },
+      data: { anulacionPinHash: await hashPassword(input.clave) },
+    });
+
+    await db.auditLog.create({
+      data: {
+        userId: ctx.user.id,
+        action: settings.anulacionPinHash
+          ? "pedidos.clave-anulacion-cambiada"
+          : "pedidos.clave-anulacion-puesta",
+        entity: "BusinessSettings",
+        entityId: settings.id,
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
+  },
+});
+
+export const quitarClaveAnulacion = defineAction({
+  schema: quitarClaveAnulacionSchema,
+  roles: [Role.PROPIETARIO],
+  async handler({ input, ctx, db }) {
+    const settings = await getSettings(ctx.business.id);
+    if (!settings.anulacionPinHash) {
+      throw new ErrorDeUsuario("Este negocio no tiene clave de anulación configurada.");
+    }
+
+    const correcta = await verifyPassword(settings.anulacionPinHash, input.claveActual);
+    if (!correcta) {
+      throw new ErrorDeUsuario("La clave actual no es correcta.", {
+        claveActual: ["La clave actual no es correcta."],
+      });
+    }
+
+    await db.businessSettings.update({
+      where: { businessId: ctx.business.id },
+      data: { anulacionPinHash: null },
+    });
+
+    await db.auditLog.create({
+      data: {
+        userId: ctx.user.id,
+        action: "pedidos.clave-anulacion-quitada",
+        entity: "BusinessSettings",
+        entityId: settings.id,
+      },
+    });
+
+    revalidatePath("/administracion/configuracion");
   },
 });
