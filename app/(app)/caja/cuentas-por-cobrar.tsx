@@ -7,6 +7,7 @@ import {
   CreditCard,
   Landmark,
   MoreHorizontal,
+  Wallet,
   Printer,
   Receipt,
   Smartphone,
@@ -19,6 +20,7 @@ import {
 } from "@/features/pedidos/components/datos-fiscales";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { UnirCuentas } from "@/features/pedidos/components/unir-cuentas";
+import { CamposDeCredito } from "@/features/cartera/components/campos-de-credito";
 import {
   ESTADOS_EN_ORDEN,
   ETIQUETA_DE_COBRO,
@@ -47,6 +49,13 @@ const METODOS_PAGO = [
   { clave: PaymentMethod.BONO, etiqueta: "Bono", icono: Receipt },
   { clave: PaymentMethod.OTRO, etiqueta: "Otro", icono: MoreHorizontal },
 ] as const;
+
+/** El fiado va aparte: no es un medio de pago más, es no cobrar hoy. */
+const METODO_CREDITO = {
+  clave: PaymentMethod.CREDITO,
+  etiqueta: "Crédito (fiado)",
+  icono: Wallet,
+} as const;
 
 type Cuenta = {
   id: string;
@@ -82,9 +91,11 @@ type Cuenta = {
 function FormularioCobro({
   cuenta,
   puedeFacturar,
+  puedeFiar,
   propina,
 }: {
   cuenta: Cuenta;
+  puedeFiar: boolean;
   puedeFacturar: boolean;
   propina: { habilitada: boolean; rateBp: number };
 }) {
@@ -214,8 +225,28 @@ function FormularioCobro({
               <span>{etiqueta}</span>
             </button>
           ))}
+
+          {/* El fiado, aparte y con su propio peso visual: elegirlo no es cobrar
+              de otra forma, es no cobrar hoy. */}
+          {puedeFiar && (
+            <button
+              type="button"
+              onClick={() => setMetodo(METODO_CREDITO.clave)}
+              className={cn(
+                "col-span-2 flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-center text-xs font-medium transition-all sm:col-span-4",
+                metodo === METODO_CREDITO.clave
+                  ? "border-warning bg-warning/10 font-bold text-warning-soft shadow-xs"
+                  : "border-border bg-background text-foreground hover:bg-muted",
+              )}
+            >
+              <METODO_CREDITO.icono className="size-3.5 shrink-0 opacity-80" />
+              <span>{METODO_CREDITO.etiqueta}</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {metodo === METODO_CREDITO.clave && <CamposDeCredito />}
 
       {/* Campos de Cobro y Efectivo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -458,10 +489,13 @@ function FilaDeCuenta({
 export function CuentasPorCobrar({
   cuentas,
   puedeFacturar,
+  puedeFiar,
   propina,
 }: {
   cuentas: Cuenta[];
   puedeFacturar: boolean;
+  /** El negocio fía: lo enciende el dueño en Configuración. */
+  puedeFiar: boolean;
   propina: { habilitada: boolean; rateBp: number };
 }) {
   /**
@@ -621,7 +655,12 @@ export function CuentasPorCobrar({
                 </p>
               )}
 
-              <FormularioCobro cuenta={cuenta} puedeFacturar={puedeFacturar} propina={propina} />
+              <FormularioCobro
+                cuenta={cuenta}
+                puedeFacturar={puedeFacturar}
+                puedeFiar={puedeFiar}
+                propina={propina}
+              />
             </CardContent>
           </Card>
         )}

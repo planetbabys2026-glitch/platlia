@@ -401,6 +401,7 @@ export function FormularioModulos({
   inventoryEnabled,
   recipesEnabled,
   permitirVentaSinStock,
+  creditoEnabled,
 }: {
   mesasHabilitado: boolean;
   deliveryEnabled: boolean;
@@ -409,6 +410,7 @@ export function FormularioModulos({
   inventoryEnabled: boolean;
   recipesEnabled: boolean;
   permitirVentaSinStock: boolean;
+  creditoEnabled: boolean;
 }) {
   const [estado, accion, pendiente] = useActionState(guardarModulos, ESTADO_INICIAL);
   const { sucio, marcar } = useSucio(estado.ok, pendiente);
@@ -418,6 +420,19 @@ export function FormularioModulos({
   return (
     <form action={accion} onChange={marcar} onInput={marcar} className="space-y-4">
       <Resultado estado={estado} />
+
+      {/* Fiar no pide clave: queda a nombre del cajero que abrió el turno, que es
+          quien lo autoriza. Lo que sí decide el dueño es si el negocio fía. */}
+      <Casilla
+        name="creditoEnabled"
+        label="Este negocio fía"
+        defaultChecked={creditoEnabled}
+        ayuda={
+          creditoEnabled
+            ? "Al cobrar aparece el método Crédito, y lo fiado se sigue en Cartera. No entra al arqueo del turno."
+            : "Está apagado: nadie puede fiar y el módulo Cartera no aparece en el menú."
+        }
+      />
 
       <Casilla
         name="mesasHabilitado"

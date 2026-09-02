@@ -169,6 +169,7 @@ export const guardarModulos = defineAction({
         recipesEnabled: input.recipesEnabled,
         rolePermissions: newRolePermissions,
         permitirVentaSinStock: input.permitirVentaSinStock,
+        creditoEnabled: input.creditoEnabled,
       },
     });
 

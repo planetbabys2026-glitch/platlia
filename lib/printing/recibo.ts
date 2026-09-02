@@ -75,6 +75,20 @@ export type PedidoDeRecibo = {
     tenderedCop: number | null;
     changeCop: number | null;
   }[];
+  /**
+   * El fiado, cuando lo hay. Viaja aparte y no se deduce de `paidCop`.
+   *
+   * Un pago de método CRÉDITO deja `paidCop == totalCop`, así que el bloque
+   * "PENDIENTE" —que se dispara con el faltante— **no se imprime**, y el status es
+   * `PAGADA`, así que tampoco sale el sello de "cuenta de cobro". Sin esto, el
+   * papel que se lleva quien acaba de fiar dice "Crédito $50.000" y se lee
+   * idéntico a una tarjeta: el único comprobante de la deuda del lado del cliente
+   * afirmaría que no debe nada.
+   */
+  fiado: {
+    saldoCop: number;
+    deudor: { nombre: string; telefono: string };
+  } | null;
 };
 
 export type NegocioDeRecibo = {
@@ -215,6 +229,19 @@ export function componerRecibo(
   if (faltante > 0) {
     push(separador(ancho));
     push(lineaDoble("PENDIENTE", formatCop(faltante), ancho));
+  }
+
+  // El comprobante del fiado. Va con nombre y teléfono porque es lo que después
+  // se compara contra la ficha de Cartera cuando el cliente vuelve a pagar.
+  if (pedido.fiado) {
+    push(separador(ancho, "="));
+    push(centrar("*** FIADO ***", ancho));
+    push(lineaDoble("QUEDA DEBIENDO", formatCop(pedido.fiado.saldoCop), ancho));
+    push(pedido.fiado.deudor.nombre);
+    push(pedido.fiado.deudor.telefono);
+    push(centrar("Comprobante de fiado", ancho));
+    push(centrar("no es factura de venta", ancho));
+    push(separador(ancho, "="));
   }
 
   // ── Factura electrónica ───────────────────────────────────────────────────

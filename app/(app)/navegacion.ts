@@ -3,7 +3,7 @@ import {
   Bike,
   BookOpen,
   Boxes,
-  Calculator,
+  BookMarked,
   ChefHat,
   CreditCard,
   LayoutGrid,
@@ -11,6 +11,7 @@ import {
   Settings,
   SlidersHorizontal,
   Users,
+  Wallet,
 } from "lucide-react";
 import type { Role } from "@/generated/prisma/enums";
 import { tienePermisoSeccion, type SeccionPermiso } from "@/lib/auth/permisos-roles";
@@ -84,6 +85,10 @@ type Contexto = {
   domiciliosActivos?: number;
   /** Cuentas esperando cobro. Es el contador que llevaba la píldora de Caja. */
   cuentasPorCobrar?: number;
+  /** El negocio fía. Sin esto, Cartera sería una pantalla siempre vacía. */
+  usaCredito?: boolean;
+  /** Cuánta gente debe. */
+  deudores?: number;
 };
 
 /** El enlace de una sección: la vista por defecto no ensucia la URL. */
@@ -130,6 +135,8 @@ export function construirNavegacion({
   comandasVivas,
   domiciliosActivos,
   cuentasPorCobrar,
+  usaCredito = false,
+  deudores,
 }: Contexto): {
   grupos: GrupoNav[];
   administracion: ItemNav[];
@@ -154,7 +161,7 @@ export function construirNavegacion({
             // de venta y la entrada del negocio.
             titulo: usaMesas ? "Pedido sin mesa" : "POS",
             href: "/pos",
-            icono: Calculator,
+            icono: BookMarked,
             enBarraInferior: !usaMesas,
           },
         ]
@@ -191,6 +198,12 @@ export function construirNavegacion({
   ];
 
   const gestion: ItemNav[] = [
+    // Va en Gestión y no en Operación: no es algo que se atienda durante el
+    // turno, es plata que se revisa. Y no se llama "cuentas por cobrar": ese
+    // nombre ya es el de las cuentas abiertas de HOY, adentro de Caja.
+    ...(usaCredito && puedeVer("cartera")
+      ? [{ titulo: "Cartera", href: "/cartera", icono: Wallet, insignia: deudores }]
+      : []),
     ...(puedeVerInventario && puedeVer("inventario")
       ? [
           {

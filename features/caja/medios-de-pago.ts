@@ -15,7 +15,7 @@ import { PaymentMethod } from "@/generated/prisma/enums";
  * no existe, y el faltante aparecería todas las noches hasta que alguien dejara
  * de mirar la cifra.
  */
-export type CuentaDeSaldo = "EFECTIVO" | "BANCO" | "OTRO";
+export type CuentaDeSaldo = "EFECTIVO" | "BANCO" | "OTRO" | "CREDITO";
 
 /**
  * El mapa está escrito entero y a mano, sin `default`, a propósito: el día que
@@ -32,6 +32,16 @@ const CUENTA_POR_METODO: Record<PaymentMethod, CuentaDeSaldo> = {
   [PaymentMethod.TRANSFERENCIA]: "BANCO",
   [PaymentMethod.BONO]: "OTRO",
   [PaymentMethod.OTRO]: "OTRO",
+  /**
+   * El fiado tiene saldo propio, y no puede ser `OTRO`.
+   *
+   * "Otros medios" es plata que nunca va a entrar —un bono es consumo ya
+   * descontado—. Un fiado sí va a entrar, otro día, y el cajero necesita verlo
+   * aparte: es lo que explica por qué las ventas del día no coinciden con lo que
+   * hay para contar. Meterlo en efectivo o en bancos haría que el cierre pidiera
+   * contar una plata que está en la calle.
+   */
+  [PaymentMethod.CREDITO]: "CREDITO",
 };
 
 export function cuentaDelMetodo(metodo: PaymentMethod | string): CuentaDeSaldo {
@@ -43,4 +53,5 @@ export const NOMBRE_DE_CUENTA: Record<CuentaDeSaldo, string> = {
   EFECTIVO: "Efectivo",
   BANCO: "Bancos",
   OTRO: "Otros medios",
+  CREDITO: "Fiado",
 };

@@ -163,6 +163,11 @@ enum PaymentMethod {
   TRANSFERENCIA
   BONO
   OTRO
+  /// Fiado: el pedido se cierra y la plata se cobra después, en Cartera.
+  ///
+  /// No confundir con `TARJETA_CREDITO`, que es plata que SÍ entró —la puso el
+  /// banco—. Acá no entró nada: es una deuda del cliente con el negocio.
+  CREDITO
 }
 
 enum CashSessionStatus {
@@ -290,6 +295,11 @@ model Business {
   productModifierGroups  ProductModifierGroup[]
   orderItemModifiers     OrderItemModifier[]
 
+  deudores            Deudor[]
+  fiados              Fiado[]
+  abonosDeCartera     AbonoDeCartera[]
+  aplicacionesDeAbono AplicacionDeAbono[]
+
   @@index([status])
 }
 
@@ -372,6 +382,11 @@ model BusinessSettings {
   turneroImageIntervalSeconds Int     @default(10)
   turneroYoutubeUrl           String?
   turneroBadgePosition        String  @default("TOP_RIGHT")
+
+  /// Si el negocio fía. Apagado de fábrica: fiar es una decisión del dueño, no un
+  /// método de pago que aparece solo. Apagado, "Crédito" no se ofrece al cobrar y
+  /// el módulo Cartera no está en el menú.
+  creditoEnabled Boolean @default(false)
 
   /// Módulos de Inventario y Recetas / Escandallos
   inventoryEnabled Boolean @default(false)
@@ -532,6 +547,9 @@ model User {
   cashSessionsOpened CashSession[]       @relation("CashSessionOpenedBy")
   cashSessionsClosed CashSession[]       @relation("CashSessionClosedBy")
   cashMovements      CashMovement[]      @relation("CashMovementCreatedBy")
+  fiadosCreados      Fiado[]             @relation("FiadoCreadoPor")
+  fiadosCondonados   Fiado[]             @relation("FiadoCondonadoPor")
+  abonosRecibidos    AbonoDeCartera[]    @relation("AbonoRecibidoPor")
 
   @@index([isSuperAdmin])
 }
@@ -1353,6 +1371,7 @@ model Order {
   items     OrderItem[]
   payments  OrderPayment[]
   printJobs PrintJob[]
+  fiado     Fiado?
 
   @@unique([businessId, businessDate, code])
   @@index([businessId, businessDate, turnNumber])
@@ -1499,6 +1518,8 @@ model OrderPayment {
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
+  fiado Fiado?
+
   @@index([businessId, orderId])
   @@index([businessId, cashSessionId, method])
 }
@@ -1586,6 +1607,8 @@ model CashSession {
   orders    Order[]
   payments  OrderPayment[]
   movements CashMovement[]
+  fiados    Fiado[]
+  abonos    AbonoDeCartera[]
 
   @@unique([businessId, businessDate, code])
   @@index([businessId, status])
@@ -1616,7 +1639,156 @@ model CashMovement {
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
+  abono AbonoDeCartera?
+
   @@index([businessId, cashSessionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cartera: lo que los clientes deben
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// La persona que debe. **El teléfono es la identidad**, no el nombre.
+///
+/// Un nombre se escribe distinto cada noche —"Andrés", "Andres G", "el de la
+/// esquina"— y con eso la misma persona termina siendo tres deudores y ninguna
+/// deuda cuadra. El teléfono se guarda normalizado a puros dígitos (ver
+/// `features/cartera/reglas.ts`), que es lo que hace que "300 123 4567" y
+/// "+57 300 123 4567" sean el mismo cliente.
+///
+/// No guarda el total adeudado: se suma de sus fiados. Dos números para la misma
+/// cifra es un número que algún día va a discrepar del otro.
+model Deudor {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Solo dígitos. Es la clave con la que se juntan los pedidos de una persona.
+  telefono  String
+  nombre    String
+  direccion String?
+  notas     String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  fiados Fiado[]
+  abonos AbonoDeCartera[]
+
+  @@unique([businessId, telefono])
+  @@index([businessId, deletedAt])
+}
+
+/// Un pedido que se fió. Uno por venta a crédito.
+///
+/// `saldoCop` es lo que queda por cobrar de ESTE pedido y lo van bajando los
+/// abonos, del fiado más viejo al más nuevo. Se guarda en vez de derivarlo porque
+/// un abono se aplica a varios pedidos a la vez y hay que poder decir cuál quedó
+/// saldado y cuál no.
+model Fiado {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  deudorId String
+  deudor   Deudor @relation(fields: [deudorId], references: [id], onDelete: Restrict)
+
+  /// El pedido que se fió. Único: un pedido no se fía dos veces.
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// El `OrderPayment` de método CREDITO que lo cerró, para poder rastrearlo.
+  orderPaymentId String       @unique
+  orderPayment   OrderPayment @relation(fields: [orderPaymentId], references: [id], onDelete: Cascade)
+
+  montoCop Int
+  saldoCop Int
+
+  /// Cuándo quedó en cero. Null mientras deba algo.
+  saldadoEn DateTime? @db.Timestamptz(3)
+
+  /// Se perdonó la deuda. Un pedido PAGADA no se puede anular, así que esta es la
+  /// única salida honesta para un fiado que no se va a cobrar, y queda con motivo.
+  condonadoEn     DateTime? @db.Timestamptz(3)
+  condonadoPorId  String?
+  condonadoPor    User?     @relation("FiadoCondonadoPor", fields: [condonadoPorId], references: [id], onDelete: SetNull)
+  condonadoMotivo String?
+
+  /// Quién lo autorizó y en qué turno. Fiar no pide clave: el cajero que abrió la
+  /// caja es el responsable, y esto es lo que lo deja firmado.
+  creadoPorId   String
+  creadoPor     User         @relation("FiadoCreadoPor", fields: [creadoPorId], references: [id], onDelete: Restrict)
+  cashSessionId String?
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  aplicaciones AplicacionDeAbono[]
+
+  @@index([businessId, deudorId, saldoCop])
+  @@index([businessId, createdAt])
+}
+
+/// Lo que el cliente entrega a cuenta de lo que debe.
+///
+/// El abono NO es un `OrderPayment`: la venta ya se reconoció el día que se fió, y
+/// registrarla otra vez como pago la contaría dos veces en los informes. Lo que
+/// entra hoy es caja, y por eso además se escribe un `CashMovement` de tipo
+/// INGRESO, que es lo que lo mete en el arqueo del turno que lo recibe.
+model AbonoDeCartera {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  deudorId String
+  deudor   Deudor @relation(fields: [deudorId], references: [id], onDelete: Restrict)
+
+  montoCop Int
+  method   PaymentMethod
+
+  /// El movimiento de caja que lo hizo entrar al arqueo.
+  cashMovementId String?       @unique
+  cashMovement   CashMovement? @relation(fields: [cashMovementId], references: [id], onDelete: SetNull)
+
+  cashSessionId String?
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  recibidoPorId String
+  recibidoPor   User   @relation("AbonoRecibidoPor", fields: [recibidoPorId], references: [id], onDelete: Restrict)
+
+  nota String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  aplicaciones AplicacionDeAbono[]
+
+  @@index([businessId, deudorId, createdAt])
+}
+
+/// A qué pedidos se le aplicó un abono, y cuánto a cada uno.
+///
+/// Sin esto, "salda del más viejo al más nuevo" no deja rastro: la pantalla lo
+/// puede decir en el momento de aplicarlo y nunca más. Y la pregunta que una
+/// cartera recibe todo el tiempo es justamente esa —"¿qué pagué el martes?"—, que
+/// sin estas filas hay que reconstruir a mano comparando saldos.
+model AplicacionDeAbono {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  abonoId String
+  abono   AbonoDeCartera @relation(fields: [abonoId], references: [id], onDelete: Cascade)
+
+  fiadoId String
+  fiado   Fiado  @relation(fields: [fiadoId], references: [id], onDelete: Cascade)
+
+  montoCop Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([businessId, fiadoId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

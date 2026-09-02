@@ -129,6 +129,7 @@ export default async function CajaPage({
         jornada={diaHistorial}
         esHoy={diaHistorial.getTime() === businessDate.getTime()}
         puedeFacturar={puedeFacturar}
+        puedeFiar={settings.creditoEnabled}
         propina={{
           habilitada: settings.tipSuggestionEnabled,
           rateBp: settings.tipSuggestionRateBp,

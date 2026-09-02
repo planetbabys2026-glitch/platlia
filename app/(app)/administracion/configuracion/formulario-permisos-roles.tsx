@@ -17,6 +17,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  Wallet,
 } from "lucide-react";
 import { Role } from "@/generated/prisma/enums";
 import { guardarPermisosRoles } from "@/features/negocio/actions";
@@ -40,6 +41,7 @@ const ICONOS_SECCION: Record<SeccionPermiso, React.ElementType> = {
   pos: Calculator,
   cocina: ChefHat,
   caja: CreditCard,
+  cartera: Wallet,
   domicilios: Bike,
   turnero: MonitorPlay,
   inventario: Boxes,

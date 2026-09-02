@@ -35,6 +35,12 @@ export type ResumenCaja = {
   bancos: SaldoDeCaja;
   /** Cobros que no se cuentan en ningún saldo: bonos y "otro". */
   otrosCop: number;
+  /**
+   * Lo que se fió hoy. No entra a ningún saldo —esa plata está en la calle— pero
+   * el cajero necesita verlo: es lo que explica por qué las ventas del día no
+   * coinciden con lo que hay para contar.
+   */
+  fiadoCop: number;
   porMetodo: { method: string; totalCop: number; cantidad: number; cuenta: CuentaDeSaldo }[];
 };
 
@@ -181,6 +187,7 @@ export async function getResumenCaja(
     efectivo: saldo("EFECTIVO", sesion.openingFloatCop),
     bancos: saldo("BANCO", sesion.openingBankCop),
     otrosCop: ventasDe("OTRO"),
+    fiadoCop: ventasDe("CREDITO"),
     porMetodo,
   };
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { OrderType, PaymentMethod } from "@/generated/prisma/enums";
 import { TIPOS_DE_DOCUMENTO } from "@/lib/billing/factus-habilitacion";
+import { telefonoEsUsable } from "@/features/cartera/reglas";
 import {
   cantidad,
   casilla,
@@ -43,6 +44,40 @@ type FormaFiscal = {
  * Marcada la casilla, los tres campos pasan a ser obligatorios. Sin marcar, no se
  * mira ninguno: se factura a consumidor final.
  */
+/** Los tres campos del fiado: quién debe, cómo se le ubica y dónde vive. */
+export const camposDeCredito = {
+  creditoNombre: textoOpcional(120),
+  creditoTelefono: textoOpcional(30),
+  creditoDireccion: textoOpcional(200),
+};
+
+type FormaCredito = {
+  method: string;
+  creditoNombre?: string;
+  creditoTelefono?: string;
+};
+
+/**
+ * Fiar exige saber a quién.
+ *
+ * Solo cuando el método es CREDITO, y por la misma razón que los datos fiscales
+ * se exigen solo al facturar: un campo obligatorio que no aplica bloquea el cobro
+ * normal, que es el 99% de las veces. El teléfono es el único imprescindible —es
+ * la identidad del deudor— y se valida su forma, no solo que esté: "no me acuerdo"
+ * escrito en el campo crea un deudor que nunca se va a poder juntar con otro.
+ */
+function exigirDatosDeCredito<T extends FormaCredito>(schema: z.ZodType<T>) {
+  return schema
+    .refine((v) => v.method !== "CREDITO" || Boolean(v.creditoNombre?.trim()), {
+      error: "Escribí a nombre de quién queda el fiado.",
+      path: ["creditoNombre"],
+    })
+    .refine((v) => v.method !== "CREDITO" || telefonoEsUsable(v.creditoTelefono ?? ""), {
+      error: "Escribí un teléfono válido: es lo que junta los pedidos de la misma persona.",
+      path: ["creditoTelefono"],
+    });
+}
+
 function exigirDatosFiscales<T extends FormaFiscal>(schema: z.ZodType<T>) {
   return schema
     .refine((v) => !v.facturaElectronica || Boolean(v.docType), {
@@ -199,7 +234,8 @@ export const propinaSchema = z.object({
   tipCop: montoCopPositivo,
 });
 
-export const pagoSchema = exigirDatosFiscales(
+export const pagoSchema = exigirDatosDeCredito(
+  exigirDatosFiscales(
   z.object({
     orderId: id,
     method: z.enum(PaymentMethod),
@@ -223,7 +259,9 @@ export const pagoSchema = exigirDatosFiscales(
     ),
     reference: textoOpcional(60),
     ...camposFiscales,
+    ...camposDeCredito,
   }),
+  ),
 );
 
 const ventaPosCompleta = z

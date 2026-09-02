@@ -107,6 +107,12 @@ export async function encolarRecibo(
             },
           },
         },
+        fiado: {
+          select: {
+            saldoCop: true,
+            deudor: { select: { nombre: true, telefono: true } },
+          },
+        },
         payments: {
           where: { voidedAt: null },
           orderBy: { createdAt: "asc" },

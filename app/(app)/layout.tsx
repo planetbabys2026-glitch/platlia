@@ -1,5 +1,6 @@
 import { AppModule } from "@/generated/prisma/enums";
 import { contarCuentasPorCobrar } from "@/features/caja/queries";
+import { contarDeudores } from "@/features/cartera/queries";
 import { contarComandasVivas } from "@/features/cocina/queries";
 import { contarDomiciliosActivos } from "@/features/domicilios/queries";
 import { getSettings } from "@/features/negocio/queries";
@@ -23,6 +24,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let usaInventario = false;
   let usaRecetas = false;
   let usaDomicilios = true;
+  let usaCredito = false;
+  let deudoresInicial = 0;
   let rolePermissions: string | null = null;
   let cocinaInicial = 0;
   let domiciliosInicial = 0;
@@ -36,18 +39,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // Inventario que la pantalla no dibuja.
       usaRecetas = settings.recipesEnabled;
       usaDomicilios = settings.deliveryEnabled;
+      usaCredito = settings.creditoEnabled;
       rolePermissions = settings.rolePermissions ?? null;
 
       // Los contadores del menú se calculan acá para que la primera pintura ya
       // traiga el número: el stream los refresca después, pero sin esto la
       // insignia arranca en cero y salta a tres medio segundo más tarde.
       const businessDate = currentBusinessDate(settings);
-      [cocinaInicial, domiciliosInicial, cajaInicial] = await Promise.all([
+      [cocinaInicial, domiciliosInicial, cajaInicial, deudoresInicial] = await Promise.all([
         usaCocina ? contarComandasVivas(ctx.business.id, businessDate) : Promise.resolve(0),
         usaDomicilios ? contarDomiciliosActivos(ctx.business.id) : Promise.resolve(0),
         // Sin condición: cualquier negocio puede mandar una cuenta a la caja,
         // también el de mostrador desde el POS.
         contarCuentasPorCobrar(ctx.business.id, businessDate),
+        usaCredito ? contarDeudores(ctx.business.id) : Promise.resolve(0),
       ]);
     } catch {
       // Si la empresa aún no tiene settings cargados

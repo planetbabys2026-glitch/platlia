@@ -50,6 +50,11 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "PrintAgent",
   "OAuthCode",
   "TokenIa",
+  // Cartera: la deuda de los clientes es de una sede, como sus ventas.
+  "Deudor",
+  "Fiado",
+  "AbonoDeCartera",
+  "AplicacionDeAbono",
 ]);
 
 /**

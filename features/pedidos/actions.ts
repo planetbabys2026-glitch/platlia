@@ -11,6 +11,7 @@ import {
 } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { elegirSesionDeCobro, mensajeSinSesion } from "@/features/caja/sesion";
+import { anotarFiado, esFiado } from "@/features/cartera/fiar";
 import { mensajeDeTraslado, puedeTrasladarse } from "@/features/salon/reglas-traslado";
 import { mensajeDeUnion, puedenUnirse } from "@/features/pedidos/reglas-union";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
@@ -902,19 +903,70 @@ export const registrarPago = defineAction({
         });
       }
 
-      await tx.orderPayment.create({
+      /**
+       * Fiar se valida acá y no solo en la pantalla: es un POST alcanzable con
+       * curl, y un negocio que no fía no puede terminar con deuda por un método
+       * que nadie encendió.
+       */
+      if (esFiado(input.method) && !settings.creditoEnabled) {
+        throw new ErrorDeUsuario(
+          "Este negocio no tiene el crédito habilitado. Se enciende en Configuración.",
+        );
+      }
+
+      const pago = await tx.orderPayment.create({
         data: {
           businessId: ctx.business.id,
           orderId: pedido.id,
           cashSessionId: caja.id,
           method: input.method,
           amountCop: input.amountCop,
-          tenderedCop: input.tenderedCop ?? null,
-          changeCop,
+          // Con crédito no entra plata: no hay recibido ni vuelto que calcular.
+          tenderedCop: esFiado(input.method) ? null : (input.tenderedCop ?? null),
+          changeCop: esFiado(input.method) ? null : changeCop,
           reference: input.reference ?? null,
           receivedById: ctx.user.id,
         },
       });
+
+      /**
+       * El fiado se anota en la MISMA transacción que el pago.
+       *
+       * Un `Fiado` sin su `OrderPayment` es una deuda que nadie generó, y un pago
+       * de crédito sin `Fiado` es plata que no entró y que además nadie debe. Las
+       * dos filas nacen juntas o no nace ninguna.
+       */
+      let fiado: Awaited<ReturnType<typeof anotarFiado>> | null = null;
+      if (esFiado(input.method)) {
+        fiado = await anotarFiado(tx, {
+          businessId: ctx.business.id,
+          orderId: pedido.id,
+          orderPaymentId: pago.id,
+          montoCop: input.amountCop,
+          datos: {
+            nombre: input.creditoNombre ?? "",
+            telefono: input.creditoTelefono ?? "",
+            direccion: input.creditoDireccion,
+          },
+          creadoPorId: ctx.user.id,
+          cashSessionId: caja.id,
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: ctx.user.id,
+            action: "cartera.fiar",
+            entity: "Fiado",
+            entityId: fiado.fiadoId,
+            metadata: {
+              pedidoId: pedido.id,
+              montoCop: input.amountCop,
+              deudaPreviaCop: fiado.saldoPrevioCop,
+              cashSessionId: caja.id,
+            },
+          },
+        });
+      }
 
       // Los datos para la factura electrónica viajan con el cobro, y se guardan
       // solo si el negocio de verdad puede emitir: el gate está acá y no solo en
@@ -1000,6 +1052,10 @@ export const registrarPago = defineAction({
         tableId: pedido.tableId,
         esDomicilio: pedido.deliveryStatus !== null,
         impresos,
+        // Para que la caja pueda decir "queda debiendo $X" sin ir a buscarlo.
+        fiado: fiado
+          ? { deudaTotalCop: fiado.saldoPrevioCop + input.amountCop }
+          : null,
       };
     });
 
@@ -1008,6 +1064,7 @@ export const registrarPago = defineAction({
     revalidatePath("/turnero");
     revalidatePath("/cocina");
     revalidatePath(`/pedido/${input.orderId}`);
+    revalidatePath("/cartera");
     void publishCocinaUpdate(ctx.business.id);
     void publishCajaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);

@@ -10,7 +10,7 @@ import { cuentaDelMetodo } from "@/features/caja/medios-de-pago";
 describe("de qué saldo es cada medio de pago", () => {
   it("clasifica TODOS los medios del enum: ninguno cae por descarte", () => {
     for (const metodo of Object.values(PaymentMethod)) {
-      expect(["EFECTIVO", "BANCO", "OTRO"]).toContain(cuentaDelMetodo(metodo));
+      expect(["EFECTIVO", "BANCO", "OTRO", "CREDITO"]).toContain(cuentaDelMetodo(metodo));
     }
   });
 
@@ -29,6 +29,20 @@ describe("de qué saldo es cada medio de pago", () => {
   it("el bono y 'otro' no suman a ningún saldo: no hay plata que contar", () => {
     expect(cuentaDelMetodo(PaymentMethod.BONO)).toBe("OTRO");
     expect(cuentaDelMetodo(PaymentMethod.OTRO)).toBe("OTRO");
+  });
+
+  /**
+   * El fiado tiene saldo propio y NO puede caer en efectivo ni en bancos: el
+   * cierre pediría contar una plata que está en la calle. Tampoco en "otros",
+   * que es lo que nunca va a entrar —un bono es consumo ya descontado—; un fiado
+   * sí va a entrar, otro día, y por eso se mira aparte.
+   */
+  it("el crédito es su propio saldo, ni cajón ni banco ni 'otros'", () => {
+    expect(cuentaDelMetodo(PaymentMethod.CREDITO)).toBe("CREDITO");
+  });
+
+  it("la tarjeta de crédito NO es fiado: esa plata la puso el banco", () => {
+    expect(cuentaDelMetodo(PaymentMethod.TARJETA_CREDITO)).toBe("BANCO");
   });
 
   it("un valor que no está en el enum no ensucia un saldo real", () => {

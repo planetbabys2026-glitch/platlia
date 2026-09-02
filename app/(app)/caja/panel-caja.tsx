@@ -23,6 +23,7 @@ const CUENTA: Record<string, string> = {
   EFECTIVO: "Efectivo",
   BANCO: "Bancos",
   OTRO: "Otros",
+  CREDITO: "Fiado",
 };
 
 type SaldoProp = {
@@ -62,6 +63,7 @@ type PanelCajaProps = {
     efectivo: SaldoProp;
     bancos: SaldoProp;
     otrosCop: number;
+    fiadoCop: number;
     porMetodo: Array<{ method: string; cantidad: number; totalCop: number; cuenta: string }>;
   } | null;
   movimientos: Array<{
@@ -82,6 +84,8 @@ type PanelCajaProps = {
   esHoy: boolean;
   /** Si el negocio está en condiciones de emitir factura electrónica. */
   puedeFacturar: boolean;
+  /** Si el negocio fía. */
+  puedeFiar: boolean;
   /** Si el negocio sugiere propina al cobrar, y con qué tarifa. */
   propina: { habilitada: boolean; rateBp: number };
   /** Null si el negocio no reparte: ahí no hay nada que abrir ni que cerrar. */
@@ -104,6 +108,7 @@ export function PanelCaja({
   jornada,
   esHoy,
   puedeFacturar,
+  puedeFiar,
   propina,
   domiciliosQr,
   timeZone,
@@ -137,6 +142,7 @@ export function PanelCaja({
         <CuentasPorCobrar
           cuentas={cuentas}
           puedeFacturar={puedeFacturar}
+          puedeFiar={puedeFiar}
           propina={propina}
         />
       )}
@@ -273,6 +279,21 @@ export function PanelCaja({
                     {/* Ni se cuenta ni se cuadra: un bono no es plata que entre.
                         Se muestra igual porque explica por qué el total del día no
                         es la suma de los dos saldos. */}
+                    {/* El fiado va primero y con su propia explicación: no es un
+                        medio de pago más, es plata que no entró. */}
+                    {resumen.fiadoCop > 0 && (
+                      <Card className="shadow-sm border-warning/40">
+                        <CardContent className="space-y-1 pt-5">
+                          <dl className="text-sm">
+                            <Fila termino="Fiado hoy" valor={resumen.fiadoCop} />
+                          </dl>
+                          <p className="text-xs text-warning-soft">
+                            No entra al arqueo: no hay que contarlo. Se cobra en Cartera.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {resumen.otrosCop > 0 && (
                       <Card className="shadow-sm">
                         <CardContent className="pt-5">

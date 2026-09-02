@@ -64,6 +64,8 @@ type AppShellProps = {
   usaMesas: boolean;
   usaCocina?: boolean;
   usaDomicilios?: boolean;
+  usaCredito?: boolean;
+  deudores?: number;
   puedeVerInventario: boolean;
   usaRecetas?: boolean;
   usaInventario?: boolean;
@@ -490,6 +492,8 @@ function Shell({
   usaMesas,
   usaCocina = true,
   usaDomicilios = true,
+  usaCredito = false,
+  deudores,
   puedeVerInventario,
   usaRecetas,
   usaInventario,
@@ -518,6 +522,8 @@ function Shell({
     usaMesas,
     usaCocina,
     usaDomicilios,
+    usaCredito,
+    deudores,
     puedeVerInventario,
     usaRecetas,
     usaInventario,

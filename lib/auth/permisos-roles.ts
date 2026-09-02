@@ -8,6 +8,7 @@ export type SeccionPermiso =
   | "pos"
   | "cocina"
   | "caja"
+  | "cartera"
   | "domicilios"
   | "turnero"
   | "inventario"
@@ -71,6 +72,17 @@ export const SECCIONES_SISTEMA: readonly InfoSeccion[] = [
     nombre: "Caja y Cobro",
     descripcion: "Cobro de cuentas, apertura/cierre de turnos y movimientos de efectivo.",
     categoria: "Operación",
+  },
+  {
+    /**
+     * La deuda de los clientes. Va con la caja —quien cobra el abono es el
+     * cajero— pero es otra pantalla: "cuentas por cobrar" en `/caja` son las
+     * cuentas abiertas de HOY; Cartera es lo que quedó debiendo de otros días.
+     */
+    id: "cartera",
+    nombre: "Cartera (fiados)",
+    descripcion: "Quién debe, cuánto y desde cuándo. Registro de abonos.",
+    categoria: "Gestión",
   },
   {
     id: "domicilios",
@@ -167,6 +179,7 @@ export const PERMISOS_POR_DEFECTO: Record<
     pos: true,
     cocina: true,
     caja: true,
+    cartera: true,
     domicilios: true,
     turnero: true,
     inventario: true,
@@ -182,6 +195,8 @@ export const PERMISOS_POR_DEFECTO: Record<
     pos: true,
     cocina: false,
     caja: true,
+    // Quien recibe el abono es el cajero: la cartera se cobra en el mostrador.
+    cartera: true,
     domicilios: true,
     turnero: true,
     inventario: false,
@@ -196,6 +211,7 @@ export const PERMISOS_POR_DEFECTO: Record<
     pos: false,
     cocina: false,
     caja: false,
+    cartera: false,
     domicilios: false,
     turnero: true,
     inventario: false,
@@ -210,6 +226,7 @@ export const PERMISOS_POR_DEFECTO: Record<
     pos: false,
     cocina: true,
     caja: false,
+    cartera: false,
     domicilios: false,
     turnero: true,
     inventario: false,
@@ -254,6 +271,7 @@ export function obtenerPermisosRol(
       pos: true,
       cocina: true,
       caja: true,
+      cartera: true,
       domicilios: true,
       turnero: true,
       inventario: true,
@@ -270,6 +288,7 @@ export function obtenerPermisosRol(
     pos: false,
     cocina: false,
     caja: false,
+    cartera: false,
     domicilios: false,
     turnero: false,
     inventario: false,
