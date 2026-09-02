@@ -32,6 +32,8 @@ export type TrabajoParaEncolar = {
   tipo: "RECIBO" | "COMANDA" | "PRUEBA";
   lineas: readonly string[];
   lineasDestacadas?: number;
+  /** Todo el trabajo a doble alto. Es lo que usa la comanda de cocina. */
+  dobleAlto?: boolean;
   abrirCajon?: boolean;
 };
 
@@ -49,6 +51,7 @@ export async function encolarImpresion(
   const bytes = componerEscPos({
     lineas: trabajo.lineas,
     lineasDestacadas: trabajo.lineasDestacadas ?? 0,
+    dobleAlto: trabajo.dobleAlto ?? false,
     abrirCajon: trabajo.abrirCajon ?? false,
   });
 

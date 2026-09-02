@@ -125,3 +125,63 @@ describe("aBase64", () => {
     expect(Uint8Array.from(Buffer.from(aBase64(bytes), "base64"))).toEqual(bytes);
   });
 });
+
+/**
+ * El tamaño de la comanda, en bytes.
+ *
+ * Esto no se ve leyendo el código ni mirando la pantalla: se ve en el papel, y si
+ * está mal nadie se entera hasta que un cocinero no puede leer un pedido.
+ */
+describe("doble alto para la comanda", () => {
+  const GS = 0x1d;
+
+  it("cada línea normal se abre en doble alto y se cierra", () => {
+    const bytes = componerEscPos({ lineas: ["ARROZ"], dobleAlto: true, cortar: false });
+    // GS ! 0x01 = doble alto con ancho normal.
+    expect(contiene(bytes, [GS, 0x21, 0x01])).toBe(true);
+    // Y vuelve a tamaño normal: una térmica conserva el estado, así que sin el
+    // reset el trabajo siguiente saldría gigante sin que nadie entienda por qué.
+    expect(contiene(bytes, [GS, 0x21, 0x00])).toBe(true);
+  });
+
+  /**
+   * Doble ALTO y no doble ancho: el ancho manda el presupuesto de columnas que
+   * `envolver` ya usó para partir las líneas, y duplicarlo cortaría los nombres
+   * de plato por la mitad.
+   */
+  it("no toca el ancho", () => {
+    const bytes = componerEscPos({ lineas: ["ARROZ"], dobleAlto: true, cortar: false });
+    expect(contiene(bytes, [GS, 0x21, 0x10])).toBe(false);
+    expect(contiene(bytes, [GS, 0x21, 0x11])).toBe(false);
+  });
+
+  it("sin la opción, nada cambia respecto de lo que se imprimía antes", () => {
+    const bytes = componerEscPos({ lineas: ["ARROZ"], cortar: false });
+    expect(contiene(bytes, [GS, 0x21, 0x01])).toBe(false);
+  });
+
+  it("la línea destacada sigue saliendo a doble ancho y alto", () => {
+    const bytes = componerEscPos({
+      lineas: ["MESA 12", "ARROZ"],
+      lineasDestacadas: 1,
+      dobleAlto: true,
+      cortar: false,
+    });
+    expect(contiene(bytes, [GS, 0x21, 0x11])).toBe(true);
+  });
+});
+
+/**
+ * Desde que el recibo y la comanda se componen en mayúsculas, todo acento que
+ * llegue a la impresora llega en caja alta. Si la tabla tuviera la minúscula y
+ * no su mayúscula, un nombre con tilde saldría con un "?" en el papel y en
+ * ningún otro lado: no falla nada, solo sale mal impreso.
+ */
+describe("CP858 cubre la caja alta de todo lo que cubre en minúscula", () => {
+  it("ningún acento se convierte en el reemplazo al pasar a mayúsculas", () => {
+    const acentos = "áéíóúñü";
+    const bytes = Array.from(codificarTexto(acentos.toUpperCase()));
+    expect(bytes).not.toContain(0x3f);
+    expect(bytes).toHaveLength(acentos.length);
+  });
+});

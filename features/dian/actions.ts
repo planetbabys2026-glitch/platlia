@@ -218,6 +218,41 @@ export const emitirFacturaElectronica = defineAction({
     }
 
     /**
+     * Los datos corregidos se guardan ANTES de armar el documento.
+     *
+     * Corregir y emitir son un solo acto: si se guardaran en una acción aparte,
+     * existiría el estado "datos cambiados, factura sin emitir" y nadie sabría
+     * después si el documento salió con los viejos o con los nuevos. Y va antes
+     * del reclamo de abajo porque el payload se construye leyendo el pedido: si
+     * se escribieran después, la factura saldría con lo anterior.
+     *
+     * Solo se escribe lo que vino: un campo vacío no borra lo que ya estaba, que
+     * es lo que pasaría al reintentar una emisión fallida sin volver a teclear
+     * todo.
+     */
+    const correcciones = {
+      ...(input.customerName?.trim() ? { customerName: input.customerName.trim() } : {}),
+      ...(input.docType ? { docType: input.docType } : {}),
+      ...(input.docNumber?.trim() ? { docNumber: input.docNumber.trim() } : {}),
+      ...(input.customerEmail?.trim() ? { customerEmail: input.customerEmail.trim() } : {}),
+    };
+
+    if (Object.keys(correcciones).length > 0) {
+      await db.order.update({ where: { id: pedido.id }, data: correcciones });
+      Object.assign(pedido, correcciones);
+
+      await db.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "dian.corregir-datos",
+          entity: "Order",
+          entityId: pedido.id,
+          metadata: correcciones,
+        },
+      });
+    }
+
+    /**
      * Se reclama la venta antes de salir a la red: dos clics seguidos en el botón
      * serían dos facturas ante la DIAN.
      *

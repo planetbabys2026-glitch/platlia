@@ -117,6 +117,7 @@ export async function agregarProducto(page: Page, producto: RegExp) {
 
   for (let intento = 0; intento < 6; intento++) {
     if (await confirmado.isVisible().catch(() => false)) return;
+
     // Si el renglón ya está —aunque sea el optimista— no se vuelve a clickear: dos
     // clics son dos unidades, y la prueba de al lado afirma cantidades.
     if (!(await renglon.first().isVisible().catch(() => false))) {
@@ -127,11 +128,23 @@ export async function agregarProducto(page: Page, producto: RegExp) {
         .click({ timeout: 10_000 })
         .catch(() => {});
     }
+
     try {
       await expect(confirmado).toBeVisible({ timeout: 8000 });
       return;
     } catch {
-      // El clic cayó antes de la hidratación: se vuelve a intentar.
+      /**
+       * Antes de reintentar, RECARGAR y volver a mirar.
+       *
+       * El renglón optimista dice "Agregando…" hasta que el cliente vuelve a
+       * pedir la pantalla, y ese repintado puede demorar más que la espera de
+       * arriba. Sin recargar, el ayudante no distingue "no se agregó" de "se
+       * agregó y todavía no se ve", y termina clickeando de nuevo: dos cervezas
+       * donde el mesero pidió una. La recarga pregunta lo único que importa —qué
+       * quedó en la cuenta— y es la misma verificación que hace una persona.
+       */
+      await page.reload();
+      await expect(cuenta).toBeVisible({ timeout: 15_000 });
     }
   }
 
@@ -216,6 +229,43 @@ export async function abrirMesa(page: Page, numero: number) {
   }
 
   throw new Error(`No se pudo abrir la mesa ${numero}.`);
+}
+
+/**
+ * Manda la comanda a cocina desde la pantalla de la cuenta.
+ *
+ * Acotado a la cuenta y con el nombre exacto: un `/cocina/i` suelto agarra el
+ * botón "Ver estado de preparaciones en cocina" de la barra lateral, que está en
+ * TODAS las pantallas y no manda nada. El síntoma es peor que un fallo: la prueba
+ * sigue como si hubiera enviado, y revienta tres pasos después buscando en la
+ * caja una cuenta que nunca salió del carrito.
+ *
+ * Se reintenta por la carrera de hidratación de siempre: hasta que la página
+ * hidrata, `<form action={serverAction}>` lleva un `action` que lanza y el clic se
+ * pierde sin error visible.
+ */
+export async function mandarComandaACocina(page: Page) {
+  const boton = page.getByRole("button", { name: /mandar comanda a cocina/i }).first();
+  await expect(boton).toBeVisible({ timeout: 15_000 });
+
+  for (let intento = 0; intento < 5; intento++) {
+    await boton.click();
+    await page.waitForTimeout(1500);
+
+    /**
+     * Se comprueba contra la pantalla RECARGADA, no contra el botón.
+     *
+     * El botón cambia de texto apenas se toca —queda "pendiente"— así que
+     * esperar a que desaparezca da por enviada una comanda que el servidor
+     * todavía está escribiendo. Con eso, el `goto` siguiente cancelaba la acción
+     * a mitad de camino y la caja se pintaba sin la cuenta. La recarga pregunta
+     * lo único que decide: si el servidor ya la mandó.
+     */
+    await page.reload();
+    if (!(await boton.isVisible().catch(() => false))) return;
+  }
+
+  throw new Error("No se pudo mandar la comanda a cocina.");
 }
 
 /**

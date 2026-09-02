@@ -1148,6 +1148,170 @@ salga la página de "no encontrada" y que no aparezca nada del equipo. Es la
 afirmación más fuerte de las dos —un 404 con el equipo adentro habría pasado la
 prueba vieja y sería el defecto de verdad—.
 
+### La tirilla del navegador se imprime contra el CABEZAL, no contra el papel
+
+`app/imprimir/pedido/[id]` es la que abre el POS (`?auto=1`). Tenía dos defectos que
+producían el mismo síntoma —"la última columna no se ve"— y solo uno se arreglaba con CSS:
+
+1. **El ancho imprimible no es el del papel.** Un rollo de 80 mm tiene un cabezal de 72; uno
+   de 55 imprime 48. Con el `@page margin: 3mm` que había, el contenido pedía 74 mm de los 72
+   que la máquina puede marcar, así que el borde derecho —donde `lineaDoble` pega los
+   importes— caía fuera del cabezal. El margen y el cuerpo salen ahora de `imprimibleMm`.
+2. **La pila de fuentes elegía una distinta en cada sistema.** Eran todas monoespaciadas,
+   pero su AVANCE no es el mismo: Consolas mide 0.55em por carácter, SF Mono 0.6em. Con el
+   ancho fijado en `ch` y el cuerpo clavado en `9.5px`, las 48 columnas caían justo en el
+   filo, y en el sistema que tocara una letra un poco más ancha se perdía la última.
+   Ahora es **Courier New y nada más**: está en todos los sistemas, su avance es exactamente
+   0.6em en todos, y es la letra con la que se imprimen los recibos desde siempre.
+
+El cuerpo se **deriva** en vez de escribirse a mano —`calc(imprimibleMm * 0.98 / ancho / 0.6)`—
+así que el mismo CSS sirve para los dos rollos y cambiar el papel no vuelve a descuadrar nada.
+
+**Lo borroso era el antialiasing.** Una térmica no imprime grises: convierte cada píxel a
+punto o no-punto. El suavizado rodea cada letra de píxeles grises que la máquina tiene que
+decidir si quema, y el borde sale sucio. Con `-webkit-font-smoothing: none` y negrita, cada
+letra es negro puro.
+
+**Y las mayúsculas las pone `componerRecibo`, no el CSS.** De ese módulo salen los DOS
+papeles —el del navegador y el de la cola térmica—, así que con `text-transform` puesto solo
+en la pantalla el mismo pedido salía en caja alta por un camino y en texto mixto por el otro:
+reimprimir daba un tiquete distinto del que había salido por la caja, que es exactamente lo
+que ese módulo compartido existe para evitar. Se aplica al final y de una pasada, como en la
+comanda, para que ninguna línea futura se olvide y para que `centrar`, `envolver` y
+`lineaDoble` hayan medido sobre el texto real. En español la caja alta no cambia el largo, así
+que ninguna columna se mueve; y **CP858 tiene la mayúscula de todo acento que tiene en
+minúscula** —Á É Í Ó Ú Ñ Ü—, con un test que lo fija: si faltara una, un nombre con tilde
+saldría con un `?` en el papel y en ningún otro lado.
+
+`tests/unit/recibo.test.ts` fija la invariante que ningún CSS puede salvar: **ningún renglón
+puede pasarse del ancho en caracteres**, en los dos rollos. Si se pasa, lo que se pierde es
+siempre la columna de la derecha, que es la de la plata.
+
+### La comanda se lee de pie, a un metro y con las manos ocupadas
+
+Tres cosas que la hacen legible en una plancha, y ninguna es estética:
+
+- **Toda la comanda va a doble alto** (`componerEscPos` con `dobleAlto`, que emite
+  `GS ! 0x01`). Doble **alto** y no doble ancho a propósito: el ancho es el presupuesto de
+  columnas que `envolver` ya usó para partir las líneas, y duplicarlo cortaría "Bandeja
+  paisa" por la mitad. El identificador sigue saliendo a doble ancho **y** alto, que es lo
+  único que se busca de lejos entre seis papeles colgados.
+- **Todo en mayúsculas.** Una térmica imprime chico y con poco contraste; la caja alta no
+  tiene descendentes que se corten ni minúsculas que se empasten. Se aplica de una sola
+  pasada al final de `componerComanda` —para que ninguna línea futura se olvide— y después
+  de componer, para que `centrar` y `envolver` hayan medido sobre el texto real: en español
+  la caja alta no cambia el largo, así que las columnas siguen cuadrando. CP858 tiene
+  Á É Í Ó Ú Ñ y `escpos.ts` ya las mapea, así que no se pierde ningún acento.
+- **El nombre del mesero.** Es a quien la cocina llama cuando algo no cuadra —"esto dice sin
+  cebolla, ¿es de la 4?"— y es lo que permite rastrear un plato que salió mal. Con seis
+  comandas colgadas, "preguntale al mesero" no alcanza.
+
+El tamaño no se ve leyendo el código ni mirando la pantalla: se ve en el papel. Por eso
+`tests/unit/escpos.test.ts` afirma los **bytes** —que aparezca `GS ! 0x01`, que se cierre con
+`GS ! 0x00`, y que NO aparezca ningún modificador de ancho—.
+
+### Con la comanda en papel no hay quién mueva un plato
+
+`comandaDestino: IMPRESA` —"solo papel" en Configuración → Impresoras— es el negocio donde
+la comanda sale por la térmica y **el sistema no se vuelve a tocar hasta el cobro**. Nadie
+marca un plato como empezado ni como listo, porque no hay pantalla donde tocarlo.
+
+Eso rompía tres cosas, y las tres se veían como pantallas vacías en vez de como un error:
+
+1. **El KDS quedaba en el menú, vacío toda la noche**, mientras la cocina trabaja con el
+   papel en la mano. `/cocina` ahora responde 404 en este modo —la guarda va en la página,
+   porque a una URL se llega sin pasar por el menú—.
+2. **El turnero era un televisor mudo.** Un número aparece ahí cuando la cocina marca el
+   pedido listo; sin KDS no aparece ninguno, y la pantalla diría "sin turnos" frente a un
+   salón lleno.
+3. **La caja agrupaba TODA cuenta en "En curso"**, esperando un "listo" que no iba a llegar
+   nunca. Los tres grupos se volvían uno solo con todo adentro, y el orden —que es la
+   información más útil de esa pantalla— dejaba de decir nada.
+
+Lo tercero es lo que importa y se resuelve en la regla, no en la pantalla: `estadoDeCobro`
+recibe `hayKds`, y sin pantalla **lo que salió a la plancha ya es cobrable**. El papel es
+toda la señal que hay. Decir "en curso" ahí sería mentir: implica que alguien lo va a mover.
+
+`usaKds(comandaDestino)` es el único lugar donde se decide, y lo consumen el layout —que
+apaga los dos módulos—, las dos páginas y `getCuentasPorCobrar`.
+
+### El fiado cierra la venta y deja una deuda, no un cobro
+
+`PaymentMethod.CREDITO` es fiar: el pedido queda **PAGADA**, la mesa se libera y la venta
+cuenta en los informes del día, pero **esa plata no entra al arqueo**. Sin esto el cajero
+tenía dos salidas y las dos malas: cobrar en efectivo algo que no entró —y cerrar con
+faltante todas las noches— o dejar la cuenta abierta y no poder cerrar el turno hasta que
+el cliente volviera, que pueden ser tres días.
+
+Lo enciende el dueño (`BusinessSettings.creditoEnabled`, apagado de fábrica) y **no pide
+clave ni rol aparte**: el cajero que abrió el turno es el responsable, y `Fiado` guarda
+quién lo autorizó y en qué caja.
+
+**El fiado tiene saldo PROPIO en el arqueo**, ni efectivo, ni bancos, ni "otros". El mapa de
+`features/caja/medios-de-pago.ts` es exhaustivo y sin `default`, así que agregar el método
+obligó a decidirlo: en efectivo o bancos, el cierre pediría contar plata que está en la
+calle; en "otros" se mezclaría con los bonos, que es plata que **nunca** va a entrar. El
+cierre muestra "Fiado hoy · no entra al arqueo" y `cerrarCaja` no cambió.
+
+**El abono es un `CashMovement` de tipo INGRESO, no un `OrderPayment`.** La venta se
+reconoció el día que se fió; registrarla otra vez como pago la contaría dos veces —una como
+CRÉDITO y otra como efectivo— y dejaría `paidCop` por encima del total. Lo que entra hoy es
+caja, no ingreso nuevo, y `CashMovement` es exactamente "entradas y salidas que no son
+ventas". Verificado: ni `features/informes/queries.ts` ni `lib/mcp/herramientas.ts` suman
+movimientos de caja.
+
+**El teléfono es la identidad del deudor**, no el nombre. Un nombre se escribe distinto cada
+noche —"Andrés", "Andres G"— y con eso la misma persona sería tres deudores. Se guarda
+normalizado a dígitos (`features/cartera/reglas.ts`, con el mismo criterio que la consulta
+del menú QR) y `@@unique([businessId, telefono])` cierra el problema. Al teclear el teléfono
+en el cobro, la pantalla dice **cuánto debe ya**: fiarle a alguien sin saber cuánto lleva es
+lo que convierte una cartera en un problema.
+
+**La tirilla tiene que decir que debe, y no se deduce del faltante.** Un fiado deja
+`paidCop == totalCop`, así que el bloque "PENDIENTE" no se dispara y el papel se leería
+idéntico al de una tarjeta. `componerRecibo` recibe el fiado aparte e imprime
+`*** FIADO ***` con el nombre y el teléfono: ese papel es el único comprobante de la deuda
+del lado del cliente.
+
+**Un abono salda del pedido más viejo al más nuevo** (`aplicarAbono`, puro y con tests), y
+`AplicacionDeAbono` guarda a qué pedido fue cada peso. Sin esa tabla, "salda del más viejo"
+se puede decir en el momento y nunca más, y la pregunta que una cartera recibe siempre es
+"¿qué pagué el martes?". Recibir **más** de lo que se debe se rechaza con la cifra: no es un
+abono, es un error de tecleo, y los saldos a favor son otro producto.
+
+**Perdonar es otro acto que fiar.** Un pedido `PAGADA` no se puede anular, así que
+`condonarFiado` —`roles: [PROPIETARIO]`, motivo obligatorio, `AuditLog`— es la única salida
+honesta para lo incobrable.
+
+### Los datos de la factura se corrigen al emitir, no antes
+
+El botón de facturar en Cuentas cobradas abre los cuatro campos que la DIAN mira —nombre,
+tipo y número de documento, correo— precargados con lo que la venta tenga. Casi siempre
+están vacíos: en un bar la mayoría de las ventas van a consumidor final y el cobro no pide
+nada.
+
+**Se revisan ahí porque ahí hay alguien mirando.** Un NIT mal escrito es un rechazo que
+aparece recién al emitir, y una factura emitida no se corrige: se anula con nota crédito.
+
+**Corregir y emitir son un solo acto**, en la misma acción. Guardar los datos por un lado y
+emitir por otro deja el estado "datos cambiados, factura sin emitir", y después nadie sabe
+si el documento salió con los viejos o con los nuevos. Se escriben **antes** del reclamo
+anti-doble-emisión, porque el payload se construye leyendo el pedido. Y un campo vacío no
+borra lo que ya estaba: reintentar una emisión fallida no puede exigir volver a teclear todo.
+
+### `useOptimistic` sin `router.refresh()` se queda mostrando el fantasma
+
+`carta.tsx` llama a `agregarItem` a mano —no con `useActionState`— para que la transición del
+formulario siga abierta y el renglón optimista no parpadee. El costo, que no era obvio: **el
+router no se entera**. El `revalidatePath` del servidor invalida la caché, pero el cliente
+nunca vuelve a pedir la pantalla, así que `useOptimistic` no recibe jamás los renglones
+reales contra los cuales reconciliar.
+
+Medido: el `OrderItem` quedaba escrito en la base y la pantalla decía **"Agregando…" para
+siempre**. En el piso eso es un mesero que toca una cerveza, no ve nada, toca otra vez, y
+termina con seis — justo lo que el renglón optimista existía para evitar. Un `router.refresh()`
+después de la acción lo cierra.
+
 ### Cobrar es una cola, y se dibuja como una cola
 
 `/caja` era una rejilla de tarjetas que se desplegaban en el lugar. Con la caja
@@ -2013,7 +2177,9 @@ scripts/pruebas-locales.ts  levanta la Postgres de espacio de usuario de los e2e
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests
 features/caja/reglas.ts      qué va a caja · qué es salida de dinero · en qué caja cae un cobro (puro)
 features/caja/sesion.ts     resuelve esa caja contra la base, dentro de la transacción del cobro
-features/caja/medios-de-pago.ts  cada PaymentMethod a su saldo: efectivo, banco u otro (puro)
+features/caja/medios-de-pago.ts  cada PaymentMethod a su saldo: efectivo, banco, otro o fiado (puro)
+features/cartera/reglas.ts   el teléfono como identidad · a qué pedidos va un abono (puro)
+features/cartera/fiar.ts     anota el fiado dentro de la transacción que cierra la venta
 features/salon/reglas-traslado.ts  a qué mesa se puede mudar una cuenta (puro)
 features/pedidos/reglas-union.ts   qué cuentas se pueden unir y en cuál (puro)
 features/cocina/reglas.ts   quién marca listo y los dos tramos de tiempo (puro)

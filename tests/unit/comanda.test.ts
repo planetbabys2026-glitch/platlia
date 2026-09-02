@@ -22,6 +22,7 @@ const PEDIDO: PedidoDeComanda = {
   customerName: "Andrés",
   deliveryAddress: null,
   openedAt: new Date("2026-08-19T18:30:00Z"),
+  openedBy: { name: "Jhon Torres" },
   table: { name: "12" },
 };
 
@@ -66,7 +67,7 @@ describe("componerComanda", () => {
     );
     expect(lineas[0]).toContain("DOMICILIO #42");
     // Quien empaca necesita saber que va para afuera antes de terminar.
-    expect(lineas.join("\n")).toContain("Calle Falsa 123");
+    expect(lineas.join("\n")).toContain("CALLE FALSA 123");
   });
 
   it("un pedido para llevar se identifica por su turno", () => {
@@ -89,11 +90,11 @@ describe("componerComanda", () => {
 
   it("lleva cantidad, modificadores y notas de cada renglón", () => {
     const texto = componerComanda(PEDIDO, ITEMS, opciones).join("\n");
-    expect(texto).toContain("2x Bandeja paisa");
-    expect(texto).toContain("Bien asado");
+    expect(texto).toContain("2X BANDEJA PAISA");
+    expect(texto).toContain("BIEN ASADO");
     // La nota va marcada: "sin cebolla" perdido entre renglones es un plato que
     // vuelve a la cocina.
-    expect(texto).toContain(">> sin cebolla");
+    expect(texto).toContain(">> SIN CEBOLLA");
   });
 
   it("dice a qué estación pertenece", () => {
@@ -128,6 +129,47 @@ describe("componerComanda", () => {
 
   it("cierra con el número de pedido, para poder cotejarlo", () => {
     const lineas = componerComanda(PEDIDO, ITEMS, opciones);
-    expect(lineas[lineas.length - 1]).toContain("Pedido #42");
+    expect(lineas[lineas.length - 1]).toContain("PEDIDO #42");
+  });
+});
+
+/**
+ * Lo que hace legible un papel colgado en la plancha: letra grande, caja alta y
+ * saber a quién llamar. Es una comanda que se lee de pie, a un metro y con las
+ * manos ocupadas — no una pantalla.
+ */
+describe("la comanda se lee de lejos", () => {
+  it("sale entera en mayúsculas, incluido lo que el mesero escribió a mano", () => {
+    const lineas = componerComanda(
+      PEDIDO,
+      [
+        {
+          quantity: 1,
+          nameSnapshot: "Bandeja paisa",
+          notes: "sin cebolla, término medio",
+          modifiers: [{ optionNameSnapshot: "arroz extra" }],
+        },
+      ],
+      opciones,
+    );
+
+    const texto = lineas.join("\n");
+    expect(texto).toBe(texto.toUpperCase());
+    expect(texto).toContain("SIN CEBOLLA, TÉRMINO MEDIO");
+    expect(texto).toContain("ARROZ EXTRA");
+  });
+
+  /**
+   * A quién llama la cocina cuando algo no cuadra. Con seis comandas colgadas,
+   * "preguntale al mesero" no alcanza.
+   */
+  it("dice quién tomó el pedido", () => {
+    const texto = componerComanda(PEDIDO, ITEMS, opciones).join("\n");
+    expect(texto).toContain("MESERO: JHON TORRES");
+  });
+
+  it("sin mesero registrado no inventa una línea vacía", () => {
+    const texto = componerComanda({ ...PEDIDO, openedBy: null }, ITEMS, opciones).join("\n");
+    expect(texto).not.toContain("MESERO:");
   });
 });

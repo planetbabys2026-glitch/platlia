@@ -24,6 +24,7 @@ const METODO: Record<string, string> = {
   TRANSFERENCIA: "Transferencia",
   BONO: "Bono",
   OTRO: "Otro",
+  CREDITO: "Crédito (fiado)",
 };
 
 /**
@@ -277,5 +278,20 @@ export function componerRecibo(
   push("");
   push(centrar("Platlia", ancho));
 
-  return lineas;
+  /**
+   * Todo en mayúsculas, al final y de una sola pasada — igual que la comanda.
+   *
+   * Va acá y no en el CSS de `app/imprimir/pedido/[id]` porque de este módulo
+   * salen LOS DOS papeles: el que imprime el navegador y el que arma la cola
+   * térmica. Con la caja alta puesta solo en la pantalla, el mismo pedido salía
+   * en mayúsculas por un camino y en texto mixto por el otro, y reimprimir daba
+   * un tiquete distinto del que había salido por la caja: exactamente lo que
+   * este módulo existe para evitar.
+   *
+   * Después de componer y no en cada `push`, para que `centrar`, `envolver` y
+   * `lineaDoble` hayan medido sobre el texto real. En español la caja alta no
+   * cambia el largo, así que ninguna columna se mueve; CP858 tiene Á É Í Ó Ú Ñ y
+   * `escpos.ts` las mapea.
+   */
+  return lineas.map((linea) => linea.toUpperCase());
 }

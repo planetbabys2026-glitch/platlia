@@ -98,12 +98,24 @@ export const ETIQUETA_DE_COBRO: Record<EstadoDeCobro, string> = {
   EN_CURSO: "En curso",
 };
 
-export function estadoDeCobro(pedido: {
-  status: string;
-  deliveryStatus: string | null;
-  /** Los renglones vivos, con su estado de cocina. */
-  items: readonly { status: string }[];
-}): EstadoDeCobro {
+export function estadoDeCobro(
+  pedido: {
+    status: string;
+    deliveryStatus: string | null;
+    /** Los renglones vivos, con su estado de cocina. */
+    items: readonly { status: string }[];
+  },
+  opciones: {
+    /**
+     * Si la cocina tiene pantalla. Con "solo papel" (`comandaDestino: IMPRESA`)
+     * **nadie puede marcar un plato como listo**, así que ningún pedido saldría
+     * jamás de "En curso" y los tres grupos de la caja se volverían uno solo con
+     * todo adentro. Decir "en curso" ahí sería mentir: implica que alguien lo va
+     * a mover, y no hay quién.
+     */
+    hayKds: boolean;
+  } = { hayKds: true },
+): EstadoDeCobro {
   if (pedido.status === "CUENTA_PEDIDA") return "PIDIO_CUENTA";
 
   if (
@@ -113,6 +125,10 @@ export function estadoDeCobro(pedido: {
     return "LISTO";
   }
 
+  // Sin pantalla de cocina, lo que salió a la plancha ya es cobrable: el papel es
+  // toda la señal que hay.
+  if (!opciones.hayKds) return "LISTO";
+
   // Sin renglones vivos no hay nada que esperar de la cocina; con todos servidos,
   // tampoco. En los dos casos la cuenta ya no va a crecer sola.
   const vivos = pedido.items.filter((i) => i.status !== "ANULADO");
@@ -120,6 +136,11 @@ export function estadoDeCobro(pedido: {
     vivos.length > 0 && vivos.every((i) => i.status === "LISTO" || i.status === "ENTREGADO");
 
   return todoServido ? "LISTO" : "EN_CURSO";
+}
+
+/** Si la cocina tiene pantalla, según cómo salga la comanda. */
+export function usaKds(comandaDestino: string): boolean {
+  return comandaDestino === "KDS" || comandaDestino === "AMBAS";
 }
 
 /**

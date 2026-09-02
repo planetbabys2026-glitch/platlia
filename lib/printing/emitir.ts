@@ -186,6 +186,7 @@ export async function encolarComandas(
         customerName: true,
         deliveryAddress: true,
         openedAt: true,
+        openedBy: { select: { name: true } },
         table: { select: { name: true } },
         items: {
           where: {
@@ -233,6 +234,8 @@ export async function encolarComandas(
         tipo: "COMANDA",
         lineas,
         lineasDestacadas: LINEAS_DESTACADAS_COMANDA,
+      // La comanda entera en letra grande: se lee de pie y a un metro.
+      dobleAlto: true,
       });
       encolados++;
     }

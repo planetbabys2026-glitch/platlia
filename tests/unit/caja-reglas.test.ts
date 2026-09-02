@@ -4,6 +4,7 @@ import {
   estadoDeCobro,
   HAY_QUE_COBRAR,
   ORDEN_DE_COBRO,
+  usaKds,
 } from "@/features/caja/reglas";
 
 /**
@@ -124,5 +125,40 @@ describe("estadoDeCobro: el orden de la lista", () => {
   it("el orden pone lo urgente arriba", () => {
     expect(ORDEN_DE_COBRO.PIDIO_CUENTA).toBeLessThan(ORDEN_DE_COBRO.LISTO);
     expect(ORDEN_DE_COBRO.LISTO).toBeLessThan(ORDEN_DE_COBRO.EN_CURSO);
+  });
+});
+
+describe("cocina en solo papel: nadie mueve el estado de un plato", () => {
+  it("`usaKds` distingue las tres formas de sacar la comanda", () => {
+    expect(usaKds("KDS")).toBe(true);
+    expect(usaKds("AMBAS")).toBe(true);
+    expect(usaKds("IMPRESA")).toBe(false);
+  });
+
+  /**
+   * El caso que motivó esto: con papel, ningún renglón llega nunca a LISTO, así
+   * que sin esta regla TODA cuenta se quedaría en "En curso" para siempre y los
+   * tres grupos de la caja serían uno solo con todo adentro. Decir "en curso" ahí
+   * es mentir: implica que alguien lo va a mover, y no hay quién.
+   */
+  it("sin KDS, lo que salió a la plancha ya se puede cobrar", () => {
+    const pedido = { status: "ABIERTA", deliveryStatus: null, items: [cocinando] };
+    expect(estadoDeCobro(pedido, { hayKds: true })).toBe("EN_CURSO");
+    expect(estadoDeCobro(pedido, { hayKds: false })).toBe("LISTO");
+  });
+
+  it("sin KDS, quien pidió la cuenta sigue yendo primero", () => {
+    expect(
+      estadoDeCobro(
+        { status: "CUENTA_PEDIDA", deliveryStatus: null, items: [cocinando] },
+        { hayKds: false },
+      ),
+    ).toBe("PIDIO_CUENTA");
+  });
+
+  it("por defecto se asume que hay pantalla: es lo que traía el producto", () => {
+    expect(
+      estadoDeCobro({ status: "ABIERTA", deliveryStatus: null, items: [cocinando] }),
+    ).toBe("EN_CURSO");
   });
 });

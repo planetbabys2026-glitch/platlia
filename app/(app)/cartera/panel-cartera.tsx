@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { HandCoins, Wallet } from "lucide-react";
 import { PaymentMethod } from "@/generated/prisma/enums";
-import { condonarFiado, registrarAbono } from "@/features/cartera/actions";
+import { condonarFiado, obtenerFicha, registrarAbono } from "@/features/cartera/actions";
 import { aplicarAbono } from "@/features/cartera/reglas";
 import type { DeudorDeCartera, FichaDeDeudor } from "@/features/cartera/queries";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -196,15 +196,14 @@ function Ficha({ deudorId, puedeCondonar }: { deudorId: string; puedeCondonar: b
   const [condonado, condonar] = useActionState(condonarFiado, ESTADO_INICIAL);
 
   // La ficha se pide al elegir a la persona: traer los fiados y abonos de todos
-  // los deudores de una sola vez sería un payload que la lista no usa.
+  // los deudores de una sola vez sería un payload que la lista no usa. Se vuelve
+  // a pedir cuando se perdona una deuda, que es lo único que la cambia sin
+  // recargar la pantalla entera.
   useEffect(() => {
     let vigente = true;
-    void fetch(`/api/cartera/${deudorId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (vigente) setFicha(d);
-      })
-      .catch(() => {});
+    void obtenerFicha(undefined, { deudorId }).then((r) => {
+      if (vigente && r.ok) setFicha(r.data);
+    });
     return () => {
       vigente = false;
     };

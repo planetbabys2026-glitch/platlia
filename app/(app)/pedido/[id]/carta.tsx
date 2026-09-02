@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { agregarItem } from "@/features/pedidos/actions";
 import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
@@ -90,6 +91,7 @@ function TarjetaProducto({
   const [elegidas, setElegidas] = useState<string[]>([]);
   const [cantidad, setCantidad] = useState(1);
   const [nota, setNota] = useState("");
+  const router = useRouter();
 
   /** Nombre y precio de cada opción elegida, para el renglón que se anticipa. */
   const detalleDeElegidas = () =>
@@ -117,7 +119,27 @@ function TarjetaProducto({
 
     try {
       const resultado = await agregarItem(undefined, formData);
-      if (!resultado.ok) setError(resultado.error ?? "No se pudo agregar.");
+      if (!resultado.ok) {
+        setError(resultado.error ?? "No se pudo agregar.");
+        return;
+      }
+
+      /**
+       * Pedir la pantalla de vuelta, o el renglón se queda en "Agregando…".
+       *
+       * La acción se llama a mano —no con `useActionState`— para que la
+       * transición del formulario siga abierta y el renglón optimista no
+       * parpadee. El costo de eso es que **nadie le avisa al router**: el
+       * `revalidatePath` del servidor invalida la caché, pero el cliente no vuelve
+       * a pedir nada, así que `useOptimistic` nunca recibe los renglones de verdad
+       * contra los cuales reconciliar.
+       *
+       * Medido: el `OrderItem` quedaba escrito en la base y la pantalla decía
+       * "Agregando…" para siempre. El mesero toca otra vez, y otra, y termina con
+       * seis cervezas — que es justamente lo que el renglón optimista existía para
+       * evitar.
+       */
+      router.refresh();
     } catch {
       // Si la acción no llega a contestar —red caída, servidor reiniciándose—
       // el renglón optimista se desvanece solo y hay que decir por qué. Sin este

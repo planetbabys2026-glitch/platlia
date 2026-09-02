@@ -89,6 +89,16 @@ export type OpcionesDeImpresion = {
    * lleno.
    */
   lineasDestacadas?: number;
+  /**
+   * Imprime TODO el trabajo a doble alto.
+   *
+   * Es para la comanda: se lee de pie, a un metro, con las manos ocupadas y a
+   * veces con vapor de por medio. Doble **alto** y no doble ancho a propósito —el
+   * ancho manda el presupuesto de columnas, y duplicarlo partiría "Bandeja paisa"
+   * en dos renglones—: así la letra crece al doble y las líneas siguen cabiendo
+   * donde `envolver` calculó que caben.
+   */
+  dobleAlto?: boolean;
   /** Corta el papel al terminar. Se apaga en impresoras sin guillotina. */
   cortar?: boolean;
   /** Manda el pulso que abre el cajón de dinero. Solo tiene sentido en la caja. */
@@ -103,7 +113,13 @@ export type OpcionesDeImpresion = {
  * mitad el siguiente sale en negrita sin que nadie entienda por qué.
  */
 export function componerEscPos(opciones: OpcionesDeImpresion): Uint8Array {
-  const { lineas, lineasDestacadas = 0, cortar = true, abrirCajon = false } = opciones;
+  const {
+    lineas,
+    lineasDestacadas = 0,
+    dobleAlto = false,
+    cortar = true,
+    abrirCajon = false,
+  } = opciones;
 
   const bytes: number[] = [];
 
@@ -119,6 +135,9 @@ export function componerEscPos(opciones: OpcionesDeImpresion): Uint8Array {
       // ESC E 1 (negrita) + GS ! 0x11 (doble ancho y doble alto).
       bytes.push(ESC, 0x45, 1);
       bytes.push(GS, 0x21, 0x11);
+    } else if (dobleAlto) {
+      // GS ! 0x01 — doble alto, ancho normal.
+      bytes.push(GS, 0x21, 0x01);
     }
 
     bytes.push(...codificarTexto(linea), 0x0a);
@@ -126,6 +145,8 @@ export function componerEscPos(opciones: OpcionesDeImpresion): Uint8Array {
     if (destacada) {
       bytes.push(GS, 0x21, 0x00);
       bytes.push(ESC, 0x45, 0);
+    } else if (dobleAlto) {
+      bytes.push(GS, 0x21, 0x00);
     }
   });
 

@@ -318,6 +318,9 @@ export async function getCuentasCobradas(businessId: string, businessDate: Date)
         customerPhone: true,
         docType: true,
         docNumber: true,
+        // Lo pide el diálogo de facturación: sin el correo, la factura no le
+        // llega a nadie y quien emite no puede corregirlo.
+        customerEmail: true,
         table: { select: { name: true } },
         closedBy: { select: { name: true } },
         // Los anulados no cuentan como cobro: el mismo criterio que usa el
@@ -356,7 +359,15 @@ export async function getCuentasCobradas(businessId: string, businessDate: Date)
  * Dentro de cada grupo manda la antigüedad: entre dos mesas que pidieron la
  * cuenta, primero la que lleva más rato esperando.
  */
-export async function getCuentasPorCobrar(businessId: string, businessDate: Date) {
+export async function getCuentasPorCobrar(
+  businessId: string,
+  businessDate: Date,
+  /**
+   * Si la cocina tiene pantalla. Con "solo papel" nadie marca un plato listo, así
+   * que la caja no puede esperar esa señal para dejar cobrar.
+   */
+  hayKds = true,
+) {
   const pedidos = await tenantDb(businessId).order.findMany({
     where: { businessDate, ...HAY_QUE_COBRAR },
     orderBy: [{ billRequestedAt: "asc" }, { openedAt: "asc" }],
@@ -403,11 +414,14 @@ export async function getCuentasPorCobrar(businessId: string, businessDate: Date
   return pedidos
     .map((pedido) => ({
       ...pedido,
-      estadoCobro: estadoDeCobro({
-        status: pedido.status,
-        deliveryStatus: pedido.deliveryStatus,
-        items: pedido.items,
-      }),
+      estadoCobro: estadoDeCobro(
+        {
+          status: pedido.status,
+          deliveryStatus: pedido.deliveryStatus,
+          items: pedido.items,
+        },
+        { hayKds },
+      ),
     }))
     .sort((a, b) => ORDEN_DE_COBRO[a.estadoCobro] - ORDEN_DE_COBRO[b.estadoCobro]);
 }

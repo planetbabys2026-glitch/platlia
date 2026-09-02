@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, FileText, Printer, Receipt, Search } from "lucide-react";
 import { emitirFacturaElectronica, emitirNotaCredito } from "@/features/dian/actions";
+import { TIPOS_DE_DOCUMENTO } from "@/lib/billing/factus-habilitacion";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,7 @@ export type CuentaCobrada = {
   customerPhone: string | null;
   docType: string | null;
   docNumber: string | null;
+  customerEmail: string | null;
   table: { name: string } | null;
   closedBy: { name: string } | null;
   payments: { method: string; amountCop: number }[];
@@ -123,34 +125,138 @@ function estadoDianDe(pedido: CuentaCobrada): EstadoDian {
  */
 function BotonFacturar({ pedido }: { pedido: CuentaCobrada }) {
   const router = useRouter();
+  const [abierto, setAbierto] = useState(false);
   const [pendiente, iniciar] = useTransition();
   const estado = estadoDianDe(pedido);
 
+  // Precargado con lo que la venta ya tenga: casi siempre el cobro no pidió nada
+  // —en un bar la mayoría de las ventas van a consumidor final— y estos campos
+  // aparecen vacíos, que es justo cuando hay que llenarlos.
+  const [nombre, setNombre] = useState(pedido.customerName ?? "");
+  const [tipoDoc, setTipoDoc] = useState(pedido.docType ?? "");
+  const [numeroDoc, setNumeroDoc] = useState(pedido.docNumber ?? "");
+  const [correo, setCorreo] = useState(pedido.customerEmail ?? "");
+
+  const sinDatos = !numeroDoc.trim();
+
   return (
-    <Button
-      type="button"
-      size="sm"
-      disabled={pendiente}
-      onClick={() =>
-        iniciar(async () => {
-          const res = await emitirFacturaElectronica(ESTADO_INICIAL, { orderId: pedido.id });
-          if (res.ok) {
-            toast.success(
-              res.data.numero
-                ? `Factura ${res.data.numero} emitida.`
-                : "Factura electrónica emitida.",
-            );
-            router.refresh();
-          } else {
-            toast.error(res.error || "No se pudo emitir la factura.");
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          size="sm"
+          className="h-11 gap-1.5 bg-brand text-xs font-bold text-brand-foreground hover:bg-brand/90 tableta:h-9"
+        >
+          <FileText className="size-3.5 shrink-0" />
+          {estado === "ERROR" ? "Reintentar" : "Facturar"}
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Datos de la factura</DialogTitle>
+        </DialogHeader>
+
+        {/* Se revisan ACÁ y no al cobrar porque acá hay alguien mirando. Un NIT
+            mal escrito es un rechazo de la DIAN que aparece al emitir, y una
+            factura emitida no se corrige: se anula con nota crédito. */}
+        <p className="text-xs text-muted-foreground text-pretty">
+          Revisá los datos antes de emitir. Una factura electrónica no se corrige:
+          para cambiarla hay que anularla con una nota crédito.
+        </p>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`nombre-${pedido.id}`}>A nombre de</Label>
+            <Input
+              id={`nombre-${pedido.id}`}
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Nombre o razón social"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
+            <div className="space-y-1.5">
+              <Label htmlFor={`tipo-${pedido.id}`}>Documento</Label>
+              <select
+                id={`tipo-${pedido.id}`}
+                value={tipoDoc}
+                onChange={(e) => setTipoDoc(e.target.value)}
+                className="h-11 w-full rounded-xl border border-[var(--linea-16)] bg-[var(--input-bg)] px-3 text-sm tableta:h-10"
+              >
+                <option value="">Elegir…</option>
+                {TIPOS_DE_DOCUMENTO.map((t) => (
+                  <option key={t.valor} value={t.valor}>
+                    {t.etiqueta}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor={`doc-${pedido.id}`}>Número</Label>
+              <Input
+                id={`doc-${pedido.id}`}
+                value={numeroDoc}
+                onChange={(e) => setNumeroDoc(e.target.value)}
+                inputMode="numeric"
+                placeholder="Sin puntos ni dígito de verificación"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`correo-${pedido.id}`}>Correo</Label>
+            <Input
+              id={`correo-${pedido.id}`}
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              type="email"
+              placeholder="A dónde se manda la factura"
+            />
+          </div>
+
+          {/* Sin documento la factura sale igual, a consumidor final. Decirlo
+              evita que alguien crea que el campo vacío es un error suyo. */}
+          {sinDatos && (
+            <p className="text-xs text-warning-soft">
+              Sin documento, la factura sale a consumidor final.
+            </p>
+          )}
+        </div>
+
+        <Button
+          type="button"
+          disabled={pendiente}
+          onClick={() =>
+            iniciar(async () => {
+              const res = await emitirFacturaElectronica(ESTADO_INICIAL, {
+                orderId: pedido.id,
+                customerName: nombre,
+                docType: tipoDoc,
+                docNumber: numeroDoc,
+                customerEmail: correo,
+              });
+              if (res.ok) {
+                toast.success(
+                  res.data.numero
+                    ? `Factura ${res.data.numero} emitida.`
+                    : "Factura electrónica emitida.",
+                );
+                setAbierto(false);
+                router.refresh();
+              } else {
+                toast.error(res.error || "No se pudo emitir la factura.");
+              }
+            })
           }
-        })
-      }
-      className="h-11 gap-1.5 bg-brand text-xs font-bold text-brand-foreground hover:bg-brand/90 tableta:h-9"
-    >
-      <FileText className="size-3.5 shrink-0" />
-      {pendiente ? "Emitiendo…" : estado === "ERROR" ? "Reintentar" : "Facturar"}
-    </Button>
+          className="h-11 w-full bg-brand font-bold text-brand-foreground hover:bg-brand/90"
+        >
+          {pendiente ? "Emitiendo…" : "Emitir factura electrónica"}
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }
 

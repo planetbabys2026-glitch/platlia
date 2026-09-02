@@ -95,3 +95,37 @@ describe("navegación y submenús con insignias", () => {
     expect(hrefDeSeccion(item, { titulo: "Cuentas cobradas", vista: "cobradas" })).toBe("/caja?vista=cobradas");
   });
 });
+
+describe("solo papel: dos módulos que no tendrían nada que mostrar", () => {
+  const base = {
+    usaMesas: true,
+    usaCocina: true,
+    usaDomicilios: true,
+    puedeVerInventario: true,
+    role: "PROPIETARIO" as const,
+    rolePermissions: null,
+  };
+
+  it("con pantalla de cocina, Cocina y Turnero están en el menú", () => {
+    const { grupos } = construirNavegacion({ ...base, usaTurnero: true });
+    const titulos = grupos.flatMap((g) => g.items).map((i) => i.titulo);
+    expect(titulos).toContain("Cocina");
+    expect(titulos).toContain("Turnero");
+  });
+
+  /**
+   * Con la comanda impresa nadie marca un plato listo, así que el KDS quedaría
+   * vacío toda la noche y el turnero sería un televisor que no llama a nadie. El
+   * layout apaga los dos; acá se fija que el menú los respete.
+   */
+  it("en solo papel no se ofrece ninguno de los dos", () => {
+    const { grupos } = construirNavegacion({
+      ...base,
+      usaCocina: false,
+      usaTurnero: false,
+    });
+    const titulos = grupos.flatMap((g) => g.items).map((i) => i.titulo);
+    expect(titulos).not.toContain("Cocina");
+    expect(titulos).not.toContain("Turnero");
+  });
+});

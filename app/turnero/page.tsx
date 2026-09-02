@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { AppModule } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
 import { getTurnero } from "@/features/turnero/queries";
+import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth/dal";
+import { usaKds } from "@/features/caja/reglas";
 import { currentBusinessDate } from "@/lib/time";
 import { PantallaTurnero } from "./pantalla-turnero";
 
@@ -22,6 +24,16 @@ export const dynamic = "force-dynamic";
 export default async function TurneroPage() {
   const ctx = await requireModule(AppModule.PEDIDOS);
   const settings = await getSettings(ctx.business.id);
+
+  /**
+   * Con la comanda en "solo papel" el turnero no tiene de dónde sacar un turno.
+   *
+   * Un número aparece en el televisor cuando la cocina marca el pedido listo, y
+   * con papel nadie marca nada: la pantalla mostraría "sin turnos" toda la noche
+   * frente a un salón lleno, que es peor que no tenerla.
+   */
+  if (!usaKds(settings.comandaDestino)) notFound();
+
   const { listos } = await getTurnero(
     ctx.business.id,
     currentBusinessDate(settings),

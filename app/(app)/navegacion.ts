@@ -87,6 +87,11 @@ type Contexto = {
   cuentasPorCobrar?: number;
   /** El negocio fía. Sin esto, Cartera sería una pantalla siempre vacía. */
   usaCredito?: boolean;
+  /**
+   * La cocina tiene pantalla. Con "solo papel" el turnero nunca avanza —nadie
+   * marca un plato listo— así que ofrecerlo sería un televisor mudo.
+   */
+  usaTurnero?: boolean;
   /** Cuánta gente debe. */
   deudores?: number;
 };
@@ -136,6 +141,7 @@ export function construirNavegacion({
   domiciliosActivos,
   cuentasPorCobrar,
   usaCredito = false,
+  usaTurnero = true,
   deudores,
 }: Contexto): {
   grupos: GrupoNav[];
@@ -192,7 +198,7 @@ export function construirNavegacion({
     ...(usaDomicilios && puedeVer("domicilios")
       ? [{ titulo: "Domicilios", href: "/domicilios", icono: Bike, insignia: domiciliosActivos }]
       : []),
-    ...(puedeVer("turnero")
+    ...(usaTurnero && puedeVer("turnero")
       ? [{ titulo: "Turnero", href: "/turnero", icono: MonitorPlay }]
       : []),
   ];

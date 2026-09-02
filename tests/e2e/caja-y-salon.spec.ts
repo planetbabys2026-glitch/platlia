@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { abrirCaja, abrirMesa, agregarProducto, ingresar, irA } from "./apoyo";
+import { abrirCaja, abrirMesa, agregarProducto, ingresar, irA, mandarComandaACocina } from "./apoyo";
 
 /** Lee una cifra del arqueo, en pesos enteros y con su signo. */
 async function saldoDe(page: Page, termino: string): Promise<number> {
@@ -174,16 +174,7 @@ test("la comanda llega sola a la caja, sin que nadie la mande", async ({ page })
   await page.getByRole("link", { name: /tomar pedido \/ adición/i }).first().click();
   await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
 
-  const mandar = page.getByRole("button", { name: /cocina/i }).first();
-  for (let intento = 0; intento < 5; intento++) {
-    await mandar.click();
-    try {
-      await expect(page.getByText(/en cocina|comanda/i).first()).toBeVisible({ timeout: 8000 });
-      break;
-    } catch {
-      // La carrera de hidratación de siempre.
-    }
-  }
+  await mandarComandaACocina(page);
 
   // Y ahora sí aparece, sola, en el grupo que corresponde.
   await irA(page, "/caja");

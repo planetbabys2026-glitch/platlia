@@ -11,6 +11,7 @@ import {
   getUltimoCierre,
   TOPE_CUENTAS_COBRADAS,
 } from "@/features/caja/queries";
+import { usaKds } from "@/features/caja/reglas";
 import { getSettings } from "@/features/negocio/queries";
 import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { requireModule } from "@/lib/auth/dal";
@@ -93,7 +94,7 @@ export default async function CajaPage({
     const [resData, movData, cuentasData] = await Promise.all([
       getResumenCaja(db, caja.id),
       getMovimientos(ctx.business.id, caja.id),
-      getCuentasPorCobrar(ctx.business.id, businessDate),
+      getCuentasPorCobrar(ctx.business.id, businessDate, usaKds(settings.comandaDestino)),
     ]);
     resumen = resData;
     movimientos = movData;

@@ -1,5 +1,6 @@
 import { AppModule } from "@/generated/prisma/enums";
 import { contarCuentasPorCobrar } from "@/features/caja/queries";
+import { usaKds } from "@/features/caja/reglas";
 import { contarDeudores } from "@/features/cartera/queries";
 import { contarComandasVivas } from "@/features/cocina/queries";
 import { contarDomiciliosActivos } from "@/features/domicilios/queries";
@@ -19,7 +20,8 @@ import { AvisoLicencia } from "./aviso-licencia";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireBusiness();
   const usaMesas = ctx.modules.has(AppModule.MESAS);
-  const usaCocina = ctx.modules.has(AppModule.COCINA);
+  let usaCocina = ctx.modules.has(AppModule.COCINA);
+  let usaTurnero = true;
 
   let usaInventario = false;
   let usaRecetas = false;
@@ -40,6 +42,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       usaRecetas = settings.recipesEnabled;
       usaDomicilios = settings.deliveryEnabled;
       usaCredito = settings.creditoEnabled;
+
+      /**
+       * Con la comanda en "solo papel" no hay pantalla de cocina ni turnero.
+       *
+       * Las dos dependen de que alguien mueva el estado de los platos, y con
+       * papel no hay quién: la comanda sale impresa y nadie vuelve a tocar el
+       * sistema hasta el cobro. Dejarlas en el menú es ofrecer dos pantallas que
+       * van a estar vacías toda la noche —y el turnero, un televisor que nunca
+       * llama a nadie—.
+       */
+      const hayKds = usaKds(settings.comandaDestino);
+      usaCocina = usaCocina && hayKds;
+      usaTurnero = hayKds;
       rolePermissions = settings.rolePermissions ?? null;
 
       // Los contadores del menú se calculan acá para que la primera pintura ya
@@ -90,7 +105,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       rolePermissions={rolePermissions}
       usaMesas={usaMesas}
       usaCocina={usaCocina}
+      usaTurnero={usaTurnero}
       usaDomicilios={usaDomicilios}
+      usaCredito={usaCredito}
+      deudores={deudoresInicial}
       puedeVerInventario={puedeVerInventario}
       puedeFacturar={puedeFacturar}
       esPropietario={esPropietario}

@@ -2,9 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { AppModule, CashMovementType, Role } from "@/generated/prisma/enums";
-import { abonoSchema, condonarSchema, consultaDeDeudaSchema } from "@/features/cartera/schemas";
+import {
+  abonoSchema,
+  condonarSchema,
+  consultaDeDeudaSchema,
+  fichaSchema,
+} from "@/features/cartera/schemas";
 import { aplicarAbono, normalizarTelefono } from "@/features/cartera/reglas";
-import { getDeudaPorTelefono } from "@/features/cartera/queries";
+import { getDeudaPorTelefono, getFichaDeDeudor } from "@/features/cartera/queries";
 import { cuentaDelMetodo } from "@/features/caja/medios-de-pago";
 import { elegirSesionDeCobro, mensajeSinSesion } from "@/features/caja/sesion";
 import { getSettings } from "@/features/negocio/queries";
@@ -217,5 +222,24 @@ export const consultarDeuda = defineAction({
   modulo: AppModule.CAJA,
   async handler({ input, ctx }) {
     return getDeudaPorTelefono(ctx.business.id, normalizarTelefono(input.telefono));
+  },
+});
+
+/**
+ * La ficha de un deudor: sus fiados y sus abonos.
+ *
+ * Va por Server Action y no por una ruta API porque `defineAction` ya hornea
+ * sesión, licencia, rol y el cliente acotado a la empresa: una ruta nueva tendría
+ * que repetir esas cuatro guardas a mano, y es exactamente donde se olvidan.
+ *
+ * Se pide al elegir a la persona y no con la lista: traer los fiados y los abonos
+ * de todos los deudores de una vez es un payload que la lista no usa.
+ */
+export const obtenerFicha = defineAction({
+  schema: fichaSchema,
+  roles: [Role.CAJERO, Role.ADMINISTRADOR],
+  modulo: AppModule.CAJA,
+  async handler({ input, ctx }) {
+    return getFichaDeDeudor(ctx.business.id, input.deudorId);
   },
 });

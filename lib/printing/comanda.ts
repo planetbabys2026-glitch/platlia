@@ -10,6 +10,11 @@
  * lleva, grande, es lo que se busca de lejos con el papel en la mano: el número de
  * turno o la mesa.
  *
+ * **Se imprime entera a doble alto y en mayúsculas.** No es una preferencia
+ * estética: esto se lee de pie, a un metro, con las manos ocupadas y a veces con
+ * vapor de por medio. El tamaño lo pone `componerEscPos` con `dobleAlto`; la caja
+ * alta, este módulo.
+ *
  * Módulo puro, con tests.
  */
 
@@ -31,6 +36,15 @@ export type PedidoDeComanda = {
   deliveryAddress: string | null;
   openedAt: Date;
   table: { name: string } | null;
+  /**
+   * Quién tomó el pedido.
+   *
+   * Va en el papel porque es a quien la cocina llama cuando algo no cuadra —"esto
+   * dice sin cebolla, ¿es de la 4?"— y porque un plato que sale mal tiene que
+   * poder rastrearse hasta quien lo cantó. Con seis comandas colgadas, "preguntale
+   * al mesero" no alcanza.
+   */
+  openedBy: { name: string } | null;
 };
 
 export type OpcionesDeComanda = {
@@ -75,6 +89,7 @@ export function componerComanda(
   push(separador(ancho, "="));
   push(estacion.toUpperCase());
   push(formatDateTimeInTimeZone(pedido.openedAt, zona));
+  if (pedido.openedBy) push(...envolver(`Mesero: ${pedido.openedBy.name}`, ancho));
   if (pedido.customerName) push(...envolver(pedido.customerName, ancho));
   // La dirección va en la comanda del domicilio porque es lo que arma el paquete:
   // quien empaca necesita saber si es para llevar antes de terminar de plegarlo.
@@ -102,5 +117,19 @@ export function componerComanda(
   push(separador(ancho));
   push(centrar(`Pedido #${pedido.code}`, ancho));
 
-  return lineas;
+  /**
+   * Todo en mayúsculas, al final y de una sola pasada.
+   *
+   * Una térmica imprime chico y con poco contraste, y esto se lee de pie, a un
+   * metro, con las manos ocupadas. La caja alta es más legible en ese contexto —no
+   * hay descendentes que se corten ni minúsculas que se empasten— y de paso hace
+   * que un nombre de plato escrito con mayúscula inicial y otro todo en minúscula
+   * se vean iguales en el papel.
+   *
+   * Se aplica acá y no en cada `push` para que ninguna línea futura se olvide, y
+   * después de componer para que `centrar` y `envolver` hayan medido sobre el
+   * texto real: en español la caja alta no cambia el largo, así que las columnas
+   * siguen cuadrando. CP858 tiene Á É Í Ó Ú Ñ, y `escpos.ts` ya las mapea.
+   */
+  return lineas.map((linea) => linea.toUpperCase());
 }

@@ -86,6 +86,9 @@ async function main() {
       // duplicaba en el papel.
       receiptHeader: "Régimen simple de tributación",
       receiptFooter: "¡Gracias por su visita!\nLa propina es voluntaria.",
+      // El bar de demostración fía, que es lo normal en un negocio de barrio.
+      // En un negocio real arranca apagado: fiar lo decide el dueño.
+      creditoEnabled: true,
     },
   });
 

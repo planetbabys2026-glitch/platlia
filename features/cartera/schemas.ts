@@ -41,3 +41,6 @@ export const condonarSchema = z.object({
 export const consultaDeDeudaSchema = z.object({
   telefono: z.string().trim().min(7).max(30),
 });
+
+/** La ficha de una persona, que la pantalla pide al elegirla en la lista. */
+export const fichaSchema = z.object({ deudorId: id });

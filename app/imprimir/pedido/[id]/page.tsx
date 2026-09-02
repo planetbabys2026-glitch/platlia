@@ -33,6 +33,13 @@ export default async function TiquetePage({
   const settings = negocio.settings;
   const ancho = anchoEnCaracteres(settings?.receiptWidth ?? "MM80");
   const milimetros = (settings?.receiptWidth ?? "MM80") === "MM55" ? 55 : 80;
+  /**
+   * Lo que el cabezal puede marcar, que NO es el ancho del papel.
+   *
+   * Un rollo de 80 mm imprime 72; uno de 55, 48. El resto es el margen mecánico
+   * que la máquina no alcanza, y todo lo que caiga ahí sencillamente no sale.
+   */
+  const imprimibleMm = milimetros === 55 ? 48 : 72;
   const zona = settings?.timeZone ?? "America/Bogota";
 
   /**
@@ -73,7 +80,7 @@ export default async function TiquetePage({
       {/* El tamaño de página depende del rollo configurado: 55 y 80 mm no son el
           mismo documento, así que el CSS se arma acá y no en una hoja global. */}
       <style>{`
-        @page { size: ${milimetros}mm auto; margin: 3mm; }
+        @page { size: ${milimetros}mm auto; margin: ${(milimetros - imprimibleMm) / 2}mm; }
         @media print { .no-imprimir { display: none !important; } }
         /* ESTA es la unica pantalla del producto que necesita una
            monoespaciada DE VERDAD, y por eso no usa la variable --font-mono.
@@ -82,14 +89,49 @@ export default async function TiquetePage({
            suponen que toda letra mide lo mismo. Desde que --font-mono es Space
            Grotesk (proporcional), apuntar aca habria torcido cada columna de
            cada recibo impreso, y es un defecto que no se ve en pantalla: se
-           descubre en el papel que se le entrega al cliente. */
+           descubre en el papel que se le entrega al cliente.
+
+           COURIER NEW Y NADA MAS. Antes habia una pila —ui-monospace, SF Mono,
+           Menlo, Consolas...— y cada sistema elegia una distinta: todas son
+           monoespaciadas, pero su AVANCE no es el mismo (Consolas mide 0.55em
+           por caracter, SF Mono 0.6em). Con el ancho fijado en ch y el cuerpo
+           clavado en 9.5px, las 48 columnas del rollo de 80 mm caian justo en el
+           borde del papel, y en el sistema que tocara una letra un poco mas
+           ancha la ULTIMA COLUMNA —la de los importes, pegada a la derecha— se
+           salia del rollo y no se imprimia. Courier New esta en todos los
+           sistemas, su avance es exactamente 0.6em en todos, y es la letra con
+           la que se imprimen los recibos desde siempre.
+
+           Y el cuerpo se DERIVA del ancho IMPRIMIBLE, que no es el del papel:
+           un rollo de 80 mm tiene un cabezal de 72, y uno de 55 imprime 48. Con
+           el margen de 3 mm que habia, el contenido pedia 74 mm de los 72 que la
+           maquina puede marcar, asi que el borde derecho —la columna de los
+           importes— caia fuera del cabezal y salia cortado. Era la segunda causa
+           del mismo sintoma, y la unica que no se arregla cambiando de letra.
+           El 0.98 es holgura: sin ella el renglon mas largo termina exactamente
+           en el filo. */
         .tiquete {
-          font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas",
-            "Liberation Mono", "Courier New", monospace;
-          font-size: 9.5px;
-          line-height: 1.4;
+          font-family: "Courier New", Courier, monospace;
+          font-size: calc(${imprimibleMm}mm * 0.98 / ${ancho} / 0.6);
+          line-height: 1.35;
           white-space: pre;
           color: #000;
+          /* En negrita porque una termica no imprime grises: convierte cada pixel
+             a punto o no-punto. Los trazos finos de Courier a este cuerpo salian
+             medio quemados, que es lo que se ve como borroso. */
+          font-weight: 700;
+          /* Y sin suavizado, por lo mismo: el antialiasing rodea cada letra de
+             pixeles grises que la impresora tiene que decidir si quema o no, y el
+             resultado es un borde sucio. Apagado, cada letra es negro puro. */
+          -webkit-font-smoothing: none;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: geometricPrecision;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+          /* Las mayusculas NO van aca: las pone componerRecibo, que es de donde
+             salen tambien las lineas de la cola termica. Con text-transform
+             puesto solo en esta pantalla, el mismo pedido salia en caja alta por
+             el navegador y en texto mixto por la impresora del local. */
           margin: 0 auto;
           width: ${ancho}ch;
         }
