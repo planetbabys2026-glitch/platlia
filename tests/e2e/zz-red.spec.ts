@@ -1,33 +1,25 @@
 import { expect, test } from "@playwright/test";
 import { ingresar } from "./apoyo";
 
-test("diagnóstico de red: qué pasa al abrir la caja", async ({ page }) => {
+/** ¿El aborto del POST le pasa también a una acción que no tocamos? */
+test("diagnóstico: abrir un pedido en el salón", async ({ page }) => {
   test.setTimeout(90_000);
 
-  page.on("request", (r) => {
-    if (r.method() === "POST") console.log(`→ POST ${r.url()}`);
-  });
-  page.on("response", (r) => {
-    if (r.request().method() === "POST") console.log(`← ${r.status()} ${r.url()}`);
-  });
-  page.on("requestfailed", (r) => console.log(`✗ FALLÓ ${r.method()} ${r.url()} :: ${r.failure()?.errorText}`));
-  page.on("console", (m) => {
-    if (m.type() === "error") console.log(`[navegador] ${m.text().slice(0, 160)}`);
-  });
-  page.on("pageerror", (e) => console.log(`[pageerror] ${String(e).slice(0, 200)}`));
+  const eventos: string[] = [];
+  page.on("request", (r) => { if (r.method() === "POST") eventos.push(`→ POST ${new URL(r.url()).pathname}`); });
+  page.on("response", (r) => { if (r.request().method() === "POST") eventos.push(`← ${r.status()} ${new URL(r.url()).pathname}`); });
+  page.on("requestfailed", (r) => { if (r.method() === "POST") eventos.push(`✗ ABORTADO ${new URL(r.url()).pathname} :: ${r.failure()?.errorText}`); });
 
   await ingresar(page);
-  await page.goto("/caja?vista=movimientos");
+  await page.goto("/salon");
 
-  const base = page.getByLabel(/base en efectivo/i);
-  await expect(base).toBeVisible();
-  await base.fill("0");
+  // `abrirPedido` no se tocó en este trabajo.
+  const boton = page.getByRole("button", { name: /abrir pedido en la mesa 9$/i });
+  await expect(boton).toBeVisible({ timeout: 20_000 });
+  eventos.push("--- clic en abrir pedido ---");
+  await boton.click();
 
-  console.log("--- clic en Abrir caja ---");
-  await page.getByRole("button", { name: /abrir caja/i }).click();
-
-  await page.waitForTimeout(25_000);
-  console.log("--- 25 s después ---");
-  console.log("botón:", await page.getByRole("button", { name: /abrir caja|un momento/i }).first().textContent());
-  console.log("h1:", await page.getByRole("heading", { level: 1 }).first().textContent());
+  await page.waitForTimeout(20_000);
+  eventos.push(`URL final: ${new URL(page.url()).pathname}`);
+  console.log("TRAZA\n" + eventos.join("\n"));
 });
