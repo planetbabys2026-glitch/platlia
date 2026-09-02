@@ -43,7 +43,7 @@ export const abrirCaja = defineAction({
     const settings = await getSettings(ctx.business.id);
     const businessDate = currentBusinessDate(settings);
 
-    return db.$transaction(async (tx) => {
+    const sesion = await db.$transaction(async (tx) => {
       const caja = await tx.cashRegister.findFirst({
         where: { id: input.cashRegisterId, deletedAt: null },
         select: { id: true, name: true, active: true },
@@ -83,7 +83,7 @@ export const abrirCaja = defineAction({
         select: { code: true },
       });
 
-      const sesion = await tx.cashSession.create({
+      return tx.cashSession.create({
         data: {
           businessId: ctx.business.id,
           cashRegisterId: caja.id,
@@ -95,13 +95,23 @@ export const abrirCaja = defineAction({
         },
         select: { id: true, code: true },
       });
-
-      revalidatePath("/caja");
-      revalidatePath("/panel");
-      revalidatePath("/salon");
-      revalidatePath("/pos");
-      return sesion;
     });
+
+    /**
+     * Las revalidaciones van DESPUÉS del commit, nunca adentro de la transacción.
+     *
+     * Es el mismo patrón que `publicarImpresion`, y acá no era cosmético: con las
+     * cuatro llamadas adentro, la acción terminaba y creaba el turno pero la
+     * respuesta se quedaba a medias —cabecera 200 y cuerpo que no llegaba nunca—,
+     * así que el formulario se congelaba en "Un momento…" para siempre. Medido con
+     * la traza de red: `POST /caja` → `200` → `net::ERR_ABORTED`, sin un solo
+     * error ni en el servidor ni en el navegador.
+     */
+    revalidatePath("/caja");
+    revalidatePath("/panel");
+    revalidatePath("/salon");
+    revalidatePath("/pos");
+    return sesion;
   },
 });
 

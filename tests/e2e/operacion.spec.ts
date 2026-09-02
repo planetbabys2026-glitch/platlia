@@ -154,8 +154,9 @@ test("no se puede cerrar la caja con un pedido sin cobrar", async ({ page }) => 
   await page.getByRole("button", { name: /abrir pedido en la mesa 2$/i }).click();
   await agregarProducto(page, /cerveza nacional \(botella\)/i);
 
-  // El pedido nunca se mandó a caja, así que no aparece en "por cobrar": la red
-  // que impide olvidarlo es el cierre de turno, que lo nombra.
+  // El pedido quedó en el carrito y nunca se mandó a COCINA, así que no aparece
+  // en "por cobrar": la caja lista lo que ya se sirvió, y esto todavía no se
+  // sirvió. La red que impide olvidarlo es el cierre de turno, que lo nombra.
   await page.goto("/caja");
   await expect(
     page.getByRole("region", { name: "Cuentas por cobrar" }).getByText(/mesa 2/i),

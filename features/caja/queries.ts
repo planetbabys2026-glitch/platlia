@@ -1,7 +1,12 @@
 import "server-only";
 import { tenantDb, type TenantDb } from "@/lib/db/tenant";
 import { cuentaDelMetodo, type CuentaDeSaldo } from "@/features/caja/medios-de-pago";
-import { HAY_QUE_COBRAR, sesionDeCobro } from "@/features/caja/reglas";
+import {
+  estadoDeCobro,
+  HAY_QUE_COBRAR,
+  ORDEN_DE_COBRO,
+  sesionDeCobro,
+} from "@/features/caja/reglas";
 
 /**
  * Consultas de caja.
@@ -332,19 +337,22 @@ export async function getCuentasCobradas(businessId: string, businessDate: Date)
 }
 
 /**
- * Trae las cuentas y pedidos pendientes de cobro para la caja.
+ * Las cuentas vivas de la jornada, ordenadas como las atendería una persona.
  *
- * Las que tienen `CUENTA_PEDIDA` salen arriba de todo con prioridad para que el
- * cajero las cobre y libere las mesas de forma ágil.
+ * Desde que la caja lista todo lo que ya salió a cocina —y no solo lo que alguien
+ * mandó—, esta lista es el piso entero, y sin jerarquía eso es peor que antes: la
+ * mesa que levantó la mano queda enterrada entre las que recién pidieron. El
+ * orden lo decide `estadoDeCobro` (puro y con tests) y se aplica **en memoria**:
+ * es una derivación de los renglones que SQL no sabe hacer sin una subconsulta
+ * por fila, y son las cuentas de una jornada, no un listado sin techo.
+ *
+ * Dentro de cada grupo manda la antigüedad: entre dos mesas que pidieron la
+ * cuenta, primero la que lleva más rato esperando.
  */
 export async function getCuentasPorCobrar(businessId: string, businessDate: Date) {
-  return tenantDb(businessId).order.findMany({
+  const pedidos = await tenantDb(businessId).order.findMany({
     where: { businessDate, ...HAY_QUE_COBRAR },
-    orderBy: [
-      { status: "asc" },
-      { billRequestedAt: "desc" },
-      { openedAt: "desc" },
-    ],
+    orderBy: [{ billRequestedAt: "asc" }, { openedAt: "asc" }],
     select: {
       id: true,
       code: true,
@@ -370,6 +378,8 @@ export async function getCuentasPorCobrar(businessId: string, businessDate: Date
       tableId: true,
       table: { select: { id: true, name: true } },
       openedBy: { select: { name: true } },
+      // `deliveryStatus` y el estado de cada renglón deciden el orden de la lista.
+      deliveryStatus: true,
       items: {
         where: { status: { not: "ANULADO" } },
         select: {
@@ -377,8 +387,22 @@ export async function getCuentasPorCobrar(businessId: string, businessDate: Date
           nameSnapshot: true,
           quantity: true,
           lineTotalCop: true,
+          status: true,
         },
       },
     },
   });
+
+  return pedidos
+    .map((pedido) => ({
+      ...pedido,
+      estadoCobro: estadoDeCobro({
+        status: pedido.status,
+        deliveryStatus: pedido.deliveryStatus,
+        items: pedido.items,
+      }),
+    }))
+    .sort((a, b) => ORDEN_DE_COBRO[a.estadoCobro] - ORDEN_DE_COBRO[b.estadoCobro]);
 }
+
+export type CuentaPorCobrar = Awaited<ReturnType<typeof getCuentasPorCobrar>>[number];

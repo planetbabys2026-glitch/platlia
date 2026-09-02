@@ -1075,38 +1075,76 @@ sumarla: preseleccionarla es exactamente lo que esa regla evita. Sugerirla es of
 que no se pinta con la paleta de la aplicación. Un solo componente para que la propina no termine
 calculándose de tres maneras según por dónde entre el pedido.
 
-### Un pedido llega a la caja porque alguien lo manda
+### La caja lista lo que ya se sirvió
 
-**Tomar el pedido no es cobrarlo, y mandar la comanda a la plancha tampoco.** Que la cocina termine
-un plato no significa que el cliente quiera irse. Hay **dos puertas** a la caja
-(`features/caja/reglas.ts`), y ninguna es automática:
+**Toda comanda que salió a cocina es una cuenta por cobrar.** No hace falta que
+nadie la "mande a caja".
 
-1. `Order.status = CUENTA_PEDIDA` — lo escribe una persona: el mesero desde la cuenta de la mesa
-   (`pedirCuenta`) o quien atiende desde el POS (`procesarVentaPosCompleta` con `ENVIAR_CAJA`).
-2. `Order.deliveryStatus ∈ DOMICILIOS_COBRABLES` — el recorrido propio del domicilio, donde el
-   disparador explícito es que la cocina terminó el último renglón (`avanzarComanda`).
+Antes hacían falta dos puertas explícitas —el mesero tocando *Pedir la cuenta*, o
+el recorrido propio del domicilio—, con el argumento de que la comida lista no
+significa que el cliente quiera irse. **Ese argumento valía cuando el cajero veía
+el salón.** Desde que el salón es la pantalla del mesero y de nadie más, el gesto
+dejó de significar "quieren pagar" y pasó a ser un trámite que le esconde al
+cajero la mitad de su trabajo: la plata que hay viva en el piso. Un cajero que no
+sabe qué se está consumiendo no puede contestar "¿cuánto va la 4?" sin levantarse,
+y descubre las cuentas recién cuando alguien se acuerda de mandárselas.
 
-`HAY_QUE_COBRAR` tenía dos ramas más y las dos mandaban cuentas a la caja sin que nadie lo
-decidiera. `{ tableId: null, status: "ABIERTA" }` metía todo pedido sin mesa apenas nacía —los del
-POS guardados en espera, los recién mandados a cocina y, como un domicilio nunca tiene mesa, **todos
-los domicilios, incluso sin confirmar**—, con lo cual anulaba por completo a la primera puerta y
-contradecía el comentario que tenía encima. Y `{ items: { every: LISTO|ENTREGADO|ANULADO } }` daba la
-cuenta por pedida en cuanto salía el último plato. El propio botón del POS lo decía en voz alta:
-*"Mandar comanda a cocina **y caja**"*.
+Las tres puertas de `HAY_QUE_COBRAR` (`features/caja/reglas.ts`):
 
-El predicado vive en `features/caja/reglas.ts` y no en `queries.ts` —que tiene `server-only` y
-arrastra Prisma— para poder probarlo: `HAY_QUE_COBRAR` es el fragmento del `where` y `debeIrACaja` su
-espejo puro, y hay un test que fija que el `OR` tenga **exactamente dos ramas**. Una tercera rama es
-una cuenta llegando a la caja sin que nadie la haya mandado.
+1. `status = CUENTA_PEDIDA` — alguien la mandó a propósito.
+2. `deliveryStatus ∈ DOMICILIOS_COBRABLES` — el recorrido del domicilio.
+3. **Al menos un renglón con `sentToKitchenAt`** — hay consumo servido.
 
-**Lo simétrico también hace falta: si a la cuenta ya en la caja se le agrega algo, vuelve a
-`ABIERTA`.** Lo hacía `confirmarPedido` y ahora también `procesarVentaPosCompleta`. Sin eso la cuenta
-se queda en la caja con un total que cambió por debajo mientras el cajero la tenía abierta.
+Lo que queda afuera es lo que **todavía no es consumo**: el carrito del POS que
+nadie mandó y la mesa recién sentada. Esa es la línea, y es la que importa.
 
-**Nada de esto afloja el cierre de caja**: `cerrarCaja` sigue bloqueando con cualquier pedido
-`ABIERTA` / `CUENTA_PEDIDA` del turno, así que un pedido que quedó en espera y nadie mandó aparece —
-por su nombre— al intentar cerrar. Esa es la red, y es la correcta: avisa al final del turno, no le
-llena la pantalla al cajero toda la noche.
+**Lo que la regla vieja protegía no se perdió: dejó de ser un filtro y pasó a ser
+el orden.** Distinguir la mesa que pidió la cuenta de la que está comiendo sigue
+siendo la información más útil de la pantalla; lo que cambió es que ya no decide
+quién existe para la caja. `estadoDeCobro` —puro y con tests— la clasifica en tres
+grupos y la lista se agrupa por ellos:
+
+| | Qué significa | Por qué va ahí |
+|---|---|---|
+| **Pidió la cuenta** | `CUENTA_PEDIDA` | hay una persona esperando: es lo único urgente |
+| **Listo para cobrar** | todo servido, o domicilio listo | la cuenta ya no crece sola |
+| **En curso** | queda algo en la plancha | se ve para saber cuánta plata hay en el piso |
+
+El test fija que el `OR` tenga **exactamente tres** ramas. Una cuarta es una cuenta
+llegando por un camino que nadie decidió.
+
+**Sigue siendo simétrico**: si a una cuenta ya en la caja se le agrega algo, vuelve
+a `ABIERTA` —lo hacen `confirmarPedido` y `procesarVentaPosCompleta`—, y la pantalla
+avisa en el detalle cuando la cuenta todavía puede crecer, para no cobrar de menos
+y tener que anular para volver a cobrar.
+
+**Y no afloja el cierre de caja**: `cerrarCaja` sigue bloqueando con cualquier
+pedido `ABIERTA` / `CUENTA_PEDIDA` de la jornada, así que el que quedó en el
+carrito y nadie mandó aparece —por su nombre— al intentar cerrar.
+
+### Cobrar es una cola, y se dibuja como una cola
+
+`/caja` era una rejilla de tarjetas que se desplegaban en el lugar. Con la caja
+mostrando el piso entero esa forma se cae: la tarjeta abierta empuja a las demás,
+hay que deslizar para encontrar la que se está cobrando, y el detalle compite por
+el ancho con las vecinas.
+
+Ahora son **dos columnas**: la lista a la izquierda —que no se mueve nunca— y el
+cobro a la derecha. Se elige, se cobra, y la lista sigue donde estaba.
+
+**Se guarda el `id` de la cuenta elegida, nunca el índice.** Al cobrar una, la
+lista se rearma y un índice apuntaría a otra —la de abajo— con el formulario ya
+abierto y un total distinto. Cobrarle a quien no era es exactamente el error que
+esta pantalla no puede permitir.
+
+Debajo de `doble:` (1180px) es una sola columna: en una tableta vertical, dos
+dejan el cobro en 300px y el formulario deja de ser usable.
+
+**El recibo y el cajón salen del cobro, no de un botón aparte.** `registrarPago`
+encola el recibo dentro de la misma transacción —imprimir el papel de una venta que
+después no se guardó sería peor que no imprimirlo— y `encolarRecibo` le pasa
+`abrirCajon` según lo que tenga configurado esa impresora, que es el pulso ESC/POS
+`ESC p` del conector del cajón monedero.
 
 ### El POS es el único punto de venta, y no le pisa la comanda a la cocina
 

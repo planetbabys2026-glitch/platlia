@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { abrirCaja, dejarCajaCerrada, ingresar, laCuenta } from "./apoyo";
+import { abrirCaja, agregarProducto, dejarCajaCerrada, ingresar, laCuenta } from "./apoyo";
 
 /**
  * El recorrido de un pedido para llevar, de punta a punta.
@@ -27,7 +27,7 @@ test("un pedido para llevar recorre cocina, turnero y entrega", async ({ page })
   const turno = /turno (\d+)/i.exec((await encabezado.textContent()) ?? "")?.[1] ?? "";
   expect(turno).not.toBe("");
 
-  await page.getByRole("button", { name: /bandeja paisa/i }).click();
+  await agregarProducto(page, /bandeja paisa/i);
   await expect(laCuenta(page)).toContainText("Bandeja paisa");
 
   // ── En el televisor está "en preparación", no listo ──────────────────────

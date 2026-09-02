@@ -1,33 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { debeIrACaja, HAY_QUE_COBRAR } from "@/features/caja/reglas";
+import {
+  debeIrACaja,
+  estadoDeCobro,
+  HAY_QUE_COBRAR,
+  ORDEN_DE_COBRO,
+} from "@/features/caja/reglas";
 
 /**
- * Quién aparece en la caja.
+ * Quién aparece en la caja, y en qué orden.
  *
- * Un error acá no rompe ninguna pantalla: le pone al cajero cuentas de gente que
- * todavía está comiendo, o le esconde una que ya pidió pagar. Las dos versiones
+ * Un error acá no rompe ninguna pantalla: le esconde al cajero una cuenta que ya
+ * pidió pagar, o se la entierra bajo veinte que todavía están comiendo. Las dos
  * salen caras y ninguna falla ruidosamente.
  */
 
-const base = { status: "ABIERTA", deliveryStatus: null, tieneItems: true } as const;
+const base = {
+  status: "ABIERTA",
+  deliveryStatus: null,
+  tieneItems: true,
+  tieneItemsEnCocina: false,
+} as const;
 
 describe("debeIrACaja", () => {
-  it("un pedido abierto NO entra por no tener mesa", () => {
-    // Era la rama `{ tableId: null, status: "ABIERTA" }`: todo lo del POS
-    // —guardado en espera o recién mandado a cocina— aparecía en la caja solo.
+  /**
+   * El cambio de fondo: la caja lista lo que YA SE SIRVIÓ, no lo que alguien
+   * mandó. Antes hacía falta que el mesero tocara "pedir la cuenta", y eso valía
+   * cuando el cajero veía el salón; desde que el salón es solo del mesero, ese
+   * trámite le escondía al cajero la plata viva en el piso.
+   */
+  it("entra en cuanto un renglón salió a cocina: eso es consumo real", () => {
+    expect(debeIrACaja({ ...base, tieneItemsEnCocina: true })).toBe(true);
+  });
+
+  it("un carrito que nadie mandó a cocina NO entra", () => {
+    // El pedido del POS guardado en espera, o la mesa recién sentada: todavía no
+    // hay nada servido, así que no hay nada que cobrar.
     expect(debeIrACaja({ ...base })).toBe(false);
   });
 
-  it("un pedido abierto NO entra porque la cocina haya terminado", () => {
-    // Que el plato esté listo no es que el cliente quiera irse.
-    expect(debeIrACaja({ ...base })).toBe(false);
-  });
-
-  it("entra cuando alguien pidió la cuenta", () => {
+  it("entra cuando alguien pidió la cuenta, aunque no haya pasado por cocina", () => {
+    // Una botella de agua que se cobra sin comanda sigue siendo una venta.
     expect(debeIrACaja({ ...base, status: "CUENTA_PEDIDA" })).toBe(true);
   });
 
-  it("un domicilio sin confirmar o en preparación NO entra", () => {
+  it("un domicilio sin confirmar o en preparación NO entra por su recorrido", () => {
     expect(debeIrACaja({ ...base, deliveryStatus: "POR_CONFIRMAR" })).toBe(false);
     expect(debeIrACaja({ ...base, deliveryStatus: "EN_PREPARACION" })).toBe(false);
   });
@@ -39,23 +55,74 @@ describe("debeIrACaja", () => {
   });
 
   it("lo cobrado y lo anulado no vuelven", () => {
-    expect(debeIrACaja({ ...base, status: "PAGADA", deliveryStatus: "EN_CAMINO" })).toBe(false);
-    expect(debeIrACaja({ ...base, status: "ANULADA" })).toBe(false);
+    expect(
+      debeIrACaja({ ...base, status: "PAGADA", deliveryStatus: "EN_CAMINO", tieneItemsEnCocina: true }),
+    ).toBe(false);
+    expect(debeIrACaja({ ...base, status: "ANULADA", tieneItemsEnCocina: true })).toBe(false);
   });
 
   it("una cuenta sin un solo renglón vivo no es una cuenta", () => {
-    expect(debeIrACaja({ ...base, status: "CUENTA_PEDIDA", tieneItems: false })).toBe(false);
+    expect(
+      debeIrACaja({ ...base, status: "CUENTA_PEDIDA", tieneItems: false }),
+    ).toBe(false);
   });
 });
 
 describe("HAY_QUE_COBRAR", () => {
-  it("tiene exactamente las dos puertas y ninguna más", () => {
-    // Si alguien agrega una tercera rama, este test la delata: cada rama nueva es
-    // una cuenta que llega a la caja sin que nadie la haya mandado.
-    expect(HAY_QUE_COBRAR.OR).toHaveLength(2);
+  it("tiene exactamente las tres puertas y ninguna más", () => {
+    // Una cuarta rama es una cuenta llegando a la caja por un camino que nadie
+    // decidió. La tercera se agregó a propósito y está documentada arriba.
+    expect(HAY_QUE_COBRAR.OR).toHaveLength(3);
     expect(HAY_QUE_COBRAR.OR[0]).toEqual({ status: "CUENTA_PEDIDA" });
     expect(HAY_QUE_COBRAR.OR[1]).toEqual({
       deliveryStatus: { in: ["LISTO", "EN_CAMINO", "ENTREGADO"] },
     });
+    expect(HAY_QUE_COBRAR.OR[2]).toEqual({
+      items: { some: { sentToKitchenAt: { not: null }, status: { not: "ANULADO" } } },
+    });
+  });
+});
+
+const servido = { status: "LISTO" };
+const cocinando = { status: "EN_PREPARACION" };
+
+describe("estadoDeCobro: el orden de la lista", () => {
+  it("quien pidió la cuenta va primero, esté como esté la cocina", () => {
+    expect(
+      estadoDeCobro({ status: "CUENTA_PEDIDA", deliveryStatus: null, items: [cocinando] }),
+    ).toBe("PIDIO_CUENTA");
+  });
+
+  it("con todo servido queda listo para cobrar", () => {
+    expect(
+      estadoDeCobro({ status: "ABIERTA", deliveryStatus: null, items: [servido, servido] }),
+    ).toBe("LISTO");
+  });
+
+  it("con algo todavía en la plancha, sigue en curso", () => {
+    expect(
+      estadoDeCobro({ status: "ABIERTA", deliveryStatus: null, items: [servido, cocinando] }),
+    ).toBe("EN_CURSO");
+  });
+
+  it("los anulados no cuentan para decidir si ya se sirvió todo", () => {
+    expect(
+      estadoDeCobro({
+        status: "ABIERTA",
+        deliveryStatus: null,
+        items: [servido, { status: "ANULADO" }],
+      }),
+    ).toBe("LISTO");
+  });
+
+  it("un domicilio que salió de cocina está listo", () => {
+    expect(
+      estadoDeCobro({ status: "ABIERTA", deliveryStatus: "LISTO", items: [cocinando] }),
+    ).toBe("LISTO");
+  });
+
+  it("el orden pone lo urgente arriba", () => {
+    expect(ORDEN_DE_COBRO.PIDIO_CUENTA).toBeLessThan(ORDEN_DE_COBRO.LISTO);
+    expect(ORDEN_DE_COBRO.LISTO).toBeLessThan(ORDEN_DE_COBRO.EN_CURSO);
   });
 });

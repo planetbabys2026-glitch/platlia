@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { abrirCaja, abrirMesa, ingresar, irA } from "./apoyo";
+import { abrirCaja, abrirMesa, agregarProducto, ingresar, irA } from "./apoyo";
 
 /**
  * Lo que este archivo viene a comprobar, y que antes no existía:
@@ -133,4 +133,38 @@ test("dos cuentas de la misma mesa se unen en una sola", async ({ page }) => {
 
   // Queda UNA cuenta en la mesa: la que se lleva el consumo de las dos.
   await expect(cuentas).toHaveCount(1);
+});
+
+test("la comanda llega sola a la caja, sin que nadie la mande", async ({ page }) => {
+  await abrirCaja(page);
+
+  await abrirMesa(page, 11);
+  await agregarProducto(page, /cerveza nacional \(botella\)/i);
+
+  // Antes de mandar a cocina la cuenta NO está en la caja: todavía no es consumo,
+  // es un carrito.
+  await irA(page, "/caja");
+  const lista = page.getByRole("region", { name: "Cuentas por cobrar" });
+  await expect(lista.getByText(/mesa 11/i)).toHaveCount(0);
+
+  // Se manda la comanda a cocina. Nadie toca "enviar a caja".
+  await irA(page, "/salon");
+  await page.getByRole("link", { name: /^mesa 11$/i }).click();
+  await page.getByRole("link", { name: /tomar pedido \/ adición/i }).first().click();
+  await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
+
+  const mandar = page.getByRole("button", { name: /cocina/i }).first();
+  for (let intento = 0; intento < 5; intento++) {
+    await mandar.click();
+    try {
+      await expect(page.getByText(/en cocina|comanda/i).first()).toBeVisible({ timeout: 8000 });
+      break;
+    } catch {
+      // La carrera de hidratación de siempre.
+    }
+  }
+
+  // Y ahora sí aparece, sola, en el grupo que corresponde.
+  await irA(page, "/caja");
+  await expect(lista.getByText(/mesa 11/i).first()).toBeVisible({ timeout: 15_000 });
 });

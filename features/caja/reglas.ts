@@ -4,23 +4,32 @@ import { DOMICILIOS_COBRABLES } from "@/features/domicilios/reglas";
 /**
  * Quién tiene algo que cobrar en la caja.
  *
- * **Un pedido entra a la caja porque alguien lo mandó, nunca solo.** Hay dos
- * puertas y ninguna es automática:
+ * **Todo consumo que ya salió a cocina es una cuenta por cobrar.** Antes hacían
+ * falta dos puertas explícitas —que el mesero tocara "pedir la cuenta", o el
+ * recorrido propio del domicilio— y ninguna era automática, con el argumento de
+ * que la comida lista no significa que el cliente quiera irse.
  *
- * 1. `status = CUENTA_PEDIDA` — lo escribe una persona: el mesero desde la cuenta
- *    de la mesa, o quien atiende desde el POS. Es `pedirCuenta`.
- * 2. `deliveryStatus ∈ DOMICILIOS_COBRABLES` — el recorrido propio del domicilio,
- *    donde el disparador explícito es que la cocina terminó el último renglón.
+ * Ese argumento valía cuando **el cajero veía el salón**. Desde que el salón es
+ * la pantalla del mesero y nadie más, el gesto dejó de significar "quieren pagar"
+ * y pasó a ser un trámite que le esconde al cajero la mitad de su trabajo: la
+ * plata que hay viva en el piso. Un cajero que no sabe qué se está consumiendo no
+ * puede cuadrar nada ni contestar "¿cuánto va la 4?" sin levantarse.
  *
- * Antes había dos ramas más y las dos mandaban cuentas a la caja sin que nadie lo
- * decidiera. `{ tableId: null, status: "ABIERTA" }` metía todo pedido sin mesa
- * apenas nacía —los del POS guardados en espera, los recién mandados a cocina y,
- * como un domicilio nunca tiene mesa, **todos los domicilios**, incluso sin
- * confirmar—, con lo cual anulaba por completo a la puerta de arriba. Y
- * `{ items: { every: LISTO|ENTREGADO|ANULADO } }` daba la cuenta por pedida en
- * cuanto la cocina terminaba: el plato sale, y la cuenta aparecía en la caja con
- * la gente todavía comiendo. Que la comida esté lista no es que el cliente quiera
- * irse.
+ * Lo que aquella decisión sí protegía —distinguir la mesa que pidió la cuenta de
+ * la que todavía está comiendo— no se pierde: dejó de ser un **filtro** y pasó a
+ * ser el **orden y el rótulo** de la lista (`estadoDeCobro`). La información
+ * sigue estando; lo que cambió es que ya no decide quién existe para la caja.
+ *
+ * Las tres puertas, entonces:
+ *
+ * 1. `status = CUENTA_PEDIDA` — alguien la mandó a propósito. Va primero.
+ * 2. `deliveryStatus ∈ DOMICILIOS_COBRABLES` — el recorrido del domicilio.
+ * 3. **Al menos un renglón enviado a cocina** — hay consumo real en la mesa.
+ *
+ * Lo que sigue afuera es lo que todavía no es consumo: el carrito del POS que
+ * nadie mandó, y la mesa recién sentada sin nada pedido. Esa es la línea, y es la
+ * que importa: la caja lista lo que **ya se sirvió**, no lo que alguien está
+ * pensando pedir.
  *
  * Vive acá y no en `queries.ts` para poder probar la regla sin base: `queries.ts`
  * tiene `server-only` y arrastra Prisma. El fragmento y la función pura de abajo
@@ -34,6 +43,7 @@ export const HAY_QUE_COBRAR = {
   OR: [
     { status: "CUENTA_PEDIDA" },
     { deliveryStatus: { in: [...DOMICILIOS_COBRABLES] } },
+    { items: { some: { sentToKitchenAt: { not: null }, status: { not: "ANULADO" } } } },
   ],
 } satisfies Prisma.OrderWhereInput;
 
@@ -43,6 +53,8 @@ export function debeIrACaja(pedido: {
   deliveryStatus: string | null;
   /** Si le queda al menos un renglón sin anular. */
   tieneItems: boolean;
+  /** Si al menos uno de esos renglones ya salió a cocina. */
+  tieneItemsEnCocina: boolean;
 }): boolean {
   if (pedido.status !== "ABIERTA" && pedido.status !== "CUENTA_PEDIDA") return false;
   if (!pedido.tieneItems) return false;
@@ -50,8 +62,64 @@ export function debeIrACaja(pedido: {
   return (
     pedido.status === "CUENTA_PEDIDA" ||
     (pedido.deliveryStatus !== null &&
-      (DOMICILIOS_COBRABLES as readonly string[]).includes(pedido.deliveryStatus))
+      (DOMICILIOS_COBRABLES as readonly string[]).includes(pedido.deliveryStatus)) ||
+    pedido.tieneItemsEnCocina
   );
+}
+
+/**
+ * En qué punto está una cuenta de la caja, que es lo que decide su orden.
+ *
+ * Con las tres puertas abiertas, la lista pasó de ser "lo que alguien mandó" a
+ * ser el piso entero, y sin jerarquía eso es peor que antes: la mesa que levanta
+ * la mano queda perdida entre las que recién pidieron. El orden es el que usaría
+ * cualquiera parado en la caja:
+ *
+ * 1. **Pidió la cuenta.** Hay alguien esperando para pagar. Es lo único urgente.
+ * 2. **Listo.** Salió todo de cocina —o el domicilio está para despachar—: la
+ *    cuenta ya no va a crecer y puede cobrarse en cuanto la pidan.
+ * 3. **En curso.** Todavía están comiendo. Se ve para saber cuánta plata hay en
+ *    el piso, no para cobrarla ahora.
+ */
+export type EstadoDeCobro = "PIDIO_CUENTA" | "LISTO" | "EN_CURSO";
+
+/** Los tres grupos, en el orden en que se atienden. */
+export const ESTADOS_EN_ORDEN = ["PIDIO_CUENTA", "LISTO", "EN_CURSO"] as const;
+
+export const ORDEN_DE_COBRO: Record<EstadoDeCobro, number> = {
+  PIDIO_CUENTA: 0,
+  LISTO: 1,
+  EN_CURSO: 2,
+};
+
+export const ETIQUETA_DE_COBRO: Record<EstadoDeCobro, string> = {
+  PIDIO_CUENTA: "Pidió la cuenta",
+  LISTO: "Listo para cobrar",
+  EN_CURSO: "En curso",
+};
+
+export function estadoDeCobro(pedido: {
+  status: string;
+  deliveryStatus: string | null;
+  /** Los renglones vivos, con su estado de cocina. */
+  items: readonly { status: string }[];
+}): EstadoDeCobro {
+  if (pedido.status === "CUENTA_PEDIDA") return "PIDIO_CUENTA";
+
+  if (
+    pedido.deliveryStatus !== null &&
+    (DOMICILIOS_COBRABLES as readonly string[]).includes(pedido.deliveryStatus)
+  ) {
+    return "LISTO";
+  }
+
+  // Sin renglones vivos no hay nada que esperar de la cocina; con todos servidos,
+  // tampoco. En los dos casos la cuenta ya no va a crecer sola.
+  const vivos = pedido.items.filter((i) => i.status !== "ANULADO");
+  const todoServido =
+    vivos.length > 0 && vivos.every((i) => i.status === "LISTO" || i.status === "ENTREGADO");
+
+  return todoServido ? "LISTO" : "EN_CURSO";
 }
 
 /**
