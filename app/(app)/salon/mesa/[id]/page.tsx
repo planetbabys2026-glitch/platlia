@@ -3,11 +3,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Layers, PlusCircle, Users, UtensilsCrossed } from "lucide-react";
 import { AppModule } from "@/generated/prisma/enums";
-import { getMesa } from "@/features/salon/queries";
+import { getMesa, getMesasParaTraslado } from "@/features/salon/queries";
+import { getSettings } from "@/features/negocio/queries";
+import { TrasladarCuenta } from "@/features/pedidos/components/trasladar";
+import { UnirCuentas } from "@/features/pedidos/components/unir-cuentas";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consumo";
 import { requireModule } from "@/lib/auth/dal";
+import { tienePermisoSeccion } from "@/lib/auth/permisos-roles";
 import { formatCop } from "@/lib/money";
 import { LiberarMesa, NuevaCuenta, RenombrarCuenta } from "./acciones";
 
@@ -29,8 +33,22 @@ export default async function MesaPage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const ctx = await requireModule(AppModule.MESAS);
 
+  /**
+   * La guarda de permiso faltaba: esta pantalla solo verificaba el módulo.
+   *
+   * `/salon` sí la tenía, así que quien no debía ver el salón entraba igual
+   * tecleando la URL de una mesa —y desde ahí a la cuenta, a la carta y a la
+   * comanda—. El menú no es la seguridad: se llega por URL.
+   */
+  const settings = await getSettings(ctx.business.id);
+  if (!tienePermisoSeccion(ctx.role, "salon_pos", settings.rolePermissions)) {
+    notFound();
+  }
+
   const mesa = await getMesa(ctx.business.id, id);
   if (!mesa) notFound();
+
+  const mesasDestino = await getMesasParaTraslado(ctx.business.id, mesa.id);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -143,12 +161,41 @@ export default async function MesaPage({ params }: { params: Promise<{ id: strin
                     <span>Tomar pedido / Adición</span>
                   </Link>
 
+                  {/* El comensal se cambia de mesa y la cuenta se va con él. Va
+                      por cuenta y no por mesa: en una mesa con tres cuentas
+                      separadas, el que se muda es uno. */}
+                  <TrasladarCuenta orderId={cuenta.id} mesas={mesasDestino} />
+
                   {cuenta.renglones === 0 && <CerrarSinConsumo orderId={cuenta.id} />}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+      )}
+
+      {/* ─── Unir las cuentas de esta mesa ─── */}
+      {mesa.cuentas.length > 1 && (
+        <Card className="rounded-2xl border-border/80 shadow-xs">
+          <CardContent className="p-5 space-y-3.5">
+            <div className="space-y-1">
+              <h2 className="text-sm font-bold text-foreground">Pagan juntos</h2>
+              <p className="text-muted-foreground text-xs">
+                Si al final una sola persona paga varias de estas cuentas, unilas en
+                una: sale un tiquete y un cobro en vez de tres.
+              </p>
+            </div>
+            <UnirCuentas
+              cuentas={mesa.cuentas.map((c) => ({
+                id: c.id,
+                code: c.code,
+                etiqueta: c.etiqueta,
+                totalCop: c.totalCop,
+              }))}
+              titulo="Unir cuentas de esta mesa"
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* ─── Formulario para Abrir Cuenta Adicional ─── */}

@@ -36,7 +36,19 @@ export default async function PanelPage() {
     redirect("/salon");
   }
 
-  // Sin mesas —o sin permiso de salón— entra por el mostrador quien pueda vender.
+  /**
+   * Quien cobra entra a la caja, no al mostrador.
+   *
+   * Desde que el salón dejó de venir encendido para el cajero, esta rama era la
+   * que lo atrapaba: entraba y caía en `/pos`, que es para vender de mostrador. Su
+   * pantalla es la caja —abrir el turno es lo primero que hace al llegar— y el POS
+   * lo tiene igual en el menú si lo necesita.
+   */
+  if (tienePermisoSeccion(ctx.role, "caja", settings.rolePermissions)) {
+    redirect("/caja");
+  }
+
+  // Sin mesas, sin salón y sin caja: entra por el mostrador quien pueda vender.
   if (tienePermisoSeccion(ctx.role, "pos", settings.rolePermissions)) {
     redirect("/pos");
   }

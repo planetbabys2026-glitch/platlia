@@ -18,6 +18,7 @@ import {
   valorFiscalInicial,
 } from "@/features/pedidos/components/datos-fiscales";
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
+import { UnirCuentas } from "@/features/pedidos/components/unir-cuentas";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -406,6 +407,11 @@ export function CuentasPorCobrar({
 }) {
   const [cuentaExpandida, setCuentaExpandida] = useState<string | null>(null);
 
+  // Los domicilios no se unen —cada uno tiene su dirección y su envío— y la
+  // acción los rechaza. No se ofrecen: la pantalla no puede proponer algo que el
+  // servidor va a devolver con un error.
+  const unibles = cuentas.filter((c) => c.type !== "DOMICILIO");
+
   if (cuentas.length === 0) {
     return (
       <Card className="border-border shadow-xs">
@@ -432,6 +438,24 @@ export function CuentasPorCobrar({
           </Badge>
         </h2>
       </div>
+
+      {/* Unir cuentas de MESAS DISTINTAS.
+          Es el caso que la pantalla de la mesa no puede resolver: un grupo que
+          llegó junto, se repartió en tres mesas y paga con una sola tarjeta. Sin
+          esto son tres cobros, tres tiquetes y —si piden factura— tres documentos
+          ante la DIAN por una sola venta. */}
+      {unibles.length > 1 && (
+        <UnirCuentas
+          cuentas={unibles.map((c) => ({
+            id: c.id,
+            code: c.code,
+            etiqueta: c.customerName?.trim() || `Pedido #${c.code}`,
+            mesa: c.table ? `Mesa ${c.table.name}` : null,
+            totalCop: c.totalCop,
+          }))}
+          titulo="Unir varias cuentas en una"
+        />
+      )}
 
       {agruparPorMesa(cuentas).map((grupo) => (
         <div key={grupo.clave} className="space-y-3">

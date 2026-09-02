@@ -66,8 +66,24 @@ test("la pantalla de facturación muestra el estado de la licencia", async ({ pa
   await page.goto("/facturacion");
 
   await expect(page.getByRole("heading", { name: "Facturación" })).toBeVisible();
-  await expect(page.getByText(/al mes/)).toContainText("$50.000");
-  await expect(page.getByRole("button", { name: /pagar \$50\.000/i })).toBeVisible();
+
+  /**
+   * El monto NO se clava.
+   *
+   * Esto fijaba "$50.000" en dos lugares, y desde que el precio salió del código
+   * y vive en `ListaDePrecios` —que edita el superadministrador— eso es afirmar
+   * el contenido de una tabla: se cambia la tarifa y la prueba se pone roja sin
+   * que nada se haya roto. Y peor, una promoción la rompe sola. Lo que sí tiene
+   * que ser cierto siempre es que la pantalla muestre una tarifa mensual y que el
+   * botón cobre ESA misma cifra, que es la coherencia que el módulo promete.
+   */
+  const mensual = page.getByText(/al mes/).first();
+  await expect(mensual).toContainText(/\$[\d.]+/);
+
+  const cifra = /\$[\d.]+/.exec((await mensual.textContent()) ?? "")?.[0] ?? "";
+  expect(cifra).not.toBe("");
+  const escapada = cifra.replace(/[$.]/g, (c) => "\\" + c);
+  await expect(page.getByRole("button", { name: new RegExp(`pagar ${escapada}`, "i") })).toBeVisible();
 
   // El enlace desde la pantalla de licencia vencida ya no muere en un 404.
   const respuesta = await page.request.get("/facturacion");

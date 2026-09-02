@@ -23,7 +23,7 @@ test("sin sesión, una ruta de la aplicación manda al ingreso y recuerda a dón
 }) => {
   await page.goto("/panel");
   await expect(page).toHaveURL(/\/ingresar\?desde=%2Fpanel/);
-  await expect(page.getByRole("heading", { name: /ingresá a tu negocio/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /entrar al piso/i })).toBeVisible();
 });
 
 test("credenciales incorrectas no delatan si el correo existe", async ({ page }) => {
@@ -62,7 +62,7 @@ test("volver a /ingresar con sesión abierta devuelve al trabajo", async ({ page
 
 test("al salir, la sesión queda cerrada de verdad", async ({ page }) => {
   await ingresar(page);
-  await page.getByRole("button", { name: /salir/i }).click();
+  await page.getByRole("button", { name: /cerrar sesión/i }).click();
   await expect(page).toHaveURL(/\/ingresar/);
 
   // No alcanza con que redirija: la cookie ya no puede servir para volver.
@@ -85,11 +85,16 @@ test("el registro crea negocio, licencia de prueba y deja adentro", async ({ pag
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
 
   await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
-  await expect(page.getByRole("heading", { name: `Bar de Prueba ${sufijo}` })).toBeVisible();
 
-  // Negocio nuevo: sin mesas ni productos, y con la caja cerrada. Los
-  // indicadores se buscan por su tarjeta y no por texto suelto: "Caja" también
-  // es un enlace de la barra superior.
-  await expect(page.getByText("Mesas").locator("..")).toContainText("0");
-  await expect(page.getByText("Sin turno abierto").locator("..")).toContainText("Cerrada");
+  /**
+   * Se comprueba que el negocio nuevo aterriza VACÍO, no los indicadores.
+   *
+   * Esto afirmaba un encabezado con el nombre del negocio y las tarjetas "Mesas"
+   * y "Sin turno abierto": eran del panel de indicadores, que se eliminó —quien
+   * entra a las siete de la tarde va a atender, y tenía que cerrar una pantalla
+   * de paso antes de empezar—. `/panel` quedó como repartidor y manda al salón.
+   */
+  await expect(
+    page.getByText(/todavía no tiene áreas ni mesas configuradas/i),
+  ).toBeVisible();
 });

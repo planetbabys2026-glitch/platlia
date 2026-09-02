@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppModule } from "@/generated/prisma/enums";
-import { getCajaAbierta } from "@/features/caja/queries";
+import { getCajasDisponibles, getSesionDeTrabajo } from "@/features/caja/queries";
 import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion";
@@ -21,8 +21,9 @@ export default async function PosPage({
   const { pedidoId } = await searchParams;
   const ctx = await requireModule(AppModule.PEDIDOS);
 
-  const [caja, pedidos, settings, carta, pedidoInicial] = await Promise.all([
-    getCajaAbierta(ctx.business.id),
+  const [trabajo, cajasDisponibles, pedidos, settings, carta, pedidoInicial] = await Promise.all([
+    getSesionDeTrabajo(ctx.business.id, ctx.user.id),
+    getCajasDisponibles(ctx.business.id),
     getPedidosAbiertos(ctx.business.id),
     getSettings(ctx.business.id),
     getCarta(ctx.business.id),
@@ -40,7 +41,8 @@ export default async function PosPage({
   return (
     <ModuloPosInteractive
       carta={carta}
-      caja={caja}
+      caja={trabajo.sesion}
+      cajasDisponibles={cajasDisponibles}
       pedidosAbiertos={pedidos}
       pedidoInicial={pedidoInicial}
       puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}

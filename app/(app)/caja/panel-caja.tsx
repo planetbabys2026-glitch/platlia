@@ -18,13 +18,32 @@ const TIPO: Record<string, string> = {
   AJUSTE: "Ajuste",
 };
 
+const CUENTA: Record<string, string> = {
+  EFECTIVO: "Efectivo",
+  BANCO: "Bancos",
+  OTRO: "Otros",
+};
+
+type SaldoProp = {
+  baseCop: number;
+  ventasCop: number;
+  ingresosCop: number;
+  egresosCop: number;
+  esperadoCop: number;
+};
+
 type PanelCajaProps = {
   caja: {
     id: string;
     code: number;
     openedAt: Date;
     openedBy: { name: string };
+    cashRegister: { id: string; name: string };
   } | null;
+  /** Las cajas físicas libres para abrir turno. */
+  cajasDisponibles: Array<{ id: string; name: string }>;
+  /** Los turnos que tienen otras personas, para explicar por qué falta una caja. */
+  otrosTurnos: Array<{ caja: string; quien: string }>;
   ultimoCierre: {
     code: number;
     closedAt: Date | null;
@@ -32,23 +51,28 @@ type PanelCajaProps = {
     expectedCashCop: number | null;
     countedCashCop: number | null;
     differenceCop: number | null;
+    expectedBankCop: number | null;
+    countedBankCop: number | null;
+    differenceBankCop: number | null;
     notes: string | null;
+    cashRegister: { name: string };
   } | null;
   resumen: {
-    openingFloatCop: number;
-    efectivoVentasCop: number;
-    ingresosCop: number;
-    egresosCop: number;
-    esperadoCop: number;
-    porMetodo: Array<{ method: string; cantidad: number; totalCop: number }>;
+    efectivo: SaldoProp;
+    bancos: SaldoProp;
+    otrosCop: number;
+    porMetodo: Array<{ method: string; cantidad: number; totalCop: number; cuenta: string }>;
   } | null;
   movimientos: Array<{
     id: string;
     type: string;
+    account: string;
     concept: string;
     amountCop: number;
     createdAt: Date;
   }>;
+  /** Si el propietario ya configuró la clave de salidas de dinero. */
+  claveSalidasPuesta: boolean;
   cuentas: React.ComponentProps<typeof CuentasPorCobrar>["cuentas"];
   cobradas: React.ComponentProps<typeof VentasCobradas>["pedidos"];
   cobradasTotal: number;
@@ -66,9 +90,12 @@ type PanelCajaProps = {
 
 export function PanelCaja({
   caja,
+  cajasDisponibles,
+  otrosTurnos,
   ultimoCierre,
   resumen,
   movimientos,
+  claveSalidasPuesta,
   cuentas,
   cobradas,
   cobradasTotal,
@@ -151,10 +178,27 @@ export function PanelCaja({
                   <div className="space-y-1.5">
                     <h2 className="rotulo-seccion">Abrir turno</h2>
                     <p className="text-sm text-muted-foreground">
-                      No hay ningún turno abierto. Hasta que abras la caja no se puede cobrar.
+                      {otrosTurnos.length > 0
+                        ? "Todavía no tenés turno propio. Hasta que abras el tuyo no podés cobrar en tu caja."
+                        : "No hay ningún turno abierto. Hasta que abras la caja no se puede cobrar."}
                     </p>
                   </div>
-                  <AbrirCaja />
+                  <AbrirCaja cajas={cajasDisponibles} />
+
+                  {/* Con varias cajas, "no hay turno abierto" no alcanza: la
+                      pregunta del cajero es cuál está libre y quién tiene la otra.
+                      Sin esto, ve una lista más corta de lo que esperaba y no sabe
+                      por qué. */}
+                  {otrosTurnos.length > 0 && (
+                    <ul className="space-y-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground">
+                      {otrosTurnos.map((t) => (
+                        <li key={t.caja}>
+                          <strong className="font-semibold text-foreground">{t.caja}</strong> — turno
+                          abierto por {t.quien}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               </Card>
 
@@ -163,25 +207,29 @@ export function PanelCaja({
                   <CardContent className="space-y-2 pt-5">
                     <h3 className="rotulo-seccion">Último cierre</h3>
                     <p className="text-sm text-muted-foreground">
-                      Turno {ultimoCierre.code} · cerró {ultimoCierre.closedBy?.name ?? "—"}
+                      {ultimoCierre.cashRegister.name} · turno {ultimoCierre.code} · cerró{" "}
+                      {ultimoCierre.closedBy?.name ?? "—"}
                       {ultimoCierre.closedAt &&
                         ` · ${formatDateTimeInTimeZone(ultimoCierre.closedAt, timeZone)}`}
                     </p>
                     <dl className="space-y-1 text-sm">
                       <Fila termino="Esperado en efectivo" valor={ultimoCierre.expectedCashCop ?? 0} />
                       <Fila termino="Contado en cajón" valor={ultimoCierre.countedCashCop ?? 0} />
-                      <div className="border-border flex items-baseline justify-between border-t pt-2">
-                        <dt className="font-semibold">Diferencia</dt>
-                        <dd
-                          className={cn(
-                            "numeral text-base font-bold",
-                            (ultimoCierre.differenceCop ?? 0) !== 0 && "text-destructive",
-                          )}
-                        >
-                          {formatCop(ultimoCierre.differenceCop ?? 0)}
-                        </dd>
-                      </div>
+                      <DiferenciaCierre valor={ultimoCierre.differenceCop ?? 0} termino="Diferencia en efectivo" />
                     </dl>
+                    {/* El saldo bancario solo se muestra si el turno lo cerró con
+                        él: los cierres anteriores a la columna traen null, y un
+                        "$0" ahí se leería como que no entró nada por datáfono. */}
+                    {ultimoCierre.expectedBankCop !== null && (
+                      <dl className="space-y-1 text-sm">
+                        <Fila termino="Esperado en bancos" valor={ultimoCierre.expectedBankCop} />
+                        <Fila termino="Según la cuenta" valor={ultimoCierre.countedBankCop ?? 0} />
+                        <DiferenciaCierre
+                          valor={ultimoCierre.differenceBankCop ?? 0}
+                          termino="Diferencia en bancos"
+                        />
+                      </dl>
+                    )}
                     {ultimoCierre.notes && (
                       <p className="text-muted-foreground text-xs italic">{ultimoCierre.notes}</p>
                     )}
@@ -196,23 +244,37 @@ export function PanelCaja({
               <div className="space-y-6">
                 {resumen && (
                   <>
-                    <Card className="shadow-sm">
-                      <CardContent className="space-y-3 pt-5">
-                        <h3 className="rotulo-seccion">Arqueo esperado</h3>
-                        <dl className="space-y-1 text-sm">
-                          <Fila termino="Base inicial del turno" valor={resumen.openingFloatCop} />
-                          <Fila termino="Ventas cobradas en efectivo" valor={resumen.efectivoVentasCop} />
-                          <Fila termino="Entradas y ajustes" valor={resumen.ingresosCop} />
-                          <Fila termino="Gastos y retiros" valor={-resumen.egresosCop} />
-                          <div className="border-border flex items-baseline justify-between border-t pt-2">
-                            <dt className="font-bold text-sm">Esperado en efectivo</dt>
-                            <dd className="numeral text-2xl font-black text-brand dark:text-brand-accent">
-                              {formatCop(resumen.esperadoCop)}
-                            </dd>
-                          </div>
-                        </dl>
-                      </CardContent>
-                    </Card>
+                    {/* Los dos saldos, uno al lado del otro.
+                        Hasta acá el arqueo cuadraba solo el cajón y lo cobrado con
+                        datáfono se listaba abajo, "por método", sin nada contra qué
+                        compararlo: la mitad de la plata de la noche sin arquear. */}
+                    <div className="grid gap-4 doble:grid-cols-2">
+                      <Saldo
+                        titulo="Efectivo en el cajón"
+                        saldo={resumen.efectivo}
+                        etiquetaVentas="Ventas en efectivo"
+                        etiquetaEsperado="Esperado en efectivo"
+                      />
+                      <Saldo
+                        titulo="Cuenta de bancos"
+                        saldo={resumen.bancos}
+                        etiquetaVentas="Ventas con tarjeta y billeteras"
+                        etiquetaEsperado="Esperado en bancos"
+                      />
+                    </div>
+
+                    {/* Ni se cuenta ni se cuadra: un bono no es plata que entre.
+                        Se muestra igual porque explica por qué el total del día no
+                        es la suma de los dos saldos. */}
+                    {resumen.otrosCop > 0 && (
+                      <Card className="shadow-sm">
+                        <CardContent className="pt-5">
+                          <dl className="text-sm">
+                            <Fila termino="Bonos y otros medios (no se cuadran)" valor={resumen.otrosCop} />
+                          </dl>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {resumen.porMetodo.length > 0 && (
                       <Card className="shadow-sm">
@@ -227,7 +289,8 @@ export function PanelCaja({
                                 <span>
                                   <strong className="font-semibold">{metodo.method}</strong>
                                   <span className="text-muted-foreground ml-2 text-rotulo">
-                                    ({metodo.cantidad} {metodo.cantidad === 1 ? "cobro" : "cobros"})
+                                    ({metodo.cantidad} {metodo.cantidad === 1 ? "cobro" : "cobros"}) ·{" "}
+                                    {CUENTA[metodo.cuenta] ?? metodo.cuenta}
                                   </span>
                                 </span>
                                 <span className="numeral font-bold">{formatCop(metodo.totalCop)}</span>
@@ -249,7 +312,7 @@ export function PanelCaja({
                         Ingresos extras, pagos a proveedores, gastos menores o retiros parciales de caja.
                       </p>
                     </div>
-                    <Movimiento />
+                    <Movimiento clavePuesta={claveSalidasPuesta} />
 
                     {movimientos.length > 0 && (
                       <div className="space-y-2 pt-2">
@@ -261,7 +324,7 @@ export function PanelCaja({
                             <li key={mov.id} className="flex items-center justify-between p-3 bg-card">
                               <div>
                                 <span className="text-rotulo font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                                  {TIPO[mov.type] ?? mov.type}
+                                  {TIPO[mov.type] ?? mov.type} · {CUENTA[mov.account] ?? mov.account}
                                 </span>
                                 <p className="font-semibold text-foreground mt-1">{mov.concept}</p>
                               </div>
@@ -284,9 +347,13 @@ export function PanelCaja({
                     <CardContent className="space-y-3 pt-5">
                       <h3 className="rotulo-seccion text-destructive-soft">Cerrar turno</h3>
                       <p className="text-xs text-muted-foreground">
-                        Ingresá el dinero físico contado en el cajón para calcular arqueo y cerrar el turno.
+                        Contá el cajón y mirá el saldo de la cuenta. El turno cierra con las
+                        dos cifras.
                       </p>
-                      <CerrarCaja esperadoCop={resumen.esperadoCop} />
+                      <CerrarCaja
+                        esperadoCop={resumen.efectivo.esperadoCop}
+                        esperadoBancoCop={resumen.bancos.esperadoCop}
+                      />
                     </CardContent>
                   </Card>
                 </aside>
@@ -295,6 +362,58 @@ export function PanelCaja({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Un saldo del turno: de dónde salió y en cuánto tendría que estar.
+ *
+ * Los dos se dibujan igual a propósito. Que el cajón y el banco se lean con la
+ * misma estructura es lo que hace evidente que son dos arqueos y no un arqueo con
+ * un dato de color al costado.
+ */
+function Saldo({
+  titulo,
+  saldo,
+  etiquetaVentas,
+  etiquetaEsperado,
+}: {
+  titulo: string;
+  saldo: SaldoProp;
+  etiquetaVentas: string;
+  /** La línea del total se nombra entera: es la cifra que alguien va a citar por
+   *  teléfono, y "Esperado" a secas no dice de cuál de los dos saldos habla. */
+  etiquetaEsperado: string;
+}) {
+  return (
+    <Card className="shadow-sm">
+      <CardContent className="space-y-3 pt-5">
+        <h3 className="rotulo-seccion">{titulo}</h3>
+        <dl className="space-y-1 text-sm">
+          <Fila termino="Base del turno" valor={saldo.baseCop} />
+          <Fila termino={etiquetaVentas} valor={saldo.ventasCop} />
+          <Fila termino="Entradas y ajustes" valor={saldo.ingresosCop} />
+          <Fila termino="Gastos y retiros" valor={-saldo.egresosCop} />
+          <div className="border-border flex items-baseline justify-between border-t pt-2">
+            <dt className="font-bold text-sm">{etiquetaEsperado}</dt>
+            <dd className="numeral text-2xl font-black text-brand dark:text-brand-accent">
+              {formatCop(saldo.esperadoCop)}
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DiferenciaCierre({ termino, valor }: { termino: string; valor: number }) {
+  return (
+    <div className="border-border flex items-baseline justify-between border-t pt-2">
+      <dt className="font-semibold">{termino}</dt>
+      <dd className={cn("numeral text-base font-bold", valor !== 0 && "text-destructive")}>
+        {formatCop(valor)}
+      </dd>
     </div>
   );
 }

@@ -159,5 +159,47 @@ export async function getMesa(businessId: string, tableId: string) {
   };
 }
 
+/**
+ * Las mesas a las que se puede mudar una cuenta.
+ *
+ * Se traen todas menos la de origen y las archivadas, incluidas las ocupadas: el
+ * modelo admite varias cuentas por mesa, y juntar dos grupos que se corrieron
+ * para hacer lugar es exactamente lo que pasa en un salón. Se dice cuáles están
+ * ocupadas para que el mesero elija sabiendo, no para impedírselo.
+ *
+ * Las `INACTIVA` sí se van: mandar una cuenta a una mesa fuera de servicio la
+ * deja colgada de algo que el salón no dibuja, y la acción lo rechaza igual.
+ */
+export async function getMesasParaTraslado(businessId: string, exceptoTableId?: string | null) {
+  const mesas = await tenantDb(businessId).table.findMany({
+    where: {
+      deletedAt: null,
+      status: { not: "INACTIVA" },
+      ...(exceptoTableId ? { NOT: { id: exceptoTableId } } : {}),
+    },
+    // Por área y después por orden: las mesas del seed tienen `sortOrder` 1..n
+    // DENTRO de cada área, así que ordenar solo por eso intercala los tres
+    // salones —"Salón · 1", "Barra · Barra 1", "Terraza · T1", "Salón · 2"— y el
+    // mesero tiene que leer la lista entera para encontrar la mesa de al lado.
+    orderBy: [{ area: { name: "asc" } }, { sortOrder: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      area: { select: { name: true } },
+      _count: { select: { orders: { where: { status: { in: ["ABIERTA", "CUENTA_PEDIDA"] } } } } },
+    },
+  });
+
+  return mesas.map((mesa) => ({
+    id: mesa.id,
+    name: mesa.name,
+    area: mesa.area?.name ?? null,
+    cuentas: mesa._count.orders,
+  }));
+}
+
+export type MesaDestino = Awaited<ReturnType<typeof getMesasParaTraslado>>[number];
+
 export type MesaConCuentas = NonNullable<Awaited<ReturnType<typeof getMesa>>>;
 export type CuentaDetallada = MesaConCuentas["cuentas"][number];

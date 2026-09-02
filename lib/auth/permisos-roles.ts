@@ -26,9 +26,23 @@ export type InfoSeccion = {
 
 export const SECCIONES_SISTEMA: readonly InfoSeccion[] = [
   {
+    /**
+     * De fábrica solo la ve el MESERO.
+     *
+     * El salón es la pantalla de tomar pedidos en la mesa, desde un celular o una
+     * tableta, parado al lado del comensal. El cajero cobra desde `/caja` y el
+     * administrador supervisa desde Informes: ninguno de los dos toma pedidos, y
+     * tenerla encendida les llenaba el menú —y la barra inferior del teléfono, que
+     * son cuatro lugares— con una pantalla que no usan.
+     *
+     * Sigue siendo configurable: un negocio chico donde el cajero también atiende
+     * mesas lo enciende desde Configuración → Permisos de roles. Lo que cambió es
+     * el valor por defecto, no la posibilidad.
+     */
     id: "salon_pos",
     nombre: "Salón",
-    descripcion: "Plano de mesas y toma de pedidos en la mesa.",
+    descripcion:
+      "Plano de mesas y toma de pedidos en la mesa, desde celular o tableta. Es la pantalla del mesero.",
     categoria: "Operación",
   },
   {
@@ -149,7 +163,7 @@ export const PERMISOS_POR_DEFECTO: Record<
   Record<SeccionPermiso, boolean>
 > = {
   [Role.ADMINISTRADOR]: {
-    salon_pos: true,
+    salon_pos: false,
     pos: true,
     cocina: true,
     caja: true,
@@ -163,7 +177,8 @@ export const PERMISOS_POR_DEFECTO: Record<
     configuracion: true,
   },
   [Role.CAJERO]: {
-    salon_pos: true,
+    // El cajero cobra, no toma pedidos en la mesa. Ver abajo, en `salon_pos`.
+    salon_pos: false,
     pos: true,
     cocina: false,
     caja: true,

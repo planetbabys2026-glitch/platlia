@@ -12,6 +12,7 @@ import {
   FormularioQrMenu,
   FormularioTurnero,
 } from "./formularios";
+import { FormularioCajas, type CajaConfig } from "./formulario-cajas";
 import { FormularioPermisosRoles } from "./formulario-permisos-roles";
 import { FormularioIa, type ConexionIa } from "./formulario-ia";
 import {
@@ -136,6 +137,9 @@ type PanelConfiguracionProps = {
   urlMcp: string | null;
   sede: string;
   cantidadDeSedes: number;
+  /** Null para quien no es propietario: las cajas y la clave de salidas son suyas. */
+  cajas: CajaConfig[] | null;
+  claveSalidasPuesta: boolean;
 };
 
 type TabId =
@@ -148,6 +152,7 @@ type TabId =
   | "impresoras"
   | "ia"
   | "factus"
+  | "cajas"
   | "licencia";
 
 export function PanelConfiguracion({
@@ -164,13 +169,15 @@ export function PanelConfiguracion({
   urlMcp,
   sede,
   cantidadDeSedes,
+  cajas,
+  claveSalidasPuesta,
 }: PanelConfiguracionProps) {
   // La sección vive en la URL: es lo que permite que el menú lateral enlace
   // "Menú digital QR" en vez de dejar al usuario buscarla adentro. Sin la tira de
   // píldoras ya nadie la cambia desde acá, así que el setter no se usa.
   const [tabActiva] = useVistaEnUrl<TabId>(
     "vista",
-    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "impresoras", "ia", "factus", "licencia"],
+    ["datos", "modulos", "permisos", "turnero", "qr", "operacion", "impresoras", "ia", "factus", "cajas", "licencia"],
     "datos",
   );
 
@@ -345,6 +352,18 @@ export function PanelConfiguracion({
                 faltantes: settings.faltantesParaFacturar,
               }}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {tabActiva === "cajas" && esPropietario && cajas && (
+        <Card className="shadow-sm overflow-visible">
+          <CardContent className="space-y-4 pt-6">
+            <EncabezadoPanel titulo="Cajas y salidas de dinero">
+              Los puntos de cobro físicos del local y la clave que autoriza sacar
+              plata. Las dos cosas las decide el propietario.
+            </EncabezadoPanel>
+            <FormularioCajas cajas={cajas} claveSalidasPuesta={claveSalidasPuesta} />
           </CardContent>
         </Card>
       )}

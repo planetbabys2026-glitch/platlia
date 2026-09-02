@@ -1,6 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
+import { exigirBaseBorrable } from "./lib/db/base-local";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+/**
+ * Los e2e ESCRIBEN en la base: abren turnos, cobran cuentas y `auth.spec.ts`
+ * llega a crear negocios y usuarios que nadie borra después. Corrida contra la
+ * base de producción, la suite le mete datos de prueba a un negocio real.
+ *
+ * Se carga el `.env` a mano porque acá no hay Next que lo haga, y se aplica la
+ * misma guarda que el seed: si la base no es de esta máquina, no se corre.
+ */
+process.loadEnvFile?.(".env");
+exigirBaseBorrable(process.env.DATABASE_URL ?? "", "La suite e2e");
 
 export default defineConfig({
   testDir: "./tests/e2e",

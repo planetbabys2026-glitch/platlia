@@ -3,9 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { AppModule, Role } from "@/generated/prisma/enums";
-import { getCajaAbierta } from "@/features/caja/queries";
+import { getCajasDisponibles, getSesionDeTrabajo } from "@/features/caja/queries";
 import { getCarta, getPedido, getPedidosAbiertos } from "@/features/pedidos/queries";
 import { CerrarSinConsumo } from "@/features/pedidos/components/cerrar-sin-consumo";
+import { TrasladarCuenta } from "@/features/pedidos/components/trasladar";
+import { getMesasParaTraslado } from "@/features/salon/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { ModuloPosInteractive } from "@/app/(app)/pos/modulo-pos-interactive";
 import { Badge } from "@/components/ui/badge";
@@ -56,15 +58,17 @@ export default async function PedidoPage({
 
   // Si no es pedido de salón o el módulo de mesas no está activo, usar vista POS mostrador
   if (pedido.type !== "MESA" || !usaMesas) {
-    const [caja, pedidos] = await Promise.all([
-      getCajaAbierta(ctx.business.id),
+    const [trabajo, cajasDisponibles, pedidos] = await Promise.all([
+      getSesionDeTrabajo(ctx.business.id, ctx.user.id),
+      getCajasDisponibles(ctx.business.id),
       getPedidosAbiertos(ctx.business.id),
     ]);
 
     return (
       <ModuloPosInteractive
         carta={carta}
-        caja={caja}
+        caja={trabajo.sesion}
+        cajasDisponibles={cajasDisponibles}
         pedidosAbiertos={pedidos}
         pedidoInicial={pedido}
         puedeFacturar={puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada())}
@@ -91,6 +95,12 @@ export default async function PedidoPage({
   ).length;
   const nombreDeCuenta = pedido.customerName?.trim() || null;
   const puedeCobrar = tieneRol(ctx.role, [Role.CAJERO, Role.ADMINISTRADOR]);
+
+  // Las mesas a las que se puede mudar esta cuenta. Se consulta solo en la rama
+  // de mesa: en el mostrador no hay a dónde trasladar nada.
+  const mesasDestino = editable
+    ? await getMesasParaTraslado(ctx.business.id, pedido.table?.id ?? null)
+    : [];
 
   const panelCuenta = (
     <div className="space-y-4">
@@ -149,6 +159,18 @@ export default async function PedidoPage({
             />
           }
         />
+      )}
+
+      {/* Trasladar la cuenta a otra mesa.
+          Va acá y no solo en la pantalla de la mesa porque este es el lugar donde
+          está parado el mesero cuando el comensal le dice que se cambia: con la
+          cuenta abierta delante. */}
+      {editable && usaMesas && mesasDestino.length > 0 && (
+        <Card className="rounded-2xl border-border/80">
+          <CardContent className="p-3">
+            <TrasladarCuenta orderId={pedido.id} mesas={mesasDestino} />
+          </CardContent>
+        </Card>
       )}
 
       {/* Anulación o Cierre sin consumo */}

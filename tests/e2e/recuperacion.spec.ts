@@ -25,7 +25,10 @@ test("el registro no deja mandar contraseñas que no coinciden", async ({ page }
   await page.getByLabel("Repetir contraseña").fill("otra-contrasena-distinta");
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
 
-  await expect(page.getByText(/las contraseñas no coinciden/i)).toBeVisible();
+  // `.first()`: el mensaje sale DOS veces y está bien que salga dos veces —
+  // `defineAction` lo pone en el error del formulario y en el del campo, así que
+  // se ve arriba y debajo de "Repetir contraseña".
+  await expect(page.getByText(/las contraseñas no coinciden/i).first()).toBeVisible();
   await expect(page).toHaveURL(/\/registro$/);
 });
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppModule } from "@/generated/prisma/enums";
-import { getCajaAbierta } from "@/features/caja/queries";
+import { hayCajaAbierta } from "@/features/caja/queries";
 import { getSettings } from "@/features/negocio/queries";
 import { AbrirPedidoSinMesa } from "@/features/pedidos/components/abrir-sin-mesa";
 import { ListaSinMesa } from "@/features/pedidos/components/lista-sin-mesa";
@@ -28,7 +28,7 @@ export default async function SalonPage() {
 
   const [areas, caja, pedidos] = await Promise.all([
     getSalon(ctx.business.id),
-    getCajaAbierta(ctx.business.id),
+    hayCajaAbierta(ctx.business.id),
     getPedidosAbiertos(ctx.business.id),
   ]);
 

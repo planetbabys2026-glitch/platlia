@@ -27,6 +27,7 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "Order",
   "OrderItem",
   "OrderPayment",
+  "CashRegister",
   "CashSession",
   "CashMovement",
   "AuditLog",

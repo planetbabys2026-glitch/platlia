@@ -43,9 +43,9 @@ test("un turno completo: abrir caja, cobrar una mesa y cuadrar el cierre", async
   // La apertura vive en la sección "movimientos", y a una sección se llega por
   // la URL desde que el menú es el único navegador.
   await page.goto("/caja?vista=movimientos");
-  await page.getByLabel(/base del turno/i).fill("100000");
+  await page.getByLabel(/base en efectivo/i).fill("100000");
   await page.getByRole("button", { name: /abrir caja/i }).click();
-  await expect(page.getByRole("heading", { name: /^caja \d+$/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^caja 1$/i })).toBeVisible();
   await expect(page.getByText("Esperado en efectivo").locator("..")).toContainText(
     "$100.000",
   );
@@ -122,6 +122,8 @@ test("un turno completo: abrir caja, cobrar una mesa y cuadrar el cierre", async
   );
 
   await page.getByLabel(/cuánto contaste/i).fill("115000");
+  // El turno cuadra dos saldos: el cajón y la cuenta del banco.
+  await page.getByLabel(/cuánto dice la cuenta/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
 
   // Cerrada la caja, el resumen del turno queda a la vista: al cerrarse
@@ -161,6 +163,8 @@ test("no se puede cerrar la caja con un pedido sin cobrar", async ({ page }) => 
 
   await page.goto("/caja?vista=movimientos");
   await page.getByLabel(/cuánto contaste/i).fill("5000");
+  // El turno cuadra dos saldos: el cajón y la cuenta del banco.
+  await page.getByLabel(/cuánto dice la cuenta/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
   await expect(page.getByRole("alert").first()).toContainText(/sin cobrar/i);
   await expect(page.getByRole("alert").first()).toContainText(/mesa 2/i);

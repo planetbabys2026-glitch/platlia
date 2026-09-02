@@ -1239,6 +1239,128 @@ responde sin ida y vuelta por cada tecla y no hay forma de paginar mal. Si la jo
 El historial **no depende de que haya caja abierta**: reimprimir la tirilla de anoche tiene que
 funcionar con el turno cerrado.
 
+### La caja es una entidad, no un singleton
+
+Había **una sola sesión abierta por empresa**, con el argumento de que dos turnos simultáneos harían
+que el efectivo de una venta cayera en cualquiera de los dos. Eso es cierto por CAJA, no por negocio:
+un local con una barra y un mostrador tiene dos cajones y dos personas contando, y obligarlos a
+compartir un turno es exactamente el arqueo que no cuadra nunca.
+
+`CashRegister` es la caja **física** —el mueble, el cajón, el datáfono— y la crea el propietario en
+Configuración → Cajas. `CashSession` cuelga de ella, y la unicidad pasó a ser **una sesión abierta por
+caja**; además, **una persona no puede tener dos turnos abiertos**, o ninguno de los dos tiene a
+alguien parado adelante haciéndose cargo.
+
+**En qué caja cae un cobro lo decide `sesionDeCobro`** (`features/caja/reglas.ts`, puro y con tests),
+y lo usan por igual el cobro y la pantalla: la propia si abriste turno; la única abierta si no tenés
+—el dueño que se para un rato en la caja—; y **se rechaza** con varias abiertas y ninguna tuya, porque
+cualquier elección ahí mete la venta en el arqueo de otra persona y el faltante lo paga quien no lo
+hizo. Que `/caja` y el cobro usen la misma regla es lo que garantiza que el arqueo que se mira y el
+cajón donde cae la plata sean el mismo.
+
+**`Order.cashSessionId` cambió de significado: es la caja que lo COBRÓ, no la que estaba abierta al
+abrirlo.** Antes lo escribía `abrirPedido` con `findFirst` sobre la única sesión que había; con varias
+cajas eso es elegir una al azar y atarle la cuenta a una caja que quizá nunca la iba a cobrar. Queda
+en null mientras el pedido está vivo y lo escribe el pago. `abrirPedido` solo pregunta si hay *alguna*
+caja abierta, que es lo único que significaba `requireOpenCashSession`.
+
+Por lo mismo, **el cierre bloquea por cuentas sin cobrar solo si es la última caja abierta**: si queda
+otra, alguien todavía puede cobrarlas. El bloqueo se mide contra la jornada, no contra "los pedidos de
+mi sesión", que dejó de querer decir algo.
+
+### El turno cuadra dos saldos, no uno
+
+`openingBankCop` al abrir y `expectedBankCop` / `countedBankCop` / `differenceBankCop` al cerrar. Lo
+que entra por datáfono no se toca ni se cuenta a mano, pero existe: se listaba "por método" sin nada
+contra qué compararlo, o sea la mitad de la plata de la noche sin arquear. Y `CashMovement.account`
+(`CashAccount`) dice de dónde sale cada movimiento — el proveedor pagado por transferencia descontaba
+del cajón, y el arqueo daba faltante por plata que nunca había estado ahí.
+
+**De qué lado cae cada medio de pago está escrito entero y a mano** en
+`features/caja/medios-de-pago.ts`, sin `default`: el día que se agregue un `PaymentMethod`, el test
+exhaustivo falla nombrándolo en vez de dejarlo caer en un saldo por descarte. `BONO` y `OTRO` no suman
+a ninguno —no es plata que se pueda contar al cierre— y se muestran aparte, porque si no el total del
+día no parece la suma de los dos saldos.
+
+### La salida de dinero lleva clave, y la pone solo el propietario
+
+`BusinessSettings.expensePinHash` (argon2, el mismo de las contraseñas). Se pide para **EGRESO,
+RETIRO y AJUSTE negativo** — `esSalidaDeDinero`, puro y con tests. El ajuste va incluido a propósito:
+es la puerta de al lado, mismo efecto que un gasto con otro nombre, y sin él quien no quiera escribir
+la clave registra el faltante como ajuste y saca la plata igual.
+
+`guardarClaveGastos` es una acción aparte con `roles: [Role.PROPIETARIO]`, **nunca dentro del guardado
+masivo de Configuración**: ese formulario lo alcanza un administrador, y un administrador que puede
+cambiar esta clave es uno que puede sacar plata sin que el dueño se entere. Cambiarla exige la
+vigente. La verificación está en la acción y no en la pantalla, como siempre: es un POST alcanzable
+con curl. Los intentos fallidos quedan en `AuditLog`.
+
+**Sin clave configurada las salidas siguen funcionando**, y Configuración lo avisa. Frenarlas de
+entrada dejaría sin registrar gastos a todo negocio que ya venía trabajando, hasta que su dueño entre
+a poner una clave que nadie le pidió.
+
+**El hash no cruza al navegador, y eso hubo que forzarlo.** La página de Configuración pasa
+`settings` entero con un spread, así que toda columna nueva de `BusinessSettings` viaja sola al
+componente cliente —estuvo bien mientras la tabla no guardó secretos; las credenciales de Factus se
+sacaron de acá por este mismo motivo—. Se desestructura `expensePinHash` afuera y a la pantalla va un
+booleano.
+
+### Una cuenta se muda de mesa, y varias se unen en una
+
+**Trasladar** (`trasladarPedido`): el comensal se cambia de mesa y la cuenta se va con él. Sin esto
+había dos salidas y las dos malas: cerrar sin consumo y volver a tomar todo, o dejar que el sistema
+siguiera diciendo una mesa distinta de la que el mesero canta —peor, porque la comanda ya salió a
+cocina con el número viejo—. La mesa de origen **queda libre sola**: el estado de una mesa no se
+escribe, se deriva, así que se sincronizan las dos dentro de la misma transacción. El área viaja con
+la mesa, o un pedido de la terraza trasladado al salón seguiría contando como de la terraza en los
+informes. La mesa destino **puede estar ocupada** —el modelo admite varias cuentas por mesa—; lo que
+se rechaza es archivada, `INACTIVA` y los domicilios.
+
+**Unir** (`unirCuentas`): un grupo repartido en tres mesas donde una sola persona paga. Sin esto son
+tres cobros, tres tiquetes y —si piden factura electrónica— tres documentos ante la DIAN por una sola
+venta. Unir es **mudar los renglones** con un `updateMany`: conservan su estado de cocina, sus
+instantáneas de precio e impuesto y su costo, así que nada de lo congelado se recalcula, y los
+modificadores viajan solos porque cuelgan del renglón. **Las propinas se suman**: cada mesa eligió la
+suya cuando le preguntaron y esa plata es del personal.
+
+Tres prohibiciones, y las tres son de plata (`features/pedidos/reglas-union.ts`, puro y con tests):
+una cuenta **con pagos** dejaría el `OrderPayment` cobrando una cuenta vacía y el arqueo de esa caja
+sin nada que lo explique; una **facturada** dejaría viva ante la DIAN una factura que ya no describe
+ninguna venta; y un **domicilio** tiene dirección y envío propios. El destino se valida igual que las
+origen, y tiene que ser una de las elegidas.
+
+**Las cuentas de origen no son anulaciones.** Quedan `ANULADA` y sin renglones, así que llevan
+`Order.mergedIntoId` y el informe de anulaciones filtra `mergedIntoId: null`. Sin ese campo, cada
+grupo que junta tres mesas aparece como tres ventas anuladas: anular es tirar una venta, unir es la
+misma venta cobrada en un solo tiquete.
+
+**Se une desde los dos lados.** En `/salon/mesa/[id]` van las cuentas de esa mesa; en `/caja`, las de
+mesas distintas —el caso que la pantalla de una mesa no puede resolver—. Y hay que **elegir cuál se
+queda con todo**: su número es el que sale en el tiquete y el que la gente canta, así que se pregunta
+en vez de suponer la primera.
+
+### El salón es la pantalla del mesero
+
+De fábrica `salon_pos` quedó en **false para CAJERO y ADMINISTRADOR**. Es la pantalla de tomar pedidos
+en la mesa, de a un toque y desde un celular o una tableta; el cajero cobra desde `/caja` y el
+administrador supervisa desde Informes. Encendida les ocupaba uno de los cuatro lugares de la barra
+inferior del teléfono con una pantalla que no usan. **Sigue siendo configurable**: un negocio chico
+donde el cajero también atiende mesas se lo devuelve desde Permisos de roles. Lo que cambió es de qué
+lado arranca.
+
+**`/salon/mesa/[id]` no verificaba el permiso**, solo el módulo: `/salon` sí lo hacía, así que quien
+no debía ver el salón entraba igual tecleando la URL de una mesa, y desde ahí a la cuenta, a la carta
+y a la comanda. El menú nunca es la seguridad.
+
+**Quien cobra aterriza en `/caja`.** `/panel` probaba salón y después POS; sin salón, el cajero caía
+en el mostrador. Su pantalla es la caja: abrir el turno es lo primero que hace al llegar.
+
+**Los e2e entran como el DUEÑO.** El usuario por defecto de `tests/e2e/apoyo.ts` era el CAJERO y con
+él se sentaban las mesas en ocho archivos, que ahora es un 404 sin una palabra sobre permisos. El
+dueño y no el mesero porque casi todos esos flujos sientan una mesa **y** la cobran: con el mesero
+habría que volver a entrar como cajero a la mitad de cada prueba. Que cada rol vea lo que le toca lo
+fija `tests/unit/permisos-roles.test.ts`, que puede probarlo sin navegador.
+
 ### Las categorías se pliegan
 
 `components/marca/seccion-plegable.tsx` agrupa productos por categoría en las tres puertas de venta:
@@ -1822,7 +1944,14 @@ lib/printing/            ticket · recibo · comanda (puros) · escpos · cola �
 agente-impresion/        el binario en Go que corre en la PC del local
 lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plataforma
 features/dian/           emitir factura y nota crédito
+lib/db/base-local.ts     la guarda de los scripts que borran: la base, no NODE_ENV (puro)
+scripts/pruebas-locales.ts  levanta la Postgres de espacio de usuario de los e2e
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests
+features/caja/reglas.ts      qué va a caja · qué es salida de dinero · en qué caja cae un cobro (puro)
+features/caja/sesion.ts     resuelve esa caja contra la base, dentro de la transacción del cobro
+features/caja/medios-de-pago.ts  cada PaymentMethod a su saldo: efectivo, banco u otro (puro)
+features/salon/reglas-traslado.ts  a qué mesa se puede mudar una cuenta (puro)
+features/pedidos/reglas-union.ts   qué cuentas se pueden unir y en cuál (puro)
 features/cocina/reglas.ts   quién marca listo y los dos tramos de tiempo (puro)
 features/informes/periodo.ts  día · semana · mes · año · rango a medida (puro)
 features/<dominio>/{actions,queries,schemas}.ts + components/
@@ -1838,6 +1967,45 @@ pnpm db:migrate   pnpm db:studio    pnpm seed
 pnpm dev:https    # necesario para probar la PWA en local
 ```
 
+### Las pruebas tienen su propia base, y los scripts que borran no llegan a producción
+
+`pnpm seed` **arrasa la base entera** —negocios y usuarios, o sea las contraseñas de
+todo el mundo— y `scripts/reset-operacion.ts` se lleva pedidos, pagos y turnos de caja.
+Lo único que los frenaba era `env.NODE_ENV === "production"`, y esa guarda no sirve para
+lo que existe: en el portátil de quien desarrolla `NODE_ENV` vale `"development"` apunte
+`DATABASE_URL` a donde apunte. Estaba encendida en el servidor —donde nadie corre el
+seed— y apagada en el único lugar donde el accidente pasa de verdad: una terminal local
+con la URL de producción en el `.env`. Pasó.
+
+Ahora se pregunta por la **base**, no por el proceso (`lib/db/base-local.ts`, puro y con
+tests): si el host no es de esta máquina, el seed, el reset y la suite e2e se niegan y
+dicen qué base y qué host. Para arrasar una remota de pruebas a propósito hay que
+nombrarla —`CONFIRMO_ARRASAR_BASE=<nombre>`— y tiene que coincidir exacto con la de la
+URL, así una variable olvidada en el `.env` deja de autorizar nada en cuanto la base
+cambia. La suite e2e lleva la misma guarda porque también escribe: abre turnos, cobra
+cuentas y `auth.spec.ts` crea negocios y usuarios que nadie borra después.
+
+```bash
+pnpm test:e2e:local     # levanta Postgres, migra, siembra y corre la suite
+pnpm pruebas:db pnpm seed   # o un solo paso contra esa misma base
+```
+
+`scripts/pruebas-locales.ts` levanta una **PostgreSQL 15 de espacio de usuario** —la misma
+versión mayor que el VPS, en `node_modules`, sin Docker ni root— con sus datos en
+`.pg-pruebas/`, que sobrevive entre corridas. Las variables van por el **entorno del hijo**
+y no por un `.env.pruebas`: está verificado que una variable ya presente le gana a
+`--env-file` y a `process.loadEnvFile()`, así que el seed, Prisma y el build de Next leen
+esta base y sacan del `.env` de siempre todo lo demás.
+
+**`REDIS_URL` se deja vacía a propósito.** `lib/redis.ts` devuelve `null` sin ella y todos
+los publicadores se vuelven no-ops. Apuntando al Redis del VPS —que desde afuera contesta
+`connect ETIMEDOUT`— cada acción que publica un aviso se comía diez segundos, y de ahí
+salía la mitad de los `Test timeout of 120000ms exceeded` de la suite: no era un cuelgue,
+era la red. Sin Redis no hay avisos en vivo, y estas pruebas navegan y recargan.
+
+**Contra el VPS la suite tarda ~15 minutos y no es culpa de las pruebas**: 89 ms de ida y
+vuelta, diez `SELECT 1` en 797 ms, y cada pantalla hace de tres a cinco consultas.
+
 Los e2e usan el **Chrome instalado en la máquina** (`channel: "chrome"`), no el Chromium de
 Playwright: no hay que bajar 130 MB y se prueba contra el navegador que la gente usa. Corren
 contra la base sembrada, así que antes va `pnpm seed`.
@@ -1850,7 +2018,7 @@ reescribe el mismo `.next` que usa el build de producción: al tocar cualquier a
 y el servidor empieza a responder 500 con `Cannot read properties of undefined (reading 'call')`
 y `Could not find files for /_error`. El síntoma no se parece en nada a la causa.
 
-Cinco trampas más, que ya costaron tiempo dos veces cada una:
+Siete trampas más, que ya costaron tiempo dos veces cada una:
 
 - **Next inyecta un `role="alert"` vacío** (`#__next-route-announcer__`) para anunciar los
   cambios de ruta. Un `getByRole("alert")` suelto lo agarra a él y falla con `""`. Hay que
@@ -1874,5 +2042,51 @@ Cinco trampas más, que ya costaron tiempo dos veces cada una:
   estado con `isVisible()` no alcanza —no espera, así que sobre una pantalla a medio pintar
   contesta "no está"—: hay que esperar a que aparezca uno de los dos estados posibles, como
   hace `abrirMesa` con `boton.or(cuadro)`.
+
+- **La carta arranca con TODAS las categorías cerradas**, así que el botón de un
+  plato está `inert` y `getByRole` no lo ve: no está en el árbol de accesibilidad.
+  `agregarProducto` lo clickeaba directo y se quedaba los 120 segundos del
+  presupuesto esperando algo que no iba a aparecer, con un mensaje —"waiting for
+  getByRole button cerveza"— que no menciona ni categorías ni carga. Ahora
+  `abrirCategoriaDe` espera la región "Carta de productos" —el barrido corría
+  antes de que la carta existiera y contaba cero encabezados— y recorre los
+  encabezados **por índice**: abrir uno cierra el anterior, así que "el primero
+  cerrado" vuelve a ser el de antes y el bucle rebota entre dos categorías.
+- **El velo de carga tapa el sondeo de la limpieza.** `cerrarPedidosAbiertos`
+  prueba cinco botones con `isVisible()`, que no espera: sobre la pantalla del
+  pedido todavía pintando, los cinco dan "no está" y el ayudante termina lanzando
+  "no supe cómo cerrar el pedido" sobre uno perfectamente cerrable. Hay que
+  esperar a que se vaya el `status` "Cargando la pantalla" antes de sondear.
+- **Después de una acción, el resultado se mide contra la BASE de la pantalla, no
+  contra el botón que se apretó.** La tarjeta de unir cuentas cambia el botón por
+  el formulario al abrirse, así que "el botón ya no está" también es cierto cuando
+  no pasó nada; y la tarjeta desaparece del todo cuando la unión SÍ funcionó. El
+  reintento se decide contando las cuentas de la mesa, con la pantalla recargada.
+
+### Una prueba que afirma una pantalla vieja no protege nada
+
+La suite acumuló afirmaciones que describían una interfaz que ya no existe, y como
+fallaban todas juntas se leían como "los e2e están rotos" en vez de como lo que eran.
+Lo que estaba desactualizado, y por qué la corrección no es actualizar el texto:
+
+- **El panel de indicadores se eliminó**, pero `auth` y `negocio-nuevo` seguían buscando
+  su encabezado con el nombre del negocio y sus tarjetas "Mesas" y "Productos en carta".
+  Un negocio recién creado se comprueba ahora contra el salón vacío, que es a donde de
+  verdad aterriza.
+- **El precio salió del código y vive en `ListaDePrecios`**, así que `facturacion` clavaba
+  "$50.000" en dos lugares: afirmar el contenido de una tabla que edita el
+  superadministrador es una prueba que se pone roja al cambiar una tarifa, y que una
+  promoción rompe sola. Se comprueba lo que sí tiene que ser cierto siempre: que la
+  pantalla muestre una mensualidad y que el botón cobre **esa misma** cifra.
+- **El mismo mensaje sale dos veces y está bien que salga dos veces**: `defineAction` pone
+  el error del formulario y el del campo, así que "las contraseñas no coinciden" aparece
+  arriba y debajo del campo. Eso es un `.first()`, no un defecto.
+- **El middleware manda el `?desde=` con la URL entera** para poder devolver a donde se
+  iba, así que un `toHaveURL(/\/superadmin\/ingresar$/)` con `$` no puede pasar nunca.
+
+Los rótulos que cambiaron —"Entrar al piso", "Cerrar sesión", "Consola de Cuentas",
+"VENTAS FACTURADAS"— son actualizaciones de una línea, y valen como recordatorio: una
+afirmación sobre copy se rompe cada vez que marketing toca una palabra. Cuando lo que
+importa es la estructura y no la frase, conviene afirmar el rol y el papel del elemento.
 
 El gestor de paquetes es **pnpm**. No hay `package-lock.json`.

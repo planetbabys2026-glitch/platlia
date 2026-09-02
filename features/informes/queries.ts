@@ -174,7 +174,17 @@ export async function getAnulaciones(businessId: string, periodo: Periodo) {
         order: { select: { code: true } },
       },
     }),
-    db.order.count({ where: { businessDate: enElPeriodo(periodo), status: "ANULADA" } }),
+    /**
+     * Las cuentas unidas a otra NO son anulaciones.
+     *
+     * Al unir, las de origen quedan `ANULADA` y sin renglones —se mudaron todos—,
+     * así que sin este filtro un grupo que junta tres mesas para pagar de una
+     * aparece acá como tres ventas anuladas. Anular es tirar una venta; unir es
+     * la misma venta cobrada en un solo tiquete.
+     */
+    db.order.count({
+      where: { businessDate: enElPeriodo(periodo), status: "ANULADA", mergedIntoId: null },
+    }),
   ]);
 
   return { renglones, pedidosAnulados: pedidos };

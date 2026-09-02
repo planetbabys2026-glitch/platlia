@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppModule } from "@/generated/prisma/enums";
 import {
-  getCajaAbierta,
+  getCajasDisponibles,
   getCuentasCobradas,
   getCuentasPorCobrar,
   getMovimientos,
   getResumenCaja,
+  getSesionDeTrabajo,
   getUltimoCierre,
   TOPE_CUENTAS_COBRADAS,
 } from "@/features/caja/queries";
@@ -39,10 +40,28 @@ export default async function CajaPage({
   }
   const { jornada } = await searchParams;
   const businessDate = currentBusinessDate(settings);
-  const caja = await getCajaAbierta(ctx.business.id);
+
+  /**
+   * El turno que esta persona opera, no "el" turno del negocio.
+   *
+   * Con varias cajas abiertas, mostrarle a cada quien la primera que devolviera
+   * la base sería mostrarle el arqueo de otra persona: la cifra contra la que
+   * después cuenta su propio cajón. `getSesionDeTrabajo` usa la misma regla que
+   * el cobro, que es lo que garantiza que el arqueo que se mira y el cajón donde
+   * cae la plata sean el mismo.
+   */
+  const { sesion: caja, abiertas } = await getSesionDeTrabajo(ctx.business.id, ctx.user.id);
+  const cajasDisponibles = await getCajasDisponibles(ctx.business.id);
+  // Los turnos de los demás, para que el cajero sepa por qué su caja no está libre.
+  const otrosTurnos = abiertas
+    .filter((s) => s.id !== caja?.id)
+    .map((s) => ({ caja: s.cashRegister.name, quien: s.openedBy.name }));
   // Un booleano, no la configuración: nada de lo fiscal tiene por qué cruzar al
   // navegador.
   const puedeFacturar = puedeFacturarElectronicamente(settings, plataformaFacturaConfigurada());
+  // Un booleano, nunca el hash: la clave de salidas no tiene por qué cruzar al
+  // navegador, ni siquiera hasheada.
+  const claveSalidasPuesta = Boolean(settings.expensePinHash);
 
   /**
    * La jornada que se está mirando en el historial de cobros.
@@ -87,19 +106,22 @@ export default async function CajaPage({
           a mano con su propio clamp, y sin la guía punteada que cierra el bloque
           en todas las demás pantallas. */}
       <EncabezadoPantalla
-        titulo={caja ? `Caja ${caja.code}` : "Caja"}
+        titulo={caja ? caja.cashRegister.name : "Caja"}
         descripcion={
           caja
-            ? `Abierta por ${caja.openedBy.name} · ${formatDateTimeInTimeZone(caja.openedAt, ctx.business.timeZone)}`
+            ? `Turno ${caja.code} · abierto por ${caja.openedBy.name} · ${formatDateTimeInTimeZone(caja.openedAt, ctx.business.timeZone)}`
             : "Control de arqueo, movimientos de efectivo y cobro de cuentas."
         }
       />
 
       <PanelCaja
         caja={caja}
+        cajasDisponibles={cajasDisponibles}
+        otrosTurnos={otrosTurnos}
         ultimoCierre={ultimoCierre}
         resumen={resumen}
         movimientos={movimientos}
+        claveSalidasPuesta={claveSalidasPuesta}
         cuentas={cuentas}
         cobradas={cobradas.pedidos}
         cobradasTotal={cobradas.total}

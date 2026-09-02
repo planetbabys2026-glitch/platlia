@@ -27,6 +27,27 @@ export const montoCopPositivo = z.preprocess(
     .min(0, "El monto no puede ser negativo."),
 );
 
+/**
+ * Un monto que puede venir vacío, y entonces vale cero.
+ *
+ * Un campo de plata opcional —la base en bancos de quien no la cuadra— llega
+ * como `""` desde el formulario, y `montoCopPositivo` lo rechaza con "Escribí un
+ * monto en pesos": el formulario entero falla por un campo que la pantalla
+ * presenta como opcional, y el mensaje ni siquiera dice cuál era. Pasó con la
+ * apertura de caja, y el síntoma —"no se puede abrir el turno"— no se parece en
+ * nada a la causa.
+ */
+export const montoCopOCero = z.preprocess(
+  (v) => {
+    if (v === "" || v === undefined || v === null) return 0;
+    return typeof v === "string" ? (parseCop(v) ?? Number.NaN) : v;
+  },
+  z
+    .number({ error: "Escribí un monto en pesos." })
+    .int("El monto va en pesos enteros, sin centavos.")
+    .min(0, "El monto no puede ser negativo."),
+);
+
 /** Cantidad de unidades de un renglón del pedido. */
 export const cantidad = z.preprocess(
   (v) => (typeof v === "string" ? Number.parseInt(v, 10) : v),

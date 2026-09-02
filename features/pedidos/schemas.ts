@@ -150,6 +150,41 @@ export const renombrarCuentaSchema = z.object({
 /** Cerrar la mesa entera cuando nadie pidió nada. */
 export const liberarMesaSchema = z.object({ tableId: id });
 
+/**
+ * Mudar una cuenta a otra mesa.
+ *
+ * El comensal se cambia de mesa y la cuenta se va con él. Hasta acá había que
+ * cerrarla sin consumo y volver a tomar todo, o dejar que el sistema dijera una
+ * mesa distinta de la que el mesero canta.
+ */
+export const trasladarPedidoSchema = z.object({
+  orderId: id,
+  tableIdDestino: id,
+});
+
+/**
+ * Unir varias cuentas en una.
+ *
+ * `orderIds` son TODAS las que participan, `destinoOrderId` la que se queda con
+ * los renglones —y tiene que ser una de ellas—. Se piden las dos cosas y no "las
+ * otras más el destino" para que el servidor valide exactamente el conjunto que
+ * la pantalla mostró.
+ */
+export const unirCuentasSchema = z.object({
+  orderIds: z.preprocess(
+    // Un formulario con casillas manda un solo valor cuando hay una marcada y un
+    // arreglo cuando hay varias. Se deduplica acá: el mismo id repetido haría que
+    // la consulta devolviera menos filas de las pedidas y el error hablara de una
+    // cuenta que no existe, cuando el problema es otro.
+    (v) => {
+      const bruto = Array.isArray(v) ? v : v === undefined || v === "" ? [] : [v];
+      return [...new Set(bruto)];
+    },
+    z.array(id).min(2, "Elegí al menos dos cuentas para unir.").max(20),
+  ),
+  destinoOrderId: id,
+});
+
 export const anularPedidoSchema = z.object({
   orderId: id,
   motivo: z

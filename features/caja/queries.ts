@@ -1,6 +1,7 @@
 import "server-only";
 import { tenantDb, type TenantDb } from "@/lib/db/tenant";
-import { HAY_QUE_COBRAR } from "@/features/caja/reglas";
+import { cuentaDelMetodo, type CuentaDeSaldo } from "@/features/caja/medios-de-pago";
+import { HAY_QUE_COBRAR, sesionDeCobro } from "@/features/caja/reglas";
 
 /**
  * Consultas de caja.
@@ -10,35 +11,112 @@ import { HAY_QUE_COBRAR } from "@/features/caja/reglas";
  * se cachea: si estas cuentas están mal, alguien paga la diferencia de su bolsillo.
  */
 
-export type ResumenCaja = {
-  openingFloatCop: number;
-  /** Ventas cobradas en efectivo durante el turno. */
-  efectivoVentasCop: number;
+/** Un saldo del turno: el cajón, o la cuenta del banco. */
+export type SaldoDeCaja = {
+  /** La base con la que se abrió. */
+  baseCop: number;
+  /** Cobros de la jornada que caen en este saldo. */
+  ventasCop: number;
+  /** Entradas y ajustes (el ajuste va con su signo). */
   ingresosCop: number;
+  /** Gastos y retiros, como magnitud. */
   egresosCop: number;
-  /** Lo que debería haber en el cajón ahora mismo. */
+  /** Lo que debería haber acá ahora mismo. */
   esperadoCop: number;
-  /** Cobros que no son efectivo, para cuadrar contra el datáfono y las apps. */
-  porMetodo: { method: string; totalCop: number; cantidad: number }[];
 };
 
-export async function getCajaAbierta(businessId: string) {
-  return tenantDb(businessId).cashSession.findFirst({
+export type ResumenCaja = {
+  efectivo: SaldoDeCaja;
+  bancos: SaldoDeCaja;
+  /** Cobros que no se cuentan en ningún saldo: bonos y "otro". */
+  otrosCop: number;
+  porMetodo: { method: string; totalCop: number; cantidad: number; cuenta: CuentaDeSaldo }[];
+};
+
+/** Una caja física del negocio, con quién la tiene abierta ahora. */
+export async function getCajasDelNegocio(businessId: string) {
+  const cajas = await tenantDb(businessId).cashRegister.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      active: true,
+      sortOrder: true,
+      sessions: {
+        where: { status: "ABIERTA" },
+        select: { id: true, code: true, openedAt: true, openedBy: { select: { name: true } } },
+        take: 1,
+      },
+      _count: { select: { sessions: true } },
+    },
+  });
+
+  return cajas.map((caja) => ({
+    id: caja.id,
+    name: caja.name,
+    active: caja.active,
+    sortOrder: caja.sortOrder,
+    turnos: caja._count.sessions,
+    abierta: caja.sessions[0] ?? null,
+  }));
+}
+
+export type CajaDelNegocio = Awaited<ReturnType<typeof getCajasDelNegocio>>[number];
+
+/** Todos los turnos abiertos del negocio ahora mismo. */
+export async function getSesionesAbiertas(businessId: string) {
+  return tenantDb(businessId).cashSession.findMany({
     where: { status: "ABIERTA" },
+    orderBy: { openedAt: "asc" },
     select: {
       id: true,
       code: true,
       businessDate: true,
       openingFloatCop: true,
+      openingBankCop: true,
       openedAt: true,
+      openedById: true,
       openedBy: { select: { name: true } },
+      cashRegister: { select: { id: true, name: true } },
     },
-    orderBy: { openedAt: "desc" },
   });
 }
 
+export type SesionAbiertaDeCaja = Awaited<ReturnType<typeof getSesionesAbiertas>>[number];
+
 /**
- * Lo que debería haber en el cajón: base + ventas en efectivo + ingresos − salidas.
+ * El turno que esta persona está operando.
+ *
+ * Es `sesionDeCobro` mirado desde la pantalla: la propia si abrió turno; la única
+ * abierta si no tiene (el dueño que se para un rato en la caja); y nada si hay
+ * varias y ninguna es suya, que es cuando la pantalla tiene que pedirle que abra
+ * la suya en vez de mostrarle el arqueo de otro.
+ *
+ * Que la pantalla y el cobro usen la MISMA regla es el punto: si divergieran, el
+ * cajero vería un arqueo y la plata caería en otro.
+ */
+export async function getSesionDeTrabajo(businessId: string, userId: string) {
+  const abiertas = await getSesionesAbiertas(businessId);
+  const elegida = sesionDeCobro(
+    abiertas.map((s) => ({ id: s.id, openedById: s.openedById, cajaNombre: s.cashRegister.name })),
+    userId,
+  );
+  if (!elegida.ok) return { sesion: null, abiertas };
+
+  return {
+    sesion: abiertas.find((s) => s.id === elegida.cashSessionId) ?? null,
+    abiertas,
+  };
+}
+
+/**
+ * Los dos saldos del turno: el cajón y el banco.
+ *
+ * Hasta acá el arqueo cuadraba uno solo. Todo lo que entraba por datáfono o Nequi
+ * se listaba "por método" sin nada contra qué compararlo, y todo lo que salía
+ * —incluido el proveedor pagado por transferencia— descontaba del cajón: el turno
+ * cerraba con un faltante por plata que nunca había estado ahí.
  *
  * Los ajustes van con signo (un faltante se registra negativo) y por eso suman
  * como vienen; ingresos, egresos y retiros son magnitudes y el signo lo pone su
@@ -51,7 +129,7 @@ export async function getResumenCaja(
   const [sesion, pagos, movimientos] = await Promise.all([
     db.cashSession.findFirstOrThrow({
       where: { id: cashSessionId },
-      select: { openingFloatCop: true },
+      select: { openingFloatCop: true, openingBankCop: true },
     }),
     db.orderPayment.groupBy({
       by: ["method"],
@@ -60,7 +138,7 @@ export async function getResumenCaja(
       _count: { _all: true },
     }),
     db.cashMovement.groupBy({
-      by: ["type"],
+      by: ["type", "account"],
       where: { cashSessionId },
       _sum: { amountCop: true },
     }),
@@ -68,27 +146,36 @@ export async function getResumenCaja(
 
   const porMetodo = pagos
     .map((p) => ({
-      method: p.method,
+      method: p.method as string,
       totalCop: p._sum.amountCop ?? 0,
       cantidad: p._count._all,
+      cuenta: cuentaDelMetodo(p.method),
     }))
     .sort((a, b) => b.totalCop - a.totalCop);
 
-  const efectivoVentasCop =
-    porMetodo.find((p) => p.method === "EFECTIVO")?.totalCop ?? 0;
+  const ventasDe = (cuenta: CuentaDeSaldo) =>
+    porMetodo.filter((p) => p.cuenta === cuenta).reduce((t, p) => t + p.totalCop, 0);
 
-  const suma = (tipo: string) =>
-    movimientos.find((m) => m.type === tipo)?._sum.amountCop ?? 0;
+  const movimientoDe = (tipo: string, cuenta: "EFECTIVO" | "BANCO") =>
+    movimientos.find((m) => m.type === tipo && m.account === cuenta)?._sum.amountCop ?? 0;
 
-  const ingresosCop = suma("INGRESO") + suma("AJUSTE");
-  const egresosCop = suma("EGRESO") + suma("RETIRO");
+  const saldo = (cuenta: "EFECTIVO" | "BANCO", baseCop: number): SaldoDeCaja => {
+    const ventasCop = ventasDe(cuenta);
+    const ingresosCop = movimientoDe("INGRESO", cuenta) + movimientoDe("AJUSTE", cuenta);
+    const egresosCop = movimientoDe("EGRESO", cuenta) + movimientoDe("RETIRO", cuenta);
+    return {
+      baseCop,
+      ventasCop,
+      ingresosCop,
+      egresosCop,
+      esperadoCop: baseCop + ventasCop + ingresosCop - egresosCop,
+    };
+  };
 
   return {
-    openingFloatCop: sesion.openingFloatCop,
-    efectivoVentasCop,
-    ingresosCop,
-    egresosCop,
-    esperadoCop: sesion.openingFloatCop + efectivoVentasCop + ingresosCop - egresosCop,
+    efectivo: saldo("EFECTIVO", sesion.openingFloatCop),
+    bancos: saldo("BANCO", sesion.openingBankCop),
+    otrosCop: ventasDe("OTRO"),
     porMetodo,
   };
 }
@@ -113,10 +200,40 @@ export async function getUltimoCierre(businessId: string) {
       expectedCashCop: true,
       countedCashCop: true,
       differenceCop: true,
+      expectedBankCop: true,
+      countedBankCop: true,
+      differenceBankCop: true,
       notes: true,
       closedBy: { select: { name: true } },
+      cashRegister: { select: { name: true } },
     },
   });
+}
+
+/**
+ * Si hay AL MENOS una caja abierta en el negocio.
+ *
+ * Es lo único que necesitan el salón, el POS y la pantalla del pedido: la
+ * pregunta ahí es "¿se puede tomar pedidos?", no "¿en qué cajón cae la plata?".
+ * Antes se traía la sesión entera con `findFirst` y, desde que hay varias cajas,
+ * eso era elegir una al azar para responder un booleano.
+ */
+export async function hayCajaAbierta(businessId: string): Promise<boolean> {
+  const abierta = await tenantDb(businessId).cashSession.findFirst({
+    where: { status: "ABIERTA" },
+    select: { id: true },
+  });
+  return abierta !== null;
+}
+
+/** Las cajas que están libres para abrir turno ahora. */
+export async function getCajasDisponibles(businessId: string) {
+  const cajas = await tenantDb(businessId).cashRegister.findMany({
+    where: { deletedAt: null, active: true, sessions: { none: { status: "ABIERTA" } } },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true },
+  });
+  return cajas;
 }
 
 export async function getMovimientos(businessId: string, cashSessionId: string) {
@@ -125,6 +242,7 @@ export async function getMovimientos(businessId: string, cashSessionId: string) 
     select: {
       id: true,
       type: true,
+      account: true,
       amountCop: true,
       concept: true,
       createdAt: true,

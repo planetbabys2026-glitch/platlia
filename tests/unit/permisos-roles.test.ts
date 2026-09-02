@@ -42,10 +42,10 @@ describe("Lógica de permisos por rol", () => {
     expect(permisos.caja).toBe(false);
   });
 
-  it("el cajero tiene caja, salón/pos, domicilios e informes por defecto", () => {
+  it("el cajero tiene caja, POS, domicilios e informes por defecto", () => {
     const permisos = obtenerPermisosRol(Role.CAJERO);
     expect(permisos.caja).toBe(true);
-    expect(permisos.salon_pos).toBe(true);
+    expect(permisos.pos).toBe(true);
     expect(permisos.domicilios).toBe(true);
     expect(permisos.informes).toBe(true);
     expect(permisos.turnero).toBe(true);
@@ -53,9 +53,31 @@ describe("Lógica de permisos por rol", () => {
     expect(permisos.carta).toBe(false);
   });
 
-  it("el administrador tiene todas las secciones habilitadas por defecto", () => {
+  /**
+   * El salón es la pantalla de tomar pedidos en la mesa, de a un toque y desde un
+   * teléfono. El cajero cobra y el administrador supervisa: ninguno de los dos la
+   * usa, y encendida les ocupaba uno de los cuatro lugares de la barra inferior.
+   * Sigue siendo configurable —un negocio chico puede devolvérsela—; lo que cambió
+   * es de qué lado arranca.
+   */
+  it("ni el cajero ni el administrador ven el salón por defecto", () => {
+    expect(obtenerPermisosRol(Role.CAJERO).salon_pos).toBe(false);
+    expect(obtenerPermisosRol(Role.ADMINISTRADOR).salon_pos).toBe(false);
+  });
+
+  it("el propietario sí lo ve, como todo lo demás", () => {
+    expect(tienePermisoSeccion(Role.PROPIETARIO, "salon_pos")).toBe(true);
+  });
+
+  it("un negocio puede devolvérselo al cajero desde Permisos de roles", () => {
+    const raw = JSON.stringify({ [Role.CAJERO]: { salon_pos: true } });
+    expect(tienePermisoSeccion(Role.CAJERO, "salon_pos", raw)).toBe(true);
+  });
+
+  it("el administrador tiene todas las secciones de gestión por defecto", () => {
     const permisos = obtenerPermisosRol(Role.ADMINISTRADOR);
     for (const seccion of SECCIONES_SISTEMA) {
+      if (seccion.id === "salon_pos") continue;
       expect(permisos[seccion.id]).toBe(true);
     }
   });

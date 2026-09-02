@@ -27,9 +27,11 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
   await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 
-  // Arranca vacío: sin mesas y sin carta.
-  await expect(page.getByText("Mesas").locator("..")).toContainText("0");
-  await expect(page.getByText("Productos en carta").locator("..")).toContainText("0");
+  // Arranca vacío. Se comprueba contra el salón y no contra las tarjetas "Mesas"
+  // y "Productos en carta": eran del panel de indicadores, que ya no existe.
+  await expect(
+    page.getByText(/todavía no tiene áreas ni mesas configuradas/i),
+  ).toBeVisible();
 
   // ── Salón: un área y doce mesas de un saque ──────────────────────────────
   await page.goto("/administracion/salon");
@@ -66,9 +68,9 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
 
   // ── Operar: caja, mesa, cobro ────────────────────────────────────────────
   await page.goto("/caja");
-  await page.getByLabel(/base del turno/i).fill("0");
+  await page.getByLabel(/base en efectivo/i).fill("0");
   await page.getByRole("button", { name: /abrir caja/i }).click();
-  await expect(page.getByRole("heading", { name: /^caja \d+$/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^caja 1$/i })).toBeVisible();
 
   await page.goto("/salon");
   await page.getByRole("button", { name: /abrir pedido en la mesa 1$/i }).click();
@@ -87,6 +89,8 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
   await page.goto("/caja");
   await expect(page.getByText("Ventas en efectivo").locator("..")).toContainText("$5.000");
   await page.getByLabel(/cuánto contaste/i).fill("5000");
+  // El turno cuadra dos saldos: el cajón y la cuenta del banco.
+  await page.getByLabel(/cuánto dice la cuenta/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
   await expect(page.getByRole("heading", { name: /caja cerrada/i })).toBeVisible();
   await expect(page.getByText("Diferencia").locator("..")).toContainText("$0");
@@ -114,7 +118,7 @@ test("la configuración cambia cómo se factura", async ({ page }) => {
   await expect(formOperacion.getByRole("status")).toContainText("Guardado");
 
   await page.goto("/caja");
-  await page.getByLabel(/base del turno/i).fill("0");
+  await page.getByLabel(/base en efectivo/i).fill("0");
   await page.getByRole("button", { name: /abrir caja/i }).click();
 
   await page.goto("/salon");
@@ -131,6 +135,8 @@ test("la configuración cambia cómo se factura", async ({ page }) => {
   await expect(page.getByText("Pagada").first()).toBeVisible();
   await page.goto("/caja");
   await page.getByLabel(/cuánto contaste/i).fill("5400");
+  // El turno cuadra dos saldos: el cajón y la cuenta del banco.
+  await page.getByLabel(/cuánto dice la cuenta/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
   await expect(page.getByRole("heading", { name: /caja cerrada/i })).toBeVisible();
 });

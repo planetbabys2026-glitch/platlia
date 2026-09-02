@@ -157,8 +157,10 @@ test("una mesa abierta por error se cierra sin motivo y sin cajero", async ({ pa
   // Y la caja cierra sin quejarse de cuentas colgadas.
   await irA(page, "/caja");
   await page.getByLabel(/cuánto contaste/i).fill("0");
+  // El turno cuadra dos saldos: el cajón y la cuenta del banco.
+  await page.getByLabel(/cuánto dice la cuenta/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
-  await expect(page.getByLabel(/base del turno/i)).toBeVisible();
+  await expect(page.getByLabel(/base en efectivo/i)).toBeVisible();
 });
 
 test("un pedido para llevar sin productos se cierra desde el salón", async ({ page }) => {

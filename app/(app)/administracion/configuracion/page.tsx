@@ -6,6 +6,7 @@ import {
   getDescargasDelAgente,
   getSettings,
 } from "@/features/negocio/queries";
+import { getCajasDelNegocio } from "@/features/caja/queries";
 import { parseExtraSettings } from "@/features/negocio/extra-settings";
 import { getFacturacion } from "@/features/facturacion/queries";
 import { requireRole } from "@/lib/auth/dal";
@@ -133,6 +134,21 @@ export default async function ConfiguracionPage() {
     ? await contarSedesDeLaCuenta(ctx.business.id)
     : 1;
 
+  // Las cajas físicas y el estado de la clave de salidas: las dos son del
+  // propietario, así que ni siquiera se consultan para los demás.
+  const cajas = esPropietario ? await getCajasDelNegocio(ctx.business.id) : null;
+
+  /**
+   * El hash de la clave de salidas NO cruza al navegador.
+   *
+   * `settings` se pasa entero con un spread, así que toda columna nueva de
+   * `BusinessSettings` viaja sola al componente cliente. Eso estuvo bien mientras
+   * la tabla no guardó secretos —las credenciales de Factus se sacaron de acá por
+   * este mismo motivo— y deja de estarlo con `expensePinHash` adentro. Se saca
+   * explícitamente y a la pantalla va un booleano.
+   */
+  const { expensePinHash, ...settingsSinSecretos } = settings;
+
   return (
     <div className="space-y-6">
       {/* El `h1` estaba copiado a mano con su propio `clamp`, así que era la única
@@ -146,7 +162,7 @@ export default async function ConfiguracionPage() {
       <PanelConfiguracion
         negocio={negocio}
         settings={{
-          ...settings,
+          ...settingsSinSecretos,
           scheduleEnabled: extra.scheduleEnabled,
           scheduleOpeningTime: extra.scheduleOpeningTime,
           scheduleClosingTime: extra.scheduleClosingTime,
@@ -170,6 +186,8 @@ export default async function ConfiguracionPage() {
         }
         sede={negocio.name}
         cantidadDeSedes={sedesDeLaCuenta}
+        cajas={cajas}
+        claveSalidasPuesta={Boolean(expensePinHash)}
         urlMcp={`${env.APP_URL}/api/mcp`}
       />
     </div>

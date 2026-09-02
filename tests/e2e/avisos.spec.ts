@@ -74,8 +74,8 @@ async function enviarACocina(page: Page) {
 async function asegurarCajaAbierta(page: Page) {
   await irA(page, "/caja");
 
-  const base = page.getByLabel(/base del turno/i);
-  const turnoAbierto = page.getByRole("heading", { name: /^caja \d+$/i });
+  const base = page.getByLabel(/base en efectivo/i);
+  const turnoAbierto = page.getByRole("heading", { name: /^caja 1$/i });
 
   // Hay que esperar a que la pantalla pinte antes de decidir. Preguntar
   // `isVisible()` sobre una página en blanco contesta "no" para las dos, y

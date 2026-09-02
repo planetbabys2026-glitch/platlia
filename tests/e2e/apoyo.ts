@@ -52,6 +52,49 @@ export function laCuenta(page: Page) {
  * la cuenta entera porque `innerText` —que es lo que usa `toContainText`— devuelve
  * el panel a medias mientras las tarjetas todavía están animando su entrada.
  */
+/**
+ * Despliega la categoría que esconde un producto.
+ *
+ * Las categorías de la carta **arrancan cerradas y solo una se abre a la vez**,
+ * así que el botón del plato no está tocable hasta que alguien abre su sección.
+ * `agregarProducto` clickeaba el producto directo y se quedaba esperando un botón
+ * que no iba a aparecer nunca: 120 segundos de presupuesto y un mensaje que no
+ * menciona categorías por ningún lado.
+ *
+ * Se recorren los encabezados por índice y no "el primero cerrado": abrir uno
+ * cierra el que estaba, así que "el primero cerrado" vuelve a ser el anterior y
+ * el bucle rebota entre dos categorías para siempre.
+ */
+async function abrirCategoriaDe(page: Page, producto: RegExp) {
+  const boton = page.getByRole("button", { name: producto }).first();
+  if (await boton.isVisible().catch(() => false)) return;
+
+  /**
+   * Esperar la carta ANTES de contar acordeones.
+   *
+   * `agregarProducto` se llama apenas se abre la mesa, así que la primera vuelta
+   * corre contra una pantalla que todavía no pintó la carta: el barrido contaba
+   * cero encabezados, no abría nada, y el clic de después se quedaba los 120
+   * segundos del presupuesto esperando un botón que seguía `inert`. El síntoma
+   * —"waiting for getByRole button cerveza"— no menciona ni categorías ni carga.
+   */
+  const carta = page.getByRole("region", { name: "Carta de productos" });
+  await carta.waitFor({ timeout: 15_000 }).catch(() => {});
+
+  // Acotado a la carta: la barra lateral también tiene acordeones con
+  // `aria-expanded`, y abrirlos no acerca a ningún plato.
+  const encabezados = carta.locator("button[aria-expanded]");
+  const cuantos = await encabezados.count();
+
+  for (let i = 0; i < cuantos; i++) {
+    const encabezado = encabezados.nth(i);
+    if ((await encabezado.getAttribute("aria-expanded")) === "false") {
+      await encabezado.click();
+    }
+    if (await boton.isVisible().catch(() => false)) return;
+  }
+}
+
 export async function agregarProducto(page: Page, producto: RegExp) {
   const cuenta = laCuenta(page);
   const renglon = cuenta.getByText(producto).first();
@@ -64,7 +107,12 @@ export async function agregarProducto(page: Page, producto: RegExp) {
   for (let intento = 0; intento < 6; intento++) {
     if (await confirmado.isVisible().catch(() => false)) return;
     if (!(await renglon.isVisible().catch(() => false))) {
-      await page.getByRole("button", { name: producto }).click();
+      await abrirCategoriaDe(page, producto);
+      await page
+        .getByRole("button", { name: producto })
+        .first()
+        .click({ timeout: 10_000 })
+        .catch(() => {});
     }
     try {
       await expect(confirmado).toBeVisible({ timeout: 8000 });
@@ -187,9 +235,26 @@ export async function irA(page: Page, ruta: string) {
  * mesas al salón y quien vende de mostrador al POS, así que la prueba no puede
  * fijar una sola ruta.
  */
-export const PANTALLA_DE_ENTRADA = /\/(salon|pos|cocina)$/;
+// `caja` entró a la lista cuando el salón dejó de venir encendido para el
+// cajero: su pantalla de trabajo es el arqueo, y abrir el turno es lo primero
+// que hace al llegar.
+export const PANTALLA_DE_ENTRADA = /\/(salon|pos|cocina|caja)$/;
 
-export async function ingresar(page: Page, datos = CAJERO) {
+/**
+ * Entra a la aplicación. Por defecto, como el DUEÑO.
+ *
+ * Antes el usuario por defecto era el CAJERO, y con él se sentaban las mesas en
+ * ocho archivos. Desde que el salón dejó de venir encendido para ese rol —lo usa
+ * el mesero, que es quien toma pedidos parado al lado de la mesa— esas pruebas
+ * caían en un 404 que no menciona permisos por ningún lado.
+ *
+ * El dueño y no el mesero porque casi todos estos flujos sientan una mesa Y la
+ * cobran: con el mesero habría que volver a entrar como cajero en la mitad de
+ * cada prueba, que es más lento y más frágil. Que un rol vea lo que le toca lo
+ * fija `tests/unit/permisos-roles.test.ts`, que es donde esa regla se puede
+ * probar sin navegador.
+ */
+export async function ingresar(page: Page, datos = DUENO) {
   await page.goto("/ingresar");
   await page.getByLabel("Correo").fill(datos.email);
   await page.getByLabel("Contraseña", { exact: true }).fill(datos.password);
@@ -252,6 +317,20 @@ export async function cerrarPedidosAbiertos(page: Page) {
     }
 
     await page.goto(href);
+
+    /**
+     * Esperar a que el velo de carga se vaya ANTES de sondear los botones.
+     *
+     * Ninguna de las comprobaciones de abajo espera —`isVisible()` no lo hace—,
+     * así que sobre una pantalla a medio pintar todas contestan "no está" y el
+     * bucle termina lanzando "no supe cómo cerrar el pedido" sobre uno
+     * perfectamente cerrable. Es el mismo cuidado que ya tiene `abrirMesa` con su
+     * `boton.or(cuadro)`.
+     */
+    await page
+      .getByRole("status", { name: /cargando la pantalla/i })
+      .waitFor({ state: "hidden", timeout: 20_000 })
+      .catch(() => {});
 
     const cobrar = page.getByRole("button", { name: /registrar pago/i });
     if (await cobrar.isVisible().catch(() => false)) {
@@ -364,7 +443,7 @@ export async function dejarCajaCerrada(page: Page) {
   await page.goto(CIERRE_DE_TURNO);
 
   const cerrar = page.getByRole("button", { name: /cerrar caja/i });
-  const abrir = page.getByLabel(/base del turno/i);
+  const abrir = page.getByLabel(/base en efectivo/i);
 
   // Esperar a que la pantalla diga en cuál de los dos estados está, igual que
   // `abrirMesa` con la mesa libre y la ocupada. `isVisible()` no espera: sobre
@@ -378,17 +457,22 @@ export async function dejarCajaCerrada(page: Page) {
   await cerrarPedidosAbiertos(page);
 
   await page.goto(CIERRE_DE_TURNO);
+  // El turno cuadra dos saldos: el cajón y la cuenta del banco.
   await page.getByLabel(/cuánto contaste/i).fill("0");
+  await page.getByLabel(/cuánto dice la cuenta/i).fill("0");
   await page.getByRole("button", { name: /cerrar caja/i }).click();
 
-  await expect(page.getByLabel(/base del turno/i)).toBeVisible();
+  await expect(page.getByLabel(/base en efectivo/i)).toBeVisible();
 }
 
 /** Abre la caja partiendo de donde sea que esté. */
 export async function abrirCaja(page: Page, base = "0") {
   await dejarCajaCerrada(page);
   await page.goto(CIERRE_DE_TURNO);
-  await page.getByLabel(/base del turno/i).fill(base);
+  await page.getByLabel(/base en efectivo/i).fill(base);
   await page.getByRole("button", { name: /abrir caja/i }).click();
-  await expect(page.getByRole("heading", { name: /^caja \d+$/i })).toBeVisible();
+  // El encabezado es el nombre de la CAJA FÍSICA —"Caja 1" en la base sembrada—,
+  // no "Caja <n>" del turno: desde que la caja es una entidad, el turno es un
+  // número dentro de ella y el título dice dónde está parada la persona.
+  await expect(page.getByRole("heading", { name: /^caja 1$/i })).toBeVisible();
 }

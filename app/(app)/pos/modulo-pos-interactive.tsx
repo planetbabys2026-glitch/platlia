@@ -207,6 +207,12 @@ function cartDesdePedido(pedido: PosPedidoDetalle): CartItem[] {
 type ModuloPosInteractiveProps = {
   carta: PosCategoria[];
   caja: { id: string; openingFloatCop: number } | null;
+  /**
+   * Las cajas físicas libres para abrir turno. Vacía significa que todas están
+   * ocupadas por otra persona, que es distinto de que el negocio no tenga
+   * ninguna: son dos mensajes distintos y dos salidas distintas.
+   */
+  cajasDisponibles: { id: string; name: string }[];
   pedidosAbiertos: PosPedidoAbierto[];
   pedidoInicial?: PosPedidoDetalle | null;
   settings: {
@@ -319,6 +325,7 @@ function CampoPedido({
 export function ModuloPosInteractive({
   carta,
   caja,
+  cajasDisponibles,
   pedidosAbiertos,
   pedidoInicial,
   settings,
@@ -897,9 +904,37 @@ export function ModuloPosInteractive({
               </Alert>
             )}
 
+            {/* En qué caja física está parado quien abre. Con una sola no se
+                pregunta: elegir entre una opción es una decisión que no existe.
+                Con varias hay que decirlo, porque de eso depende en qué cajón
+                cae la plata de la noche. */}
+            {cajasDisponibles.length > 1 ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="cashRegisterId" className="text-xs font-semibold">
+                  ¿En qué caja estás? *
+                </Label>
+                <select
+                  id="cashRegisterId"
+                  name="cashRegisterId"
+                  className="h-11 w-full rounded-xl border border-border bg-[var(--input-bg)] px-3 text-sm"
+                  required
+                >
+                  {cajasDisponibles.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              cajasDisponibles[0] && (
+                <input type="hidden" name="cashRegisterId" value={cajasDisponibles[0].id} />
+              )
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="openingFloatCop" className="text-xs font-semibold">
-                Base Inicial de Caja ($ COP) *
+                Base en efectivo ($ COP) *
               </Label>
               <Input
                 id="openingFloatCop"
@@ -912,13 +947,38 @@ export function ModuloPosInteractive({
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="openingBankCop" className="text-xs font-semibold">
+                Base en bancos ($ COP)
+              </Label>
+              <Input
+                id="openingBankCop"
+                name="openingBankCop"
+                type="text"
+                defaultValue="0"
+                placeholder="0"
+                className="h-11 text-base font-bold rounded-xl font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Lo que hay en la cuenta al empezar. Contra esto se cuadra lo cobrado
+                con datáfono, Nequi y transferencia.
+              </p>
+            </div>
+
             <Button
               type="submit"
-              disabled={pendingCaja}
+              disabled={pendingCaja || cajasDisponibles.length === 0}
               className="w-full h-11 bg-brand text-brand-foreground hover:bg-brand/90 font-bold rounded-xl text-sm"
             >
               {pendingCaja ? "Abriendo turno..." : "Abrir turno de caja"}
             </Button>
+
+            {cajasDisponibles.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center">
+                Todas las cajas del negocio tienen un turno abierto. Pedile a quien
+                la esté usando que cierre el suyo, o creá otra caja en Configuración.
+              </p>
+            )}
           </form>
         </Card>
       ) : (

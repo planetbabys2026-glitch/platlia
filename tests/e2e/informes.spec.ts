@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { abrirCaja, dejarCajaCerrada, ingresar, laCuenta } from "./apoyo";
+import { abrirCaja, agregarProducto, dejarCajaCerrada, ingresar, laCuenta } from "./apoyo";
 
 /**
  * El informe de la jornada.
@@ -19,8 +19,8 @@ test("una venta cobrada aparece en el informe con el impuesto desagregado", asyn
   // Punto de partida: lo que el informe ya trae de esta jornada.
   await page.goto("/informes");
   await expect(page.getByRole("heading", { name: "Informes" })).toBeVisible();
-  const ventasAntes = await leerCifra(page, "Ventas");
-  const pedidosAntes = await leerCifra(page, "Pedidos");
+  const ventasAntes = await leerCifra(page, "VENTAS FACTURADAS");
+  const pedidosAntes = await leerCifra(page, "TOTAL COMANDAS");
 
   // Se vende: tres cervezas de $5.000 con 8% incluido.
   await abrirCaja(page);
@@ -28,7 +28,7 @@ test("una venta cobrada aparece en el informe con el impuesto desagregado", asyn
   await page.goto("/salon");
   await page.getByRole("button", { name: /abrir pedido en la mesa 6$/i }).click();
   await expect(page).toHaveURL(/\/pedido\/[a-z0-9]+$/i);
-  await page.getByRole("button", { name: /cerveza nacional \(botella\)/i }).click();
+  await agregarProducto(page, /cerveza nacional \(botella\)/i);
   await page.getByRole("button", { name: "+" }).first().click();
   await page.getByRole("button", { name: "+" }).first().click();
   await expect(laCuenta(page).getByText("Total").locator("..")).toContainText(
@@ -39,8 +39,8 @@ test("una venta cobrada aparece en el informe con el impuesto desagregado", asyn
 
   // El informe ya la refleja.
   await page.goto("/informes");
-  expect(await leerCifra(page, "Ventas")).toBe(ventasAntes + 15000);
-  expect(await leerCifra(page, "Pedidos")).toBe(pedidosAntes + 1);
+  expect(await leerCifra(page, "VENTAS FACTURADAS")).toBe(ventasAntes + 15000);
+  expect(await leerCifra(page, "TOTAL COMANDAS")).toBe(pedidosAntes + 1);
 
   // La desagregación es la que declara el contador: base + impuesto = venta.
   const tarifa = page.getByRole("listitem").filter({ hasText: "Impuesto al consumo" });

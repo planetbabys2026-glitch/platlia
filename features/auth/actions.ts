@@ -77,6 +77,11 @@ async function crearNegocio(nombre: string, userId: string) {
       name: nombre,
       slug,
       settings: { create: {} },
+      // Sin una caja física no se puede abrir turno, y sin turno no se cobra: un
+      // negocio recién creado tiene que poder vender antes de pasar por
+      // Configuración. Las demás las agrega el dueño cuando tenga más de un
+      // punto de cobro.
+      cashRegisters: { create: { name: "Caja 1" } },
       memberships: { create: { userId, role: Role.PROPIETARIO } },
       modules: { create: Object.values(AppModule).map((module) => ({ module })) },
       taxRates: {

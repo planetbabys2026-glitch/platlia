@@ -53,3 +53,59 @@ export function debeIrACaja(pedido: {
       (DOMICILIOS_COBRABLES as readonly string[]).includes(pedido.deliveryStatus))
   );
 }
+
+/**
+ * Si este movimiento saca plata del negocio.
+ *
+ * Es lo que decide si hay que pedir la clave del propietario. El tipo no alcanza
+ * por sí solo: `AJUSTE` es el único que admite signo, y un ajuste negativo es
+ * exactamente lo mismo que un gasto —plata que estaba y ya no está— escrito con
+ * otro nombre. Dejarlo afuera sería dejar abierta la puerta de al lado.
+ */
+export function esSalidaDeDinero(type: string, amountCop: number): boolean {
+  if (type === "EGRESO" || type === "RETIRO") return true;
+  if (type === "AJUSTE") return amountCop < 0;
+  return false;
+}
+
+/** Un turno abierto, con lo mínimo para decidir cuál cobra. */
+export type SesionAbierta = {
+  id: string;
+  openedById: string;
+  /** Para poder nombrar la caja en el mensaje de error. */
+  cajaNombre: string;
+};
+
+export type ResultadoSesionDeCobro =
+  | { ok: true; cashSessionId: string }
+  | { ok: false; motivo: "SIN_CAJA" | "VARIAS_Y_NINGUNA_TUYA" };
+
+/**
+ * En qué caja cae el dinero de este cobro.
+ *
+ * Mientras hubo una sola caja por negocio la pregunta no existía: `findFirst` y
+ * listo. Con varias, elegir mal es plata que aparece en el arqueo de otra
+ * persona, y el faltante lo termina pagando quien no lo hizo.
+ *
+ * El orden es el de la responsabilidad:
+ *
+ * 1. **La tuya.** Si abriste turno, ahí va lo que cobrás. Es el caso normal.
+ * 2. **La única abierta.** El dueño o el administrador que cobran un rato sin
+ *    tener turno propio: si hay una sola caja abierta no hay ambigüedad, y el
+ *    pago igual queda firmado con `receivedById`.
+ * 3. **Se rechaza.** Con dos cajas abiertas y ninguna tuya, cualquier elección
+ *    es adivinar de quién es la plata. Es preferible pedir que abra su turno.
+ */
+export function sesionDeCobro(
+  abiertas: readonly SesionAbierta[],
+  userId: string,
+): ResultadoSesionDeCobro {
+  if (abiertas.length === 0) return { ok: false, motivo: "SIN_CAJA" };
+
+  const propia = abiertas.find((s) => s.openedById === userId);
+  if (propia) return { ok: true, cashSessionId: propia.id };
+
+  if (abiertas.length === 1) return { ok: true, cashSessionId: abiertas[0].id };
+
+  return { ok: false, motivo: "VARIAS_Y_NINGUNA_TUYA" };
+}

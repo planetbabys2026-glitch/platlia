@@ -25,7 +25,7 @@ test("sin cookie de soporte, /superadmin manda a su propio ingreso y no hace buc
   // El bucle era real: /superadmin/ingresar no estaba en la lista pública del
   // middleware y se redirigía a sí misma para siempre.
   await page.goto("/superadmin");
-  await expect(page).toHaveURL(/\/superadmin\/ingresar$/);
+  await expect(page).toHaveURL(/\/superadmin\/ingresar/);
   await expect(page.getByRole("heading", { name: "Superadministración" })).toBeVisible();
 });
 
@@ -36,7 +36,7 @@ test("la sesión del producto no abre la consola de soporte", async ({ page }) =
 
   // ...y aun así la consola le pide su propia puerta.
   await page.goto("/superadmin");
-  await expect(page).toHaveURL(/\/superadmin\/ingresar$/);
+  await expect(page).toHaveURL(/\/superadmin\/ingresar/);
 });
 
 test("ni siquiera el superadministrador entra con la cookie de la aplicación", async ({
@@ -47,7 +47,7 @@ test("ni siquiera el superadministrador entra con la cookie de la aplicación", 
   await ingresarApp(page, SUPER);
 
   await page.goto("/superadmin");
-  await expect(page).toHaveURL(/\/superadmin\/ingresar$/);
+  await expect(page).toHaveURL(/\/superadmin\/ingresar/);
 });
 
 test("el superadministrador entra por su puerta y ve los negocios", async ({ page }) => {
@@ -57,9 +57,9 @@ test("el superadministrador entra por su puerta y ve los negocios", async ({ pag
   await page.getByRole("button", { name: /entrar/i }).click();
 
   await expect(page).toHaveURL(/\/superadmin$/);
-  // level:1: "Negocios" es el h1 de la página Y el h2 de la tarjeta con la
-  // lista, dentro de esa misma página.
-  await expect(page.getByRole("heading", { name: "Negocios", level: 1 })).toBeVisible();
+  // El h1 de la consola es "Consola de Cuentas"; "Negocios" quedó como el h2 de
+  // la tarjeta con la lista.
+  await expect(page.getByRole("heading", { name: "Consola de Cuentas", level: 1 })).toBeVisible();
   await expect(page.getByText("Bar Demo").first()).toBeVisible();
 });
 

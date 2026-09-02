@@ -1,5 +1,7 @@
 import { pool } from "../lib/db/pool";
 import { rootDb } from "../lib/db/root";
+import { exigirBaseBorrable } from "../lib/db/base-local";
+import { env } from "../lib/env";
 
 /**
  * Borra la operación y deja el negocio listo para volver a probar desde cero.
@@ -22,7 +24,10 @@ if (process.env.NODE_ENV === "production") {
 }
 
 async function main() {
-  console.log("🧹 Borrando la operación (se conservan usuarios, mesas y carta)…");
+  // La misma guarda que el seed: esto borra pedidos, pagos y turnos de caja, que
+  // es el historial de plata del negocio. Ver `lib/db/base-local.ts`.
+  const base = exigirBaseBorrable(env.DATABASE_URL, "El reseteo de la operación");
+  console.log(`🧹 Borrando la operación de ${base.nombre} (se conservan usuarios, mesas y carta)…`);
 
   // El orden respeta las llaves foráneas. Varias de estas tablas se irían solas
   // por `onDelete: Cascade`, pero se borran explícitas: si mañana alguien cambia

@@ -177,6 +177,17 @@ enum CashMovementType {
   AJUSTE
 }
 
+/// Dónde está la plata que se mueve: en el cajón o en la cuenta del banco.
+///
+/// Un turno cuadra DOS saldos, no uno. Pagar el hielo en efectivo y pagarlo por
+/// transferencia son dos salidas igual de reales, y hasta acá las dos
+/// descontaban del cajón: el arqueo de la noche daba faltante por una plata que
+/// nunca había estado ahí.
+enum CashAccount {
+  EFECTIVO
+  BANCO
+}
+
 /// Para qué sirve cada impresora del local.
 ///
 /// No es lo mismo la de la caja que la de la plancha: una imprime el recibo del
@@ -254,6 +265,7 @@ model Business {
   orders        Order[]
   orderItems    OrderItem[]
   orderPayments OrderPayment[]
+  cashRegisters CashRegister[]
   cashSessions  CashSession[]
   cashMovements CashMovement[]
   payments      SubscriptionPayment[]
@@ -411,6 +423,21 @@ model BusinessSettings {
 
   /// Permisos de vista personalizados por rol (JSON serializado)
   rolePermissions String @default("{}")
+
+  /// La clave que hay que escribir para registrar una SALIDA de dinero: un gasto,
+  /// un retiro a la caja fuerte o un ajuste negativo.
+  ///
+  /// Se guarda el hash (argon2, el mismo de las contraseñas) y nunca viaja al
+  /// navegador: a la pantalla va un booleano que dice si está configurada. La
+  /// pone y la cambia SOLO el propietario —es la puerta por la que sale la plata,
+  /// y un administrador que puede cambiarla es un administrador que puede sacar
+  /// plata sin que el dueño se entere—.
+  ///
+  /// Null significa "todavía no la configuró": las salidas siguen funcionando
+  /// como antes y Configuración lo avisa. Frenarlas de entrada dejaría sin
+  /// registrar gastos a todo negocio que ya venía trabajando, hasta que su dueño
+  /// entre a poner una clave que nadie le pidió.
+  expensePinHash String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -1226,8 +1253,22 @@ model Order {
   areaId  String?
   area    Area?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
 
+  /// La caja que lo COBRÓ. Null mientras el pedido está abierto.
+  ///
+  /// Antes se escribía al abrirlo, con la única sesión abierta que hubiera. Desde
+  /// que hay varias cajas eso era elegir una al azar —`findFirst` sin orden— y el
+  /// pedido quedaba contra una caja que quizá nunca lo iba a cobrar. Lo escribe
+  /// el pago, que es el momento en que la plata entra a un cajón concreto.
   cashSessionId String?
   cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  /// Si esta cuenta se unió a otra: a cuál. La cuenta origen queda ANULADA y sin
+  /// renglones —se mudaron todos—, y esto es lo que la distingue de una anulación
+  /// de verdad. Sin este campo, cada grupo que junta tres mesas para pagar de una
+  /// aparecería como tres ventas anuladas en el informe.
+  mergedIntoId String?
+  mergedInto   Order?  @relation("CuentasUnidas", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  merged       Order[] @relation("CuentasUnidas")
 
   guestsCount Int?
 
@@ -1466,24 +1507,70 @@ model OrderPayment {
 // Caja
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// La caja FÍSICA: el mueble con el cajón, el datáfono y la persona parada
+/// adelante. Un negocio tiene las que tenga —una barra y un mostrador son dos—,
+/// las crea el propietario desde Configuración, y cada turno (`CashSession`)
+/// ocurre en una de ellas.
+///
+/// Es una entidad y no un texto libre en la sesión porque es contra esto que se
+/// compara el arqueo de anoche con el de hoy: "la barra viene con faltante toda
+/// la semana" es una pregunta que no se puede hacer si la caja es una etiqueta
+/// que cada quien escribe como quiere.
+model CashRegister {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Etiqueta visible: "Caja 1", "Barra", "Mostrador".
+  name      String
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  /// Archivada. No se borra: sus turnos cerrados son el historial del arqueo y
+  /// tienen que seguir diciendo en qué caja pasaron.
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  sessions CashSession[]
+
+  @@unique([businessId, name])
+  @@index([businessId, active, sortOrder])
+}
+
 model CashSession {
   id         String   @id @default(cuid())
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
+  /// En qué caja física ocurre este turno. `Restrict` y no `Cascade`: borrar una
+  /// caja no puede llevarse los arqueos que pasaron en ella.
+  cashRegisterId String
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+
   code         Int
   businessDate DateTime          @db.Date
   status       CashSessionStatus @default(ABIERTA)
 
-  /// Base con la que se abre la caja.
+  /// Las dos bases con las que se abre el turno: la del cajón y la de la cuenta
+  /// del banco contra la que se cobra con datáfono y se pagan proveedores.
   openingFloatCop Int @default(0)
+  openingBankCop  Int @default(0)
 
   /// Se llenan al cerrar: lo que el sistema calculó, lo que la persona contó y la
   /// diferencia. Se guarda la diferencia y no se recalcula al leer, porque el
   /// cálculo esperado depende de datos que después se pueden corregir.
+  ///
+  /// Van por duplicado porque el turno cuadra dos saldos. `differenceCop` se
+  /// queda con el nombre viejo —es la del efectivo, la que ya estaba escrita en
+  /// todos los cierres anteriores— y la del banco es explícita.
   expectedCashCop Int?
   countedCashCop  Int?
   differenceCop   Int?
+
+  expectedBankCop   Int?
+  countedBankCop    Int?
+  differenceBankCop Int?
 
   notes String?
 
@@ -1502,6 +1589,7 @@ model CashSession {
 
   @@unique([businessId, businessDate, code])
   @@index([businessId, status])
+  @@index([businessId, cashRegisterId, status])
 }
 
 /// Entradas y salidas que no son ventas: pagar el domicilio del hielo, retirar
@@ -1515,6 +1603,9 @@ model CashMovement {
   cashSession   CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
 
   type       CashMovementType
+  /// De dónde sale o a dónde entra la plata. El gasto del hielo pagado por
+  /// transferencia no puede descontar del cajón.
+  account    CashAccount      @default(EFECTIVO)
   amountCop  Int
   concept    String
   /// Foto del recibo del gasto, subida a Cloudinary.

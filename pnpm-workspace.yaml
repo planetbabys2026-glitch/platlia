@@ -5,3 +5,6 @@ allowBuilds:
   prisma: true
   esbuild: true
   sharp: true
+  # La Postgres de espacio de usuario con la que corren los e2e: su postinstall
+  # descomprime el binario. Solo se usa en pruebas; no viaja al despliegue.
+  '@embedded-postgres/linux-x64': true

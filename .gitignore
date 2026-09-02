@@ -60,3 +60,6 @@ next-env.d.ts
 # cambia `agente-impresion/`, o sea casi nunca.
 #
 # Se regeneran con `pnpm agente:build` y se commitean junto al cambio de Go.
+
+# La base de PostgreSQL de las pruebas locales (scripts/pruebas-locales.ts).
+.pg-pruebas/

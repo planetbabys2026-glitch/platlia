@@ -10,6 +10,9 @@ import {
   Role,
 } from "@/generated/prisma/enums";
 import { getSettings } from "@/features/negocio/queries";
+import { elegirSesionDeCobro, mensajeSinSesion } from "@/features/caja/sesion";
+import { mensajeDeTraslado, puedeTrasladarse } from "@/features/salon/reglas-traslado";
+import { mensajeDeUnion, puedenUnirse } from "@/features/pedidos/reglas-union";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
 import { cerrarComandaAlDespachar } from "@/features/domicilios/despacho";
 import { avisarAlAgente } from "@/lib/printing/cola";
@@ -24,6 +27,8 @@ import {
   anularPedidoSchema,
   cambiarCantidadSchema,
   liberarMesaSchema,
+  trasladarPedidoSchema,
+  unirCuentasSchema,
   pagoSchema,
   pedidoSchema,
   pedirCuentaSchema,
@@ -93,14 +98,23 @@ export const abrirPedido = defineAction({
     const settings = await getSettings(ctx.business.id);
     const businessDate = currentBusinessDate(settings);
 
-    const caja = await db.cashSession.findFirst({
-      where: { status: "ABIERTA" },
-      select: { id: true },
-    });
-    if (settings.requireOpenCashSession && !caja) {
-      throw new ErrorDeUsuario(
-        "No hay caja abierta. Abrí el turno antes de tomar pedidos, o desactivá esa exigencia en la configuración.",
-      );
+    /**
+     * Acá solo se pregunta si el negocio está trabajando, no en qué cajón cae la
+     * plata: una cuenta de mesa no es de ninguna caja hasta que alguien la cobra.
+     * Antes se traía la sesión con `findFirst` y se le pegaba al pedido; con
+     * varias cajas eso era elegir una al azar y atarle la cuenta a una caja que
+     * quizá nunca la iba a cobrar.
+     */
+    if (settings.requireOpenCashSession) {
+      const alguna = await db.cashSession.findFirst({
+        where: { status: "ABIERTA" },
+        select: { id: true },
+      });
+      if (!alguna) {
+        throw new ErrorDeUsuario(
+          "No hay caja abierta. Abrí el turno antes de tomar pedidos, o desactivá esa exigencia en la configuración.",
+        );
+      }
     }
 
     return conReintento(() =>
@@ -198,7 +212,6 @@ export const abrirPedido = defineAction({
             type: input.type,
             channel: input.type === "MESA" ? OrderChannel.MESERO : OrderChannel.POS,
             tableId: input.tableId ?? null,
-            cashSessionId: caja?.id ?? null,
             guestsCount: input.guestsCount ?? null,
             customerName,
             customerPhone: input.customerPhone ?? null,
@@ -860,13 +873,9 @@ export const registrarPago = defineAction({
       if (pedido.status === "PAGADA") throw new ErrorDeUsuario("El pedido ya está pagado.");
       if (pedido.status === "ANULADA") throw new ErrorDeUsuario("El pedido está anulado.");
 
-      const caja = await tx.cashSession.findFirst({
-        where: { status: "ABIERTA" },
-        select: { id: true },
-      });
-      if (!caja) {
-        throw new ErrorDeUsuario("No hay caja abierta: no se puede recibir un pago.");
-      }
+      const elegida = await elegirSesionDeCobro(tx, ctx.user.id);
+      if (!elegida.ok) throw new ErrorDeUsuario(mensajeSinSesion(elegida.motivo));
+      const caja = { id: elegida.cashSessionId };
 
       let changeCop: number | null = null;
       if (input.method === "EFECTIVO" && input.tenderedCop !== undefined) {
@@ -1299,6 +1308,258 @@ export const renombrarCuenta = defineAction({
   },
 });
 
+/**
+ * Traslada una cuenta a otra mesa.
+ *
+ * El comensal se cambia —le da el sol, se suma gente, la de al lado tiene
+ * enchufe— y la cuenta se va con él. Sin esto había dos salidas y las dos malas:
+ * cerrar sin consumo y volver a tomar todo el pedido, o dejar que el sistema
+ * siguiera diciendo una mesa distinta de la que el mesero canta. Lo segundo es
+ * peor, porque la comanda ya salió a cocina con el número viejo.
+ *
+ * La mesa de origen queda libre sola: el estado de una mesa no se escribe, se
+ * deriva de sus cuentas. Por eso se sincronizan LAS DOS dentro de la misma
+ * transacción; si se hiciera después, entre el commit y esa escritura hay un
+ * instante en que el salón muestra dos mesas ocupadas por la misma gente.
+ */
+export const trasladarPedido = defineAction({
+  schema: trasladarPedidoSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.MESAS,
+  async handler({ input, ctx, db }) {
+    const resultado = await db.$transaction(async (tx) => {
+      const pedido = await tx.order.findFirst({
+        where: { id: input.orderId },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          tableId: true,
+          deliveryStatus: true,
+          customerName: true,
+          table: { select: { id: true, name: true } },
+        },
+      });
+      if (!pedido) throw new ErrorDeUsuario("Ese pedido no existe.");
+
+      const destino = await tx.table.findFirst({
+        where: { id: input.tableIdDestino },
+        select: { id: true, name: true, status: true, areaId: true, deletedAt: true },
+      });
+
+      const veredicto = puedeTrasladarse(
+        {
+          status: pedido.status,
+          tableId: pedido.tableId,
+          esDomicilio: pedido.deliveryStatus !== null,
+        },
+        destino
+          ? { id: destino.id, status: destino.status, archivada: destino.deletedAt !== null }
+          : null,
+      );
+      if (!veredicto.ok) {
+        throw new ErrorDeUsuario(mensajeDeTraslado(veredicto.motivo, destino?.name));
+      }
+      // `destino` no puede ser null acá: la regla ya lo habría rechazado.
+      const mesaDestino = destino!;
+
+      const origen = pedido.table;
+
+      await tx.order.update({
+        where: { id: pedido.id },
+        data: {
+          tableId: mesaDestino.id,
+          // El área viaja con la mesa: si no, un pedido de la terraza trasladado
+          // al salón seguiría contando como de la terraza en los informes.
+          areaId: mesaDestino.areaId,
+          // Una cuenta que llega a una mesa es una cuenta de mesa, aunque haya
+          // nacido para llevar en el POS.
+          type: OrderType.MESA,
+        },
+      });
+
+      await sincronizarEstadoMesa(tx, origen?.id ?? null);
+      await sincronizarEstadoMesa(tx, mesaDestino.id);
+
+      await tx.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "pedido.trasladar",
+          entity: "Order",
+          entityId: pedido.id,
+          metadata: {
+            pedido: pedido.code,
+            desde: origen?.name ?? "sin mesa",
+            hasta: mesaDestino.name,
+          },
+        },
+      });
+
+      return {
+        desde: origen?.name ?? null,
+        hasta: mesaDestino.name,
+        code: pedido.code,
+        mesas: [origen?.id, mesaDestino.id].filter((x): x is string => Boolean(x)),
+      };
+    });
+
+    revalidatePath("/salon");
+    revalidatePath("/caja");
+    revalidatePath("/cocina");
+    revalidatePath(`/pedido/${input.orderId}`);
+    // Las dos pantallas de mesa, por su ruta exacta: `/salon` no las cubre —es
+    // otra ruta— y la de origen tiene que dejar de listar la cuenta que se fue.
+    for (const tableId of resultado.mesas) revalidatePath(`/salon/mesa/${tableId}`);
+    // La comanda del KDS lleva el número de mesa arriba, que es lo que se busca
+    // de lejos entre seis papeles: si no se avisa, la cocina sigue viendo la vieja.
+    void publishCocinaUpdate(ctx.business.id);
+
+    return resultado;
+  },
+});
+
+/**
+ * Une varias cuentas en una sola.
+ *
+ * Llega un grupo, se reparte en tres mesas, y al final una persona paga todo. Sin
+ * esto hay que cobrar tres veces, entregar tres tiquetes y sumar a mano; y si
+ * pidieron factura electrónica, son tres documentos ante la DIAN por una venta.
+ *
+ * Unir es MUDAR LOS RENGLONES: el destino queda como un pedido de verdad, con su
+ * consecutivo, su comanda y su tiquete. Los renglones conservan su estado de
+ * cocina, sus instantáneas de precio e impuesto y su costo, así que nada de lo
+ * que ya se congeló se vuelve a calcular.
+ *
+ * Las cuentas de origen NO se anulan a secas: quedan con `mergedIntoId`, que es
+ * lo que las distingue de una anulación real en el informe. Sin eso, cada grupo
+ * que junta tres mesas aparecería como tres ventas anuladas.
+ */
+export const unirCuentas = defineAction({
+  schema: unirCuentasSchema,
+  roles: ATIENDEN,
+  modulo: AppModule.PEDIDOS,
+  async handler({ input, ctx, db }) {
+    const resultado = await db.$transaction(async (tx) => {
+      const cuentas = await tx.order.findMany({
+        where: { id: { in: input.orderIds } },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          paidCop: true,
+          tipCop: true,
+          tableId: true,
+          deliveryStatus: true,
+          facturaElectronicaCufe: true,
+        },
+      });
+      if (cuentas.length !== input.orderIds.length) {
+        throw new ErrorDeUsuario("Alguna de las cuentas elegidas ya no existe.");
+      }
+
+      const veredicto = puedenUnirse(
+        cuentas.map((c) => ({
+          id: c.id,
+          code: c.code,
+          status: c.status,
+          paidCop: c.paidCop,
+          facturada: c.facturaElectronicaCufe !== null,
+          esDomicilio: c.deliveryStatus !== null,
+        })),
+        input.destinoOrderId,
+      );
+      if (!veredicto.ok) {
+        throw new ErrorDeUsuario(mensajeDeUnion(veredicto.motivo, veredicto.cuenta));
+      }
+
+      const porId = new Map(cuentas.map((c) => [c.id, c]));
+      const destino = porId.get(veredicto.destino.id)!;
+      const origenes = veredicto.origenes.map((c) => porId.get(c.id)!);
+
+      // Los renglones se mudan enteros. Sus modificadores cuelgan de cada renglón,
+      // así que viajan solos.
+      await tx.orderItem.updateMany({
+        where: { orderId: { in: origenes.map((c) => c.id) } },
+        data: { orderId: destino.id },
+      });
+
+      /**
+       * Las propinas se suman.
+       *
+       * Cada mesa eligió la suya cuando le preguntaron, y esa plata es del
+       * personal: quedarse con la del destino y tirar las otras sería recortarle
+       * la propina a alguien por haber juntado las cuentas. La caja igual puede
+       * corregirla al cobrar.
+       */
+      const propinaTotal = cuentas.reduce((suma, c) => suma + c.tipCop, 0);
+      if (propinaTotal !== destino.tipCop) {
+        await tx.order.update({
+          where: { id: destino.id },
+          data: { tipCop: propinaTotal },
+        });
+      }
+
+      const ahora = new Date();
+      await tx.order.updateMany({
+        where: { id: { in: origenes.map((c) => c.id) } },
+        data: {
+          status: "ANULADA",
+          mergedIntoId: destino.id,
+          canceledAt: ahora,
+          canceledById: ctx.user.id,
+          canceledReason: `Unida a la cuenta #${destino.code}`,
+        },
+      });
+
+      const totales = await recalcularTotales(tx, destino.id);
+
+      // Las mesas que quedaron sin cuentas se liberan solas, incluida la del
+      // destino si cambió de estado al recibir renglones.
+      const mesas = new Set(
+        [destino.tableId, ...origenes.map((c) => c.tableId)].filter(
+          (id): id is string => id !== null,
+        ),
+      );
+      for (const tableId of mesas) {
+        await sincronizarEstadoMesa(tx, tableId);
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "pedido.unir",
+          entity: "Order",
+          entityId: destino.id,
+          metadata: {
+            destino: destino.code,
+            unidas: origenes.map((c) => c.code),
+            totalCop: totales.totalCop,
+          },
+        },
+      });
+
+      return {
+        destinoId: destino.id,
+        destinoCode: destino.code,
+        unidas: origenes.length,
+        totalCop: totales.totalCop,
+        mesas: [...mesas],
+      };
+    });
+
+    revalidatePath("/salon");
+    revalidatePath("/caja");
+    revalidatePath("/cocina");
+    revalidatePath(`/pedido/${resultado.destinoId}`);
+    for (const tableId of resultado.mesas) revalidatePath(`/salon/mesa/${tableId}`);
+    // La cocina tiene los renglones colgando de otra cuenta: si no se avisa, el
+    // KDS sigue mostrando comandas de pedidos que ya no existen.
+    void publishCocinaUpdate(ctx.business.id);
+
+    return resultado;
+  },
+});
+
 export const confirmarPedido = defineAction({
   schema: pedidoSchema,
   roles: ATIENDEN,
@@ -1413,13 +1674,15 @@ export const procesarVentaPosCompleta = defineAction({
     const settings = await getSettings(ctx.business.id);
     const businessDate = currentBusinessDate(settings);
 
-    const caja = await db.cashSession.findFirst({
-      where: { status: "ABIERTA" },
-      select: { id: true },
-    });
+    const elegida = await elegirSesionDeCobro(db, ctx.user.id);
+    const caja = elegida.ok ? { id: elegida.cashSessionId } : null;
+
     if (settings.requireOpenCashSession && !caja) {
       throw new ErrorDeUsuario(
-        "No hay caja abierta. Abrí el turno antes de tomar pedidos.",
+        mensajeSinSesion(
+          elegida.ok ? "SIN_CAJA" : elegida.motivo,
+          "tomar pedidos",
+        ),
       );
     }
     /**
@@ -1432,7 +1695,9 @@ export const procesarVentaPosCompleta = defineAction({
      * `registrarPago` nunca lo permitió.
      */
     if (input.accion === "PAGAR_DIRECTO" && !caja) {
-      throw new ErrorDeUsuario("No hay caja abierta: no se puede recibir un pago.");
+      throw new ErrorDeUsuario(
+        mensajeSinSesion(elegida.ok ? "SIN_CAJA" : elegida.motivo),
+      );
     }
 
     // Los datos de la factura electrónica solo se guardan si el negocio de verdad
@@ -1598,7 +1863,6 @@ export const procesarVentaPosCompleta = defineAction({
               businessDate,
               type: input.type,
               channel: OrderChannel.POS,
-              cashSessionId: caja?.id ?? null,
               customerName: input.customerName ?? null,
               customerPhone: input.customerPhone ?? null,
               deliveryAddress: input.deliveryAddress ?? null,

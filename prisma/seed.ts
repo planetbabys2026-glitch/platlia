@@ -2,6 +2,7 @@ import { AppModule, SubscriptionStatus, TaxKind } from "@/generated/prisma/enums
 import { hashPassword } from "@/lib/auth/password";
 import { pool } from "@/lib/db/pool";
 import { rootDb } from "@/lib/db/root";
+import { exigirBaseBorrable } from "@/lib/db/base-local";
 import { env } from "@/lib/env";
 import { formatCop } from "@/lib/money";
 import {
@@ -35,6 +36,18 @@ if (env.NODE_ENV === "production") {
       "una sola vez desde /pl-bootstrap con SUPERADMIN_BOOTSTRAP_TOKEN.",
   );
 }
+
+/**
+ * Y la guarda que de verdad hace falta: la BASE, no el proceso.
+ *
+ * `NODE_ENV` vale "development" en el portátil de quien desarrolla apunte
+ * `DATABASE_URL` a donde apunte, así que el chequeo de arriba estaba encendido
+ * solo en el servidor —donde nadie corre el seed— y apagado en el único lugar
+ * donde el accidente pasa: una terminal local con la URL de producción en el
+ * `.env`. Este script borra los negocios Y los usuarios: se lleva las
+ * contraseñas de todo el mundo.
+ */
+const baseObjetivo = exigirBaseBorrable(env.DATABASE_URL, "El seed");
 
 const CLAVE = process.env.SEED_PASSWORD ?? CLAVE_SEMILLA;
 const DIA_MS = 86_400_000;
@@ -148,6 +161,16 @@ async function main() {
     },
   });
 
+  // ── Cajas ─────────────────────────────────────────────────────────────────
+  //
+  // Una sola, y a propósito: la segunda hace aparecer el selector al abrir turno,
+  // y esta base es la que usan los e2e para abrir y cerrar caja veinte veces. El
+  // camino de varias cajas se prueba creándolas desde Configuración, que es como
+  // pasa en un negocio de verdad.
+  await rootDb.cashRegister.create({
+    data: { businessId: business.id, name: "Caja 1", sortOrder: 0 },
+  });
+
   // ── Salón ─────────────────────────────────────────────────────────────────
   for (const area of AREAS) {
     const creada = await rootDb.area.create({
@@ -196,6 +219,7 @@ async function main() {
   console.log(`
 Listo. Base sembrada con datos de desarrollo.
 
+  Base          ${baseObjetivo.nombre} en ${baseObjetivo.host}${baseObjetivo.puerto ? ":" + baseObjetivo.puerto : ""}
   Se borró      ${borrado.negocios} negocio(s) y ${borrado.usuarios} usuario(s) previos
   Empresa       ${business.name} (${business.slug})
   Licencia      prueba hasta ${finPrueba.toLocaleDateString("es-CO")}
