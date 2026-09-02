@@ -7,6 +7,7 @@ import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { getPreparacionesActivas } from "./queries";
 import { currentBusinessDate } from "@/lib/time";
 import {
+  publishCajaUpdate,
   publishCocinaUpdate,
   publishDomiciliosUpdate,
   publishTurneroUpdate,
@@ -151,6 +152,7 @@ export const avanzarComanda = defineAction({
     revalidatePath(`/pedido/${item.orderId}`);
 
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
 
     if (despachable) {

@@ -1122,6 +1122,32 @@ y tener que anular para volver a cobrar.
 pedido `ABIERTA` / `CUENTA_PEDIDA` de la jornada, así que el que quedó en el
 carrito y nadie mandó aparece —por su nombre— al intentar cerrar.
 
+### `notFound()` adentro del shell contesta 200, y eso no es un agujero
+
+Medido: una ruta inexistente **fuera** de `(app)` devuelve 404, pero cualquier
+página del shell que corta con `notFound()` —`/administracion/equipo` con un
+mesero, `/administracion/salon` con el mismo— devuelve **200** con la página "No
+encontramos esta página".
+
+La causa es el streaming: el layout de `(app)` es async y consulta la base para
+pintar el shell, así que la cabecera 200 ya salió cuando la página llama a
+`notFound()`. Ahí el status ya no se puede cambiar. Le pasa a **toda** guarda de
+permisos del producto, no a una en particular.
+
+**Lo que importa está intacto y se verificó**: el cuerpo no trae una sola fila de
+lo que protegía —ni correos, ni nombres del equipo, ni el formulario de alta—. El
+bloqueo es real; lo que miente es el número.
+
+Arreglarlo de verdad exigiría decidir el permiso **antes** de que empiece a
+transmitirse la respuesta, y eso hoy no se puede: el permiso vive en la base y
+`middleware.ts` corre en edge y no la toca a propósito. Cambiar eso es una
+reestructuración grande por un código de estado que ningún usuario ve.
+
+Por eso `tests/e2e/equipo.spec.ts` **afirma el contenido y no el status**: que
+salga la página de "no encontrada" y que no aparezca nada del equipo. Es la
+afirmación más fuerte de las dos —un 404 con el equipo adentro habría pasado la
+prueba vieja y sería el defecto de verdad—.
+
 ### Cobrar es una cola, y se dibuja como una cola
 
 `/caja` era una rejilla de tarjetas que se desplegaban en el lugar. Con la caja

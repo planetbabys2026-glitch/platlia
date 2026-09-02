@@ -97,16 +97,29 @@ async function abrirCategoriaDe(page: Page, producto: RegExp) {
 
 export async function agregarProducto(page: Page, producto: RegExp) {
   const cuenta = laCuenta(page);
-  const renglon = cuenta.getByText(producto).first();
-  // El renglón optimista aparece al instante y dice "Agregando…"; el de verdad es
-  // el que trae los controles de cantidad. Esperar solo al texto daba por hecho el
-  // agregado antes de que el servidor lo confirmara, y el paso siguiente no
-  // encontraba nada que tocar.
-  const confirmado = cuenta.getByRole("button", { name: /agregar una unidad/i }).first();
+
+  /**
+   * Todo acotado al renglón de ESTE producto.
+   *
+   * Antes `confirmado` era el primer botón "Agregar una unidad" de toda la
+   * cuenta, y eso hacía que la función **mintiera**: con cualquier otro renglón ya
+   * en la cuenta —el producto anterior de la misma prueba, o una mesa que se
+   * retomó ocupada— el botón ya estaba visible, la función devolvía al instante y
+   * **el producto nunca se agregaba**. El fallo aparecía tres pasos después,
+   * buscando en cocina algo que nadie había pedido.
+   *
+   * El renglón optimista aparece al instante y dice "Agregando…"; el de verdad es
+   * el que trae los controles de cantidad, así que ese botón —dentro de su propio
+   * `<li>`— es la única señal de que el servidor confirmó.
+   */
+  const renglon = cuenta.locator("li").filter({ hasText: producto });
+  const confirmado = renglon.getByRole("button", { name: /agregar una unidad/i }).first();
 
   for (let intento = 0; intento < 6; intento++) {
     if (await confirmado.isVisible().catch(() => false)) return;
-    if (!(await renglon.isVisible().catch(() => false))) {
+    // Si el renglón ya está —aunque sea el optimista— no se vuelve a clickear: dos
+    // clics son dos unidades, y la prueba de al lado afirma cantidades.
+    if (!(await renglon.first().isVisible().catch(() => false))) {
       await abrirCategoriaDe(page, producto);
       await page
         .getByRole("button", { name: producto })
@@ -351,17 +364,16 @@ export async function cerrarPedidosAbiertos(page: Page) {
       continue;
     }
 
-    // Una cuenta de mesa con consumo se manda a caja y se cobra ahí: es el camino
-    // real, y el único que tiene un cajero —anular un pedido con productos exige
-    // administrador (`anularPedido`), así que el `catch` de abajo se quedaba
-    // esperando un "Anulada" que nunca iba a llegar—.
-    const pedirCuenta = page.getByRole("button", { name: /pedir la cuenta/i });
-    if (await pedirCuenta.isVisible().catch(() => false)) {
-      await pedirCuenta.click();
-      await expect(pedirCuenta).toBeHidden();
-      await cobrarLoQueEstaEnCaja(page);
-      continue;
-    }
+    /**
+     * Una cuenta de mesa con consumo se cobra en la caja, y ya está ahí.
+     *
+     * Acá se tocaba "Pedir la cuenta" primero. Ese botón se fue: desde que la
+     * caja lista todo lo que salió a cocina, la cuenta llega sola y mandarla era
+     * un trámite sin efecto. Se va directo a cobrarla, que es el camino real y el
+     * único que tiene un cajero —anular un pedido con productos exige
+     * administrador—.
+     */
+    if (await cobrarLoQueEstaEnCaja(page)) continue;
 
     // Con consumo y sin poder cobrar acá ni mandarlo: se anula.
     const anular = page.getByRole("button", { name: /anular pedido/i });
@@ -411,24 +423,36 @@ export async function cerrarPedidosAbiertos(page: Page) {
  * ofrece "registrar pago" para toda cuenta de mesa— y sin esto quedaban cuentas
  * colgadas que después impedían cerrar el turno.
  */
-async function cobrarLoQueEstaEnCaja(page: Page) {
+/**
+ * Cobra todo lo que haya en la caja. Devuelve si llegó a cobrar algo.
+ *
+ * La pantalla es de dos columnas y **preselecciona la primera cuenta**, así que no
+ * hay nada que desplegar: el cobro ya está a la vista. Son dos botones seguidos y
+ * se llaman parecido a propósito —el primero abre la verificación con el monto
+ * ("Cobrar $15.000") y el segundo confirma ("Cobrar")—, que es el paso que existe
+ * para que nadie cobre una cifra que ya no era la del formulario.
+ */
+async function cobrarLoQueEstaEnCaja(page: Page): Promise<boolean> {
+  let cobroAlgo = false;
+
   for (let vuelta = 0; vuelta < 25; vuelta++) {
     await page.goto("/caja");
 
-    // Con varias cuentas hay que desplegar la que se va a cobrar; con una sola,
-    // la caja la abre ya desplegada.
-    const desplegar = page.getByRole("button", { name: /^cobrar cuenta$/i }).first();
-    if (await desplegar.isVisible().catch(() => false)) await desplegar.click();
+    const revisar = page.getByRole("button", { name: /^cobrar \$/i }).first();
+    if (!(await revisar.isVisible().catch(() => false))) return cobroAlgo;
+    await revisar.click();
 
-    const confirmar = page.getByRole("button", { name: /confirmar pago/i }).first();
-    if (!(await confirmar.isVisible().catch(() => false))) return;
-
+    const confirmar = page.getByRole("button", { name: "Cobrar", exact: true }).first();
+    if (!(await confirmar.isVisible().catch(() => false))) return cobroAlgo;
     await confirmar.click();
-    // El repintado tras una Server Action no siempre llega (fallo conocido), así
-    // que no se espera un texto: se vuelve a pedir la pantalla y se mira si
-    // quedó algo.
+    cobroAlgo = true;
+
+    // El repintado tras una Server Action no siempre llega, así que no se espera
+    // un texto: se vuelve a pedir la pantalla y se mira si quedó algo.
     await page.waitForTimeout(1200);
   }
+
+  return cobroAlgo;
 }
 
 /**

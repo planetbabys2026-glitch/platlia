@@ -42,6 +42,7 @@ import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { describirAviso } from "@/lib/avisos";
 import {
   publicarAviso,
+  publishCajaUpdate,
   publishCocinaUpdate,
   publishDomiciliosUpdate,
   publishTurneroUpdate,
@@ -594,6 +595,7 @@ export const ponerNotaItem = defineAction({
     revalidatePath(`/pedido/${item.orderId}`);
     revalidatePath("/cocina");
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
   },
 });
 
@@ -1007,6 +1009,7 @@ export const registrarPago = defineAction({
     revalidatePath("/cocina");
     revalidatePath(`/pedido/${input.orderId}`);
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
 
     // Sin esto el panel de domicilios se queda mostrando el pedido en la caja y
@@ -1305,6 +1308,7 @@ export const renombrarCuenta = defineAction({
     revalidatePath("/caja");
     revalidatePath(`/pedido/${pedido.id}`);
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
   },
 });
 
@@ -1413,6 +1417,7 @@ export const trasladarPedido = defineAction({
     // La comanda del KDS lleva el número de mesa arriba, que es lo que se busca
     // de lejos entre seis papeles: si no se avisa, la cocina sigue viendo la vieja.
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
 
     return resultado;
   },
@@ -1555,6 +1560,7 @@ export const unirCuentas = defineAction({
     // La cocina tiene los renglones colgando de otra cuenta: si no se avisa, el
     // KDS sigue mostrando comandas de pedidos que ya no existen.
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
 
     return resultado;
   },
@@ -1651,6 +1657,7 @@ export const confirmarPedido = defineAction({
     revalidatePath("/turnero");
     revalidatePath(`/pedido/${input.orderId}`);
     void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
     void publishTurneroUpdate(ctx.business.id);
     // Este es el momento canónico en que un pedido llega a la cocina, y por eso
     // acá sí se levanta un aviso: los otros `publishCocinaUpdate` del archivo
@@ -2239,6 +2246,7 @@ export const procesarVentaPosCompleta = defineAction({
       revalidatePath("/cocina");
       revalidatePath("/turnero");
       void publishCocinaUpdate(ctx.business.id);
+    void publishCajaUpdate(ctx.business.id);
       void publishTurneroUpdate(ctx.business.id);
       // Los renglones que van a cocina son los del carrito: este camino recrea
       // solo los que todavía no tomó la plancha, así que `input.items` es

@@ -16,7 +16,6 @@ import { puedeFacturarElectronicamente } from "@/lib/billing/factus-habilitacion
 import { plataformaFacturaConfigurada } from "@/lib/billing/factus-plataforma";
 import { requireModule, tieneRol } from "@/lib/auth/dal";
 import { formatCop } from "@/lib/money";
-import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { Carta } from "./carta";
 import { CuentaMovil } from "./cuenta-movil";
@@ -26,7 +25,7 @@ import {
   SegunConsumo,
   TotalesEnVivo,
 } from "./cuenta-en-vivo";
-import { AnularPedido, ConfirmarPedido, PedirCuenta } from "./acciones";
+import { AnularPedido, ConfirmarPedido } from "./acciones";
 
 export const metadata: Metadata = { title: "Pedido · Platlia" };
 export const dynamic = "force-dynamic";
@@ -135,31 +134,15 @@ export default async function PedidoPage({
         </CardContent>
       </Card>
 
-      {/* Mandar la cuenta a caja (marca CUENTA_PEDIDA).
-          Sin condición de tipo: una cuenta llega a la caja porque alguien la
-          manda, tenga mesa o no. Hoy acá solo llegan pedidos de mesa —el early
-          return de arriba deriva el resto al POS, que tiene su propio "Enviar a
-          caja"—, así que la condición que había no cambiaba nada y solo sugería
-          que un pedido sin mesa se cierra distinto. No se cierra distinto. */}
-      {pedido.status === "ABIERTA" && (
-        <SegunConsumo
-          conConsumo={
-            <PedirCuenta
-              orderId={pedido.id}
-              esMesa={pedido.type === "MESA"}
-              tipActualCop={pedido.tipCop}
-              propina={{
-                habilitada: settings.tipSuggestionEnabled,
-                rateBp: settings.tipSuggestionRateBp,
-                sugeridaCop: computeSuggestedTip(
-                  pedido.totalCop - pedido.tipCop,
-                  settings.tipSuggestionRateBp,
-                ),
-              }}
-            />
-          }
-        />
-      )}
+      {/* Acá vivía "Pedir la cuenta (Enviar a caja)", y se fue.
+          Desde que la caja lista todo lo que salió a cocina, mandarla era un
+          trámite sin efecto: la cuenta ya estaba del otro lado desde que el
+          mesero cantó la comanda. Un botón que no cambia nada enseña a tocar
+          botones que no cambian nada.
+          Con él se fue el selector de propina de esta pantalla: la propina se
+          pregunta donde está la persona que paga, y eso es la caja. El comensal
+          que pide por QR sigue eligiéndola él mismo, y el POS de mostrador
+          también, porque ahí quien atiende Y cobra es la misma persona. */}
 
       {/* Trasladar la cuenta a otra mesa.
           Va acá y no solo en la pantalla de la mesa porque este es el lugar donde

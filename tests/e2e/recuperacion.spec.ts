@@ -37,11 +37,26 @@ test("el ojo de la contraseña alterna entre ocultarla y mostrarla", async ({ pa
   const campo = page.getByLabel("Contraseña", { exact: true });
   await expect(campo).toHaveAttribute("type", "password");
 
-  await page.getByRole("button", { name: "Mostrar contraseña" }).click();
-  await expect(campo).toHaveAttribute("type", "text");
+  /**
+   * Se reintenta: el ojo es `useState`, así que un clic anterior a la hidratación
+   * no hace nada y no avisa. Es la misma trampa que documenta AGENTS.md para
+   * `<form action={serverAction}>`, y acá se ve igual de callada.
+   */
+  const alternar = async (boton: string, tipoEsperado: string) => {
+    for (let intento = 0; intento < 5; intento++) {
+      await page.getByRole("button", { name: boton }).click();
+      try {
+        await expect(campo).toHaveAttribute("type", tipoEsperado, { timeout: 3000 });
+        return;
+      } catch {
+        // El clic cayó antes de la hidratación: se vuelve a intentar.
+      }
+    }
+    throw new Error(`El botón "${boton}" no dejó el campo en type="${tipoEsperado}".`);
+  };
 
-  await page.getByRole("button", { name: "Ocultar contraseña" }).click();
-  await expect(campo).toHaveAttribute("type", "password");
+  await alternar("Mostrar contraseña", "text");
+  await alternar("Ocultar contraseña", "password");
 });
 
 test("recuperar contesta lo mismo exista o no la cuenta", async ({ page }) => {

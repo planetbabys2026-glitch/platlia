@@ -87,5 +87,5 @@ test("el bootstrap avisa que reemplaza al superadministrador que ya existe", asy
   await page.goto("/pl-bootstrap");
 
   await expect(page.getByRole("heading", { name: /rehacer el superadministrador/i })).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText(/pierde el acceso/i);
+  await expect(page.getByRole("alert")).toContainText(/pierden? el acceso/i);
 });

@@ -1,5 +1,16 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { abrirCaja, abrirMesa, agregarProducto, ingresar, irA } from "./apoyo";
+
+/** Lee una cifra del arqueo, en pesos enteros y con su signo. */
+async function saldoDe(page: Page, termino: string): Promise<number> {
+  const texto = (await page.getByText(termino).locator("..").textContent()) ?? "";
+  const m = /(-?)\$([\d.]+)/.exec(texto.replace(termino, ""));
+  if (!m) throw new Error(`No encontré la cifra de "${termino}" en: ${texto.slice(0, 120)}`);
+  return Number(`${m[1]}${m[2]!.replace(/\./g, "")}`);
+}
+
+const saldoDeEfectivo = (page: Page) => saldoDe(page, "Esperado en efectivo");
+const saldoDeBancos = (page: Page) => saldoDe(page, "Esperado en bancos");
 
 /**
  * Lo que este archivo viene a comprobar, y que antes no existía:
@@ -22,7 +33,9 @@ test("el arqueo cuadra el cajón y el banco por separado", async ({ page }) => {
   // caso que antes reventaba la apertura entera con "Escribí un monto en pesos".
   await irA(page, "/caja?vista=movimientos");
   await expect(page.getByText("Esperado en efectivo").locator("..")).toContainText("$100.000");
-  await expect(page.getByText("Esperado en bancos").locator("..")).toContainText("$0");
+
+  const efectivoAntes = await saldoDeEfectivo(page);
+  const bancosAntes = await saldoDeBancos(page);
 
   /**
    * El gasto pagado por el banco NO toca el cajón.
@@ -36,8 +49,16 @@ test("el arqueo cuadra el cajón y el banco por separado", async ({ page }) => {
   await page.getByLabel(/para qué fue/i).fill("Proveedor de carnes");
   await page.getByRole("button", { name: /registrar movimiento/i }).click();
 
-  await expect(page.getByText("Esperado en bancos").locator("..")).toContainText("-$30.000");
-  await expect(page.getByText("Esperado en efectivo").locator("..")).toContainText("$100.000");
+  /**
+   * Se mide el EFECTO del gasto, no una cifra absoluta.
+   *
+   * Fijar "-$30.000" daba por hecho que ninguna prueba anterior había dejado un
+   * movimiento bancario en la jornada. Lo que esta prueba viene a comprobar es
+   * que el gasto por banco descuenta del banco y **no toca el cajón**, y eso se
+   * afirma contra el antes y el después.
+   */
+  await expect(saldoDeBancos(page)).resolves.toBe(bancosAntes - 30_000);
+  await expect(saldoDeEfectivo(page)).resolves.toBe(efectivoAntes);
 });
 
 test("una cuenta se traslada de mesa y la de origen queda libre", async ({ page }) => {

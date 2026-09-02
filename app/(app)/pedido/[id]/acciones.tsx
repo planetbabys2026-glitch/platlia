@@ -1,22 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Minus, Plus, ReceiptText, Trash2, UtensilsCrossed } from "lucide-react";
+import { CheckCircle2, Minus, Plus, Trash2, UtensilsCrossed } from "lucide-react";
 import {
   anularItem,
   anularPedido,
   cambiarCantidad,
   confirmarPedido,
-  pedirCuenta,
   ponerNotaItem,
   quitarItem,
 } from "@/features/pedidos/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
@@ -218,62 +215,6 @@ export function AnularPedido({
       </div>
       {!estado.ok && estado.error && (
         <p className="text-destructive text-xs">{estado.error}</p>
-      )}
-    </form>
-  );
-}
-
-/**
- * Pedir la cuenta para la mesa (genera pre-cuenta y marca CUENTA_PEDIDA para Caja).
- */
-export function PedirCuenta({
-  orderId,
-  esMesa,
-  propina,
-  tipActualCop = 0,
-}: {
-  orderId: string;
-  esMesa?: boolean;
-  propina?: { habilitada: boolean; rateBp: number; sugeridaCop: number };
-  tipActualCop?: number;
-}) {
-  const router = useRouter();
-  const [estado, accion, isPending] = useActionState(pedirCuenta, ESTADO_INICIAL);
-  const [propinaCop, setPropinaCop] = useState(tipActualCop);
-
-  useEffect(() => {
-    if (estado.ok && esMesa) {
-      router.push("/salon");
-    }
-  }, [estado.ok, esMesa, router]);
-
-  return (
-    <form action={accion} className="space-y-3">
-      <input type="hidden" name="orderId" value={orderId} />
-      <input type="hidden" name="tipCop" value={propinaCop} />
-
-      {propina && (
-        <SelectorDePropina
-          habilitado={propina.habilitada}
-          sugeridaCop={propina.sugeridaCop}
-          rateBp={propina.rateBp}
-          valorCop={propinaCop}
-          onCambiar={setPropinaCop}
-          id={orderId}
-        />
-      )}
-
-      <Button
-        type="submit"
-        variant="outline"
-        className="w-full border-border bg-card hover:bg-muted/80 text-foreground font-bold text-xs h-10 rounded-xl shadow-xs gap-2"
-        disabled={isPending}
-      >
-        <ReceiptText className="size-4 text-muted-foreground" />
-        <span>{isPending ? "Solicitando cuenta…" : "Pedir la cuenta (Enviar a caja)"}</span>
-      </Button>
-      {!estado.ok && estado.error && (
-        <p className="text-destructive mt-1 text-xs">{estado.error}</p>
       )}
     </form>
   );

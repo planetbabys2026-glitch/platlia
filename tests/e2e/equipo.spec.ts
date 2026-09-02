@@ -54,10 +54,27 @@ test("el mesero entra y no alcanza la administración", async ({ page }) => {
   await page.goto("/salon");
   await expect(page.getByRole("heading", { name: "Salón", level: 1 })).toBeVisible();
 
-  // Y no la administración, aunque escriba la URL a mano: requireRole responde
-  // 404, sin confirmarle siquiera que la página existe.
+  /**
+   * Y no la administración, aunque escriba la URL a mano.
+   *
+   * Se afirma el CONTENIDO, no el código de estado. Esto pedía un 404 y recibe un
+   * 200, y no es un agujero: la página corta con `notFound()` y devuelve
+   * "No encontramos esta página" sin una sola fila del equipo. El 200 lo pone el
+   * streaming —el layout de `(app)` es async y consulta la base para pintar el
+   * shell, así que la cabecera ya salió cuando la guarda llama a `notFound()`—, y
+   * le pasa igual a toda ruta del shell: `/administracion/salon` también contesta
+   * 200 para este mesero. Una ruta inexistente FUERA del shell sí da 404.
+   *
+   * Afirmar que no se filtra nada es más fuerte que afirmar el número: un 404 con
+   * el equipo adentro pasaría la prueba vieja y sería el defecto de verdad.
+   */
   const respuesta = await page.request.get("/administracion/equipo");
-  expect(respuesta.status()).toBe(404);
+  const cuerpo = await respuesta.text();
+
+  expect(cuerpo).toContain("No encontramos esta página");
+  expect(cuerpo).not.toMatch(/Agregar al equipo/i);
+  expect(cuerpo).not.toContain("caja@platlia.com");
+  expect(cuerpo).not.toContain(MESERO.email);
 });
 
 test("no se puede dejar al negocio sin propietario", async ({ page }) => {

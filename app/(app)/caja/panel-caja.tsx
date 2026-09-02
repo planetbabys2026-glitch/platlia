@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { vistaInicialDeCaja } from "../navegacion";
 import { CuentasPorCobrar } from "./cuentas-por-cobrar";
 import { InterruptorDomiciliosQr } from "@/features/domicilios/components/interruptor-qr";
+import { EscuchaDeCaja } from "./escucha";
 import { AbrirCaja, CerrarCaja, Movimiento } from "./formularios";
 import { VentasCobradas } from "./ventas-cobradas";
 
@@ -123,6 +124,12 @@ export function PanelCaja({
 
   return (
     <div className="space-y-6">
+      {/* Siempre montado, en las tres secciones: lo que cambia —una comanda que
+          entra, una cuenta que se cobra, un movimiento— afecta a las tres. */}
+      <div className="flex justify-end">
+        <EscuchaDeCaja />
+      </div>
+
       {/* ─────────────────────────────────────────────────────────────
           MÓDULO 1: COBRO DE CUENTAS
           ───────────────────────────────────────────────────────────── */}

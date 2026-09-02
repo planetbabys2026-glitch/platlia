@@ -77,6 +77,31 @@ export async function publishCocinaUpdate(businessId: string): Promise<void> {
 }
 
 /**
+ * Publica un cambio en lo que la caja está mirando.
+ *
+ * La caja dejó de ser una pantalla que alguien abre cuando le mandan algo: desde
+ * que lista todo lo que salió a cocina, es un tablero que cambia solo mientras el
+ * cajero está parado adelante. Sin esto habría que recargar para enterarse de que
+ * entró una comanda, de que la mesa 4 pidió la cuenta o de que la cocina terminó
+ * —y una cuenta que aparece tarde es un cliente esperando en el mostrador—.
+ *
+ * Va por su propio canal y no por `avisos:`: ese está montado en TODAS las
+ * pantallas y no refresca ninguna a propósito. Refrescar desde ahí repintaría la
+ * cocina cada vez que alguien cobra.
+ */
+export async function publishCajaUpdate(businessId: string): Promise<void> {
+  const pub = getRedisPublisher();
+  if (!pub) return;
+
+  try {
+    const channel = `caja:${businessId}`;
+    await pub.publish(channel, JSON.stringify({ type: "update", timestamp: Date.now() }));
+  } catch {
+    // Falla tolerante: sin Redis la caja sigue andando, solo que hay que recargar.
+  }
+}
+
+/**
  * Publica un evento de actualización del panel de domicilios para una sucursal en Redis Pub/Sub.
  */
 export async function publishDomiciliosUpdate(businessId: string): Promise<void> {

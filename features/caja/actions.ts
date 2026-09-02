@@ -16,6 +16,7 @@ import { esSalidaDeDinero, sesionDeCobro } from "@/features/caja/reglas";
 import { getSettings } from "@/features/negocio/queries";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { publishCajaUpdate } from "@/lib/redis";
 import { currentBusinessDate } from "@/lib/time";
 
 /**
@@ -108,6 +109,7 @@ export const abrirCaja = defineAction({
      * error ni en el servidor ni en el navegador.
      */
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
     revalidatePath("/panel");
     revalidatePath("/salon");
     revalidatePath("/pos");
@@ -228,6 +230,7 @@ export const cerrarCaja = defineAction({
     });
 
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
     revalidatePath("/panel");
     return cerrada;
   },
@@ -310,6 +313,7 @@ export const registrarMovimiento = defineAction({
     });
 
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
     return movimiento;
   },
 });
@@ -353,6 +357,7 @@ export const guardarCaja = defineAction({
 
     revalidatePath("/administracion/configuracion");
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
     return caja;
   },
 });
@@ -361,7 +366,7 @@ export const archivarCaja = defineAction({
   schema: archivarCajaSchema,
   roles: [Role.PROPIETARIO],
   modulo: AppModule.CAJA,
-  async handler({ input, db }) {
+  async handler({ input, ctx, db }) {
     const caja = await db.cashRegister.findFirst({
       where: { id: input.id, deletedAt: null },
       select: {
@@ -398,6 +403,7 @@ export const archivarCaja = defineAction({
 
     revalidatePath("/administracion/configuracion");
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
   },
 });
 
@@ -443,6 +449,7 @@ export const guardarClaveGastos = defineAction({
 
     revalidatePath("/administracion/configuracion");
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
   },
 });
 
@@ -478,5 +485,6 @@ export const quitarClaveGastos = defineAction({
 
     revalidatePath("/administracion/configuracion");
     revalidatePath("/caja");
+    void publishCajaUpdate(ctx.business.id);
   },
 });

@@ -9,7 +9,7 @@ test("la portada carga y ofrece registro e ingreso", async ({ page }) => {
   // trimestre. Antes afirmaba "Tu restaurante, ordenado", que dejó de existir
   // hace commits y tenía la suite en rojo desde entonces.
   await expect(page.getByRole("heading", { name: /cada segundo optimizado/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /empezar prueba gratis/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /empezar 7 días gratis/i }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /^ingresar$/i })).toBeVisible();
 });
 

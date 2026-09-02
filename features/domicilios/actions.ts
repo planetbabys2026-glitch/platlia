@@ -16,7 +16,8 @@ import { avisarAlAgente } from "@/lib/printing/cola";
 import { encolarComandas } from "@/lib/printing/emitir";
 import { defineAction, ErrorDeUsuario } from "@/lib/actions/define-action";
 import { describirAviso } from "@/lib/avisos";
-import { publicarAviso, publishCocinaUpdate, publishDomiciliosUpdate } from "@/lib/redis";
+import { publicarAviso, publishCajaUpdate,
+  publishCocinaUpdate, publishDomiciliosUpdate } from "@/lib/redis";
 
 /** Quiénes atienden el mostrador de domicilios. */
 const DESPACHAN = [Role.PROPIETARIO, Role.ADMINISTRADOR, Role.CAJERO, Role.MESERO] as const;
@@ -31,6 +32,9 @@ const MARCA_DE_TIEMPO: Partial<Record<EstadoDomicilio, "deliveryConfirmedAt" | "
 /** Refresca todo lo que mira un domicilio. Son cuatro pantallas, no una. */
 function refrescar(businessId: string, tambienCocina = false) {
   void publishDomiciliosUpdate(businessId);
+  // El recorrido de un domicilio lo mueve entre los grupos de la caja —y al
+  // despacharlo, lo saca—, así que la caja también tiene que enterarse sola.
+  void publishCajaUpdate(businessId);
   if (tambienCocina) void publishCocinaUpdate(businessId);
 
   revalidatePath("/domicilios");
