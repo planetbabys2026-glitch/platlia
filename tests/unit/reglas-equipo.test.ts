@@ -4,6 +4,8 @@ import {
   puedeCambiarEstado,
   puedeCambiarRol,
   puedeRestablecerContrasena,
+  puedeRestablecerContrasenaGlobal,
+  puedeVincularCuentaExistente,
 } from "@/lib/auth/reglas-equipo";
 
 const dueno = { userId: "u-dueno", role: "PROPIETARIO" as const };
@@ -111,5 +113,58 @@ describe("puedeRestablecerContrasena", () => {
 
   it("un cajero no le cambia la contraseña a nadie", () => {
     expect(puedeRestablecerContrasena(cajero, objetivo("MESERO")).permitido).toBe(false);
+  });
+});
+
+describe("puedeVincularCuentaExistente", () => {
+  it("rechaza al dueño de un negocio ajeno", () => {
+    // Es la mitad de la cadena que permitía tomarle el negocio a otro: agregarlo
+    // como mesero y después resetearle la contraseña, que es global.
+    const veredicto = puedeVincularCuentaExistente({ esPropietarioAfuera: true });
+    expect(veredicto.permitido).toBe(false);
+  });
+
+  it("deja pasar a quien ya trabaja en otra sucursal de la misma cuenta", () => {
+    // Este es el caso que el alta tiene que resolver sin fricción: la misma
+    // persona en dos sedes del mismo dueño. Ahí no se cruza ninguna frontera:
+    // quien da el alta ya controla los dos negocios, así que no cuenta como
+    // "propietario afuera".
+    expect(puedeVincularCuentaExistente({ esPropietarioAfuera: false }).permitido).toBe(true);
+  });
+
+  it("deja pasar al empleado de un negocio ajeno", () => {
+    // Un mesero que trabaja en dos restaurantes distintos existe de verdad. Lo
+    // que lo protege no es impedir el alta, es que su contraseña ya no se pueda
+    // resetear desde acá.
+    expect(puedeVincularCuentaExistente({ esPropietarioAfuera: false }).permitido).toBe(true);
+  });
+});
+
+describe("puedeRestablecerContrasenaGlobal", () => {
+  const empleado = objetivo("CAJERO");
+
+  it("deja resetear a quien solo trabaja acá", () => {
+    expect(puedeRestablecerContrasenaGlobal(dueno, empleado, false).permitido).toBe(true);
+  });
+
+  it("no deja resetear a quien tiene cuentas afuera", () => {
+    // La contraseña no es de este negocio, es de la persona: cambiársela le
+    // entrega al que la escribió la llave de su otro trabajo.
+    const veredicto = puedeRestablecerContrasenaGlobal(dueno, empleado, true);
+    expect(veredicto.permitido).toBe(false);
+    if (!veredicto.permitido) expect(veredicto.motivo).toContain("enlace de recuperación");
+  });
+
+  it("uno siempre puede con la suya, tenga las cuentas que tenga", () => {
+    const uno = { userId: dueno.userId, role: "PROPIETARIO" as const, active: true };
+    expect(puedeRestablecerContrasenaGlobal(dueno, uno, true).permitido).toBe(true);
+  });
+
+  it("no afloja ninguna de las reglas de adentro", () => {
+    // Es una capa encima de puedeRestablecerContrasena, no un reemplazo: un
+    // administrador sigue sin poder tocar la contraseña de un propietario.
+    const propietario = objetivo("PROPIETARIO");
+    expect(puedeRestablecerContrasenaGlobal(admin, propietario, false).permitido).toBe(false);
+    expect(puedeRestablecerContrasenaGlobal(cajero, empleado, false).permitido).toBe(false);
   });
 });

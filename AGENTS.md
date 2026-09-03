@@ -122,6 +122,144 @@ recuperación muerto antes de usarse.
 principio que ya aplica `ingresar` con su hash señuelo—: decir "ese correo no existe" es regalarle
 a cualquiera la lista de quién tiene cuenta.
 
+### Registrarse con un correo que ya existe NO adopta esa cuenta
+
+`registrarse` miraba solo las membresías **activas**. El correo que existía sin ninguna —un
+empleado dado de baja, un registro abandonado— caía en un `let userId = existente.id` que seguía de
+largo: se le creaba un negocio y se le abría sesión **sin verificar nunca la contraseña tecleada**,
+que quedaba descartada en silencio. O sea que conocer el correo de alguien alcanzaba para entrar
+como esa persona. Hoy todo correo que ya existe se rechaza: adoptar una cuenta exigiría probar su
+contraseña, y eso ya es la pantalla de ingreso.
+
+El mensaje es **uno solo para todos los casos** y **no nombra la empresa**. Antes decía «ya está
+vinculado a la empresa "Bar La Esquina"», que le confirma a cualquiera que pruebe correos quién
+tiene cuenta y dónde trabaja; y distinguir "existe con negocio" de "existe sin negocio" era una
+segunda filtración más silenciosa. La pantalla acompaña el aviso con los dos caminos que sirven
+—Ingresar y Recuperar contraseña— y lo detecta por `campos.email`, no comparando el texto del
+mensaje: un mensaje se reescribe y nadie se acuerda del `if`.
+
+### La contraseña: composición, y por qué el mínimo es 10
+
+`lib/auth/reglas-contrasena.ts` (puro y con tests) exige mayúscula, minúscula, número, símbolo y
+**10 caracteres**. Vale registrar la discusión, porque el código decía lo contrario: acá se pedían
+8 caracteres y nada más, con el argumento —que sigue siendo cierto— de que las reglas de
+composición empujan a `Bar123!` y a anotarla en un papel al lado de la caja, y de que la guía
+vigente del NIST (SP 800-63B) desaconseja exigirlas. **La decisión del producto fue pedirlas
+igual**, y entonces el mínimo tenía que subir: `Bar123!` cumple las cuatro clases y son ocho
+caracteres, así que con el mínimo viejo la exigencia no cambiaba nada.
+
+El símbolo se define **por descarte** (cualquier cosa que no sea letra ni número), así que el
+espacio cuenta y una frase larga califica. Las tildes y la ñ quedan del lado de las letras: en un
+teclado español son letras, y contarlas como símbolo dejaría pasar "Contraseña1" sin ninguno.
+
+`evaluarContrasena` devuelve **la lista de los cinco requisitos**, no un booleano, porque la usan
+los dos lados: el esquema del servidor y la lista que `CampoContrasena` pinta mientras se escribe.
+Con una copia en la pantalla, tarde o temprano marcaría en verde algo que el servidor rechaza.
+
+Dos cosas que hay que no romper:
+
+- **`ingresarSchema.password` queda en `min(1)`.** Ahí se verifica contra un hash que ya existe;
+  aplicarle la política nueva dejaría afuera de un día para el otro a todos los usuarios actuales.
+- **Las contraseñas existentes siguen valiendo.** No hay reseteo forzado: la regla rige para las
+  que se crean de acá en adelante. Obligar a cambiarla a todo el mundo el día del despliegue es un
+  local que no puede abrir la caja.
+
+**El superadministrador pide 12, con las mismas cuatro clases.** Tenía su propia regla —`min(12)`
+y nada más— así que la cuenta que ve TODOS los negocios aceptaba doce letras seguidas mientras a un
+cajero se le exigía un símbolo. Ahora sale de las mismas funciones con
+`LARGO_MINIMO_SUPERADMIN`, y `evaluarContrasena` recibe el mínimo para que la lista de la pantalla
+no marque en verde a los 10 donde el servidor va a pedir 12.
+
+`correo` y `contrasenaFuerte` viven en `lib/validaciones.ts` porque estaban **duplicados** en
+`features/auth/schemas.ts` y `features/equipo/schemas.ts`: dos copias de una regla de identidad son
+una que se endurece y otra que se olvida, y la que se olvidaba era la del alta de empleados, que es
+la cuenta que más manos toca.
+
+## Anti-abuso: tres capas, y ninguna alcanza sola
+
+Las puertas públicas —ingresar, registrarse, recuperar, el formulario de contacto y el pedido por
+QR— no tenían **ningún** freno por procedencia. Lo único que había era el bloqueo por cuenta de
+`User` (10 intentos, 15 minutos), que frena a quien insiste contra UNA cuenta y no ve el rociado:
+una contraseña probable contra doscientos correos no llega a diez en ninguno, así que no se bloquea
+nada.
+
+Las tres capas se **declaran en `definePublicAction`**, no en cada acción. Es la misma filosofía por
+la que existe `defineAction`: lo que se deja a criterio de cada una, alguna se lo olvida —y las que
+se olvidan son las que nadie mira—. El orden es **trampa → freno → Turnstile → zod → handler**: las
+dos primeras son locales y baratas, Turnstile es un pedido de red a un tercero y no se paga si algo
+ya rechazó.
+
+**Con la trampa encendida, `respuestaParaTrampa` es obligatoria, y el tipo lo exige.** Al robot hay
+que contestarle algo con la MISMA forma que una respuesta buena, porque el formulario la va a leer:
+la pantalla de recuperación hace `estado.data.mensaje`, así que devolverle `undefined` no lo
+engaña —le rompe la página con un TypeError, y una pantalla de error se distingue bastante del
+éxito—. `ConfigPublica` está escrita como unión justamente para que el olvido sea un error de
+compilación y no una excepción que aparece el día que un robot llena el campo. Por lo mismo, el
+mensaje de recuperación es una constante: lo devuelven dos caminos, y si uno cambiara sin el otro,
+la respuesta al robot dejaría de parecerse a la buena.
+
+**El freno vive en Postgres, no en Redis.** `lib/redis.ts` devuelve `null` sin `REDIS_URL` y todos
+sus publicadores se vuelven no-ops en silencio —la suite e2e corre así a propósito—. Un limitador
+que se apaga solo cuando falta una variable opcional es peor que no tenerlo: figura en el código y
+no frena nada. Es el mismo razonamiento por el que la cola de impresión vive en Postgres y Redis es
+solo el timbre.
+
+`IntentoDeAcceso` usa **ventana fija**, y el comienzo de la ventana forma parte del índice único
+`(clave, ventanaAt)`. Eso permite contar con un solo `upsert` atómico —leer y después escribir deja
+pasar los intentos simultáneos, que en un limitador son justamente los que hay que frenar, el mismo
+error que ya evitan el descuento de stock y la guarda anti-doble-emisión ante la DIAN— y hace que el
+conteo se reinicie **solo** al cambiar de tramo, sin que nadie tenga que borrar nada. Se resigna
+exactitud en el borde: se puede gastar el cupo al final de un tramo y otro tanto al principio del
+siguiente. Para fuerza bruta alcanza de sobra.
+
+**Quien acierta no arrastra sus intentos.** `olvidarIntentos` corre también en el camino del
+`redirect()` —que sale por el `catch`, no por el `return`—, porque las dos acciones que más importan
+terminan justamente en un redirect: sin eso, quien se equivoca tres veces y entra a la cuarta se
+queda con el cupo casi gastado y el próximo despiste lo deja afuera sabiendo su contraseña.
+
+**Sin IP no se deja pasar libre.** Todo lo que llega sin procedencia comparte una clave
+`desconocida`, o sea que comparte el cupo: si la falta de IP diera vía libre, saltearse el freno
+sería tan fácil como no mandar la cabecera. La IP sale de `cf-connecting-ip` —el sitio está detrás
+de Cloudflare, que la escribe él y descarta lo que venga puesto— con respaldo en el primer tramo de
+`x-forwarded-for`, que cualquiera puede inventar y por eso va segundo.
+
+**Turnstile es opcional y esa es la única asimetría a propósito.** Sin `TURNSTILE_SECRET_KEY` la
+verificación se saltea y el widget no se pinta —así corren desarrollo y los e2e, sin configurar
+nada—; **configurado, un token inválido rechaza**. Si un token inválido pasara, la protección no
+existiría en producción y nadie se enteraría. Se eligió Turnstile y no reCAPTCHA porque Cloudflare
+ya está adelante, es gratis y no hace falta ninguna dependencia: el widget es un `<script>` y la
+verificación es un POST. Cloudflare **caído** deja pasar, con el freno todavía puesto debajo: quien
+está del otro lado es un cliente que quiere entrar a trabajar.
+
+El cupo del **pedido por QR es holgado** (40 en 10 minutos) y no lleva Turnstile: una mesa de doce
+pide desde el wifi del local, o sea desde una sola IP, y del otro lado hay un comensal con hambre.
+
+Las filas viejas las barre el cron diario, con un día de gracia, igual que los códigos de OAuth.
+
+## Inyección SQL: no hay nada que sanear, hay algo que impedir
+
+Prisma protege mientras se le hable por el ORM o por la plantilla etiquetada (`` $queryRaw`…` ``),
+que manda cada `${valor}` como parámetro. En todo el producto hay **exactamente dos** consultas
+crudas —las dos en `features/informes/queries.ts`, las dos parametrizadas y las dos con su
+`businessId` a la vista en el WHERE— y **cero** `$queryRawUnsafe`, `$executeRawUnsafe` o
+`Prisma.raw`.
+
+O sea que agregar "saneamiento" sería cargo cult. Lo que se agregó es que no pueda volver, en dos
+lugares porque uno solo se saltea:
+
+- **`eslint.config.mjs`** rechaza las tres formas inseguras, con la misma salida que la regla de
+  `@/lib/db/root`: desactivarla en la línea y explicar por qué, para que la excepción quede en el
+  diff.
+- **`tests/unit/sql-crudo.test.ts`** afirma lo mismo con `pnpm test`, que es lo que corre en CI
+  cuando el lint no. Además fija que todo `$queryRaw` sea **plantilla etiquetada y no llamada**: la
+  diferencia entera es el carácter que sigue al método —un backtick parametriza, un paréntesis
+  recibe una cadena ya armada—, se ven casi igual en una revisión y no se parecen en nada al
+  ejecutarse. Y comprueba que las dos consultas que hay sigan acotando por `businessId`, porque
+  `tenantDb` no las alcanza.
+
+El barrido usa `git ls-files --cached --others --exclude-standard`: sin `--others`, quien escribe
+hoy un `$queryRawUnsafe` y corre `pnpm test` antes de hacer `git add` pasa en verde.
+
 ## Superadministración
 
 Puerta aparte: cookie `pl_sa` con path `/superadmin`, sesión de tipo `SUPERADMIN` y
@@ -182,6 +320,47 @@ cambiar una contraseña **revoca las sesiones** de esa persona: si no, dar de ba
 **Un correo nunca tumba una operación.** `enviarCorreoSinBloquear` registra el fallo y sigue: que
 Resend esté caído no puede impedir que un empleado quede creado. `APP_URL` se normaliza sin barra
 final en `lib/env.ts`, porque todo el código compone `${APP_URL}/algo`.
+
+### Un correo que ya existe es de una persona, no de un negocio
+
+`User` es global y su correo es único, así que al dar de alta a alguien que ya tiene cuenta no hay
+opción de "crearle otra": o se engancha la que hay, o se rechaza. `agregarEmpleado` enganchaba
+**cualquiera**, sin permiso de esa persona. Combinado con `restablecerContrasena` —que escribe
+`User.passwordHash`, o sea la contraseña de la persona y no "la de este negocio"— eso era una cadena
+de toma de control completa:
+
+```
+prueba gratis de 7 días
+  → agregar dueño@otro-negocio.com como MESERO   (nadie lo impedía)
+  → restablecerle la contraseña                   (la regla solo miraba su rol ACÁ)
+  → entrar como esa persona → todas SUS sedes
+```
+
+Se corta con **dos** guardas, y hacen falta las dos:
+
+1. **`puedeVincularCuentaExistente`** rechaza al que es PROPIETARIO de un negocio ajeno. Las sedes
+   de la propia cuenta se descuentan con `sedesDeLaMismaCuenta()`, porque el caso que tiene que
+   seguir andando sin fricción es **la misma persona en dos sucursales del mismo dueño**: ahí quien
+   da el alta ya controla los dos negocios y no se cruza ninguna frontera.
+2. **`puedeRestablecerContrasenaGlobal`** no deja escribirle la contraseña a quien tiene membresías
+   **fuera** de este negocio. La primera guarda sola no alcanza: al empleado de un negocio ajeno sí
+   se lo engancha —un mesero que trabaja en dos restaurantes existe de verdad— y sin la segunda se
+   le podría tomar la cuenta igual.
+
+Para esa persona la salida es `mandarEnlaceDeContrasena`: un `PASSWORD_RESET` a su correo, que
+elige ella y que nadie más conoce. La pantalla no ofrece el campo de contraseña en ese caso —un
+botón que siempre falla es una trampa— y **no dice dónde más trabaja**: eso es asunto suyo, no del
+negocio que la está dando de alta.
+
+Ese correo va por `enviarCorreo` y no por `enviarCorreoSinBloquear`, que es la regla de la casa para
+los avisos: acá el correo **es** la operación, y un "listo" sobre un correo que nunca salió deja a
+alguien esperando un enlace que no existe. Es la misma excepción que ya hacía el formulario de
+contacto de la portada.
+
+**`agregarEmpleado` ahora audita.** Era la única de las cuatro acciones del equipo que no escribía
+`AuditLog`, justo la que suma gente: quién entró al negocio y cuándo es lo que se pregunta después.
+El rechazo también queda (`equipo.alta-rechazada`), siguiendo el patrón de intento fallido que ya
+existía en `caja.salida-clave-incorrecta` y `superadmin.bootstrap.token-invalido`.
 
 ## Facturación
 
@@ -2416,6 +2595,8 @@ lib/billing/factus*.ts   mapeador DIAN · habilitación · credenciales de plata
 features/dian/           emitir factura y nota crédito
 lib/db/base-local.ts     la guarda de los scripts que borran: la base, no NODE_ENV (puro)
 scripts/pruebas-locales.ts  levanta la Postgres de espacio de usuario de los e2e
+lib/seguridad/           reglas-limite.ts (puro) · limite.ts (Postgres) · turnstile.ts
+lib/auth/reglas-contrasena.ts   los cinco requisitos, puros y compartidos con la pantalla
 lib/{money,tax,time,turns}.ts                   lógica pura, con tests
 features/caja/reglas.ts      qué va a caja · qué es salida de dinero · en qué caja cae un cobro (puro)
 features/caja/sesion.ts     resuelve esa caja contra la base, dentro de la transacción del cobro
@@ -2477,6 +2658,25 @@ era la red. Sin Redis no hay avisos en vivo, y estas pruebas navegan y recargan.
 
 **Contra el VPS la suite tarda ~15 minutos y no es culpa de las pruebas**: 89 ms de ida y
 vuelta, diez `SELECT 1` en 797 ms, y cada pantalla hace de tres a cinco consultas.
+
+**Turnstile se apaga en la corrida local, y hay que dejarlo apagado.**
+`scripts/pruebas-locales.ts` blanquea `TURNSTILE_SECRET_KEY` y
+`NEXT_PUBLIC_TURNSTILE_SITE_KEY` por la misma razón que blanquea `REDIS_URL`. La verificación
+deja pasar cuando no hay llave y **rechaza cuando hay llave y el token no verifica**; un navegador
+manejado por Playwright no resuelve el widget, así que con las llaves en el `.env` —que es lo normal
+apenas alguien las configura— la suite entera se cae en el primer ingreso, con un "no pudimos
+verificar que no seas un robot" que no se parece en nada a lo que la prueba estaba probando. Pasó
+tal cual: se configuraron las llaves y `equipo.spec.ts` empezó a quedarse en `/ingresar`.
+
+Lo que **no** se apaga es el freno por procedencia ni el campo trampa: no dependen de ninguna
+variable, y las pruebas tienen que pasar con ellos puestos porque es como corre producción.
+
+**Las contraseñas de las pruebas tienen que cumplir la política.** `CLAVE_SEMILLA`
+(`prisma/datos-semilla.ts`) y `CLAVE_DE_PRUEBA` (`tests/e2e/apoyo.ts`) existen para no repetirlas a
+mano: estaban escritas en ocho archivos, y como ingresar NO exige la política —se verifica contra un
+hash que ya existe— una clave vieja seguía sirviendo para entrar mientras rompía en silencio las
+pruebas que **crean** una por formulario (registro, alta de empleado, restablecimiento). El síntoma
+es un fallo en el campo de contraseña, lejos de lo que la prueba estaba probando.
 
 Los e2e usan el **Chrome instalado en la máquina** (`channel: "chrome"`), no el Chromium de
 Playwright: no hay que bajar 130 MB y se prueba contra el navegador que la gente usa. Corren
@@ -2560,5 +2760,25 @@ Los rótulos que cambiaron —"Entrar al piso", "Cerrar sesión", "Consola de Cu
 "VENTAS FACTURADAS"— son actualizaciones de una línea, y valen como recordatorio: una
 afirmación sobre copy se rompe cada vez que marketing toca una palabra. Cuando lo que
 importa es la estructura y no la frase, conviene afirmar el rol y el papel del elemento.
+
+**En modo `serial`, un fallo esconde a los que siguen.** Aparecen como "did not run", que se
+lee como "no pasó nada" y en realidad es "no se sabe". Tres afirmaciones viejas de
+`equipo.spec.ts` y `auth.spec.ts` estuvieron rotas sin que nadie las viera, tapadas por el
+primer fallo del archivo, y salieron a la luz de a una a medida que se iban arreglando las
+anteriores. Al tocar un archivo en serie hay que correrlo hasta que pase **entero**, no hasta
+que pase el que se estaba arreglando.
+
+Las tres, porque cada una es una forma distinta de envejecer:
+
+- **"Cerrar sesión" se mudó adentro del menú de la cuenta.** La prueba lo clickeaba directo y
+  se quedaba los dos minutos del presupuesto esperando un botón que existe pero no está
+  desplegado. Hay que abrir el menú (`aria-label` "Cuenta de …") primero.
+- **Un `not.toContain(MESERO.email)` que no podía cumplirse nunca**: el layout de `(app)` le
+  pasa `ctx.user` entero al shell —email incluido— en toda página del producto. Que alguien
+  vea su PROPIO correo no es una filtración; lo que hay que afirmar es que no se vean los de
+  los demás. La afirmación pedía algo que no tenía que ver con lo que la prueba protege.
+- **"Hay un solo propietario" se pinta solo con `propietariosActivos === 1`**, y al seed le
+  agregaron dos propietarios más. La afirmación quedó imposible sin que el seed pareciera
+  tener nada que ver con esa prueba.
 
 El gestor de paquetes es **pnpm**. No hay `package-lock.json`.

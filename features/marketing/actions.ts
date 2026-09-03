@@ -1,6 +1,7 @@
 "use server";
 
 import { definePublicAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { CUPOS } from "@/lib/seguridad/limite";
 import { enviarCorreo } from "@/lib/email/enviar";
 import { CORREO_SOPORTE } from "@/lib/soporte";
 import { mensajeComercialSchema } from "./schemas";
@@ -26,11 +27,14 @@ import { mensajeComercialSchema } from "./schemas";
  */
 export const enviarMensajeComercial = definePublicAction({
   schema: mensajeComercialSchema,
+  // La trampa que este formulario estrenó ahora la aplica el envoltorio, así
+  // que el `if` que estaba acá adentro se fue: era la misma decisión escrita en
+  // dos lados el día que otra puerta pública la necesitara. Se le suma el freno
+  // por procedencia, que la trampa sola no cubre —un robot que la esquiva una
+  // vez la esquiva mil—.
+  protecciones: { limite: CUPOS.contacto, turnstile: true, trampa: true },
+  respuestaParaTrampa: () => ({ enviado: true }),
   async handler({ input }) {
-    // Un robot llenó el campo escondido: se le contesta que salió bien y no se
-    // manda nada. Decirle que lo detectamos solo le enseña a esquivarlo.
-    if (input.sitio.trim() !== "") return { enviado: true };
-
     const linea = (etiqueta: string, valor: string) =>
       valor.trim() ? `${etiqueta}: ${valor.trim()}` : null;
 

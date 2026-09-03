@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Campo } from "@/components/formulario/campo";
+import { CampoTrampa } from "@/components/formulario/trampa";
+import { Turnstile } from "@/components/formulario/turnstile";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { solicitarRecuperacion } from "@/features/auth/actions";
@@ -37,7 +39,8 @@ export function FormularioRecuperar() {
   }
 
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form action={accion} className="relative space-y-4" noValidate>
+      <CampoTrampa />
       {estado.error && (
         <Alert variant="destructive" role="alert">
           <AlertDescription>{estado.error}</AlertDescription>
@@ -54,6 +57,7 @@ export function FormularioRecuperar() {
         errores={estado.campos?.email}
       />
 
+      <Turnstile />
       <Enviar />
     </form>
   );

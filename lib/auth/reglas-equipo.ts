@@ -107,3 +107,74 @@ export function puedeRestablecerContrasena(actor: Actor, objetivo: Objetivo): Ve
   }
   return PERMITIDO;
 }
+
+/**
+ * Enganchar a este negocio una cuenta que YA existe.
+ *
+ * `User` es global —la misma persona puede ser mesera en dos bares— y su correo
+ * es único, así que al dar de alta a alguien que ya tiene cuenta no hay opción
+ * de "crear otra": o se engancha la que hay, o se rechaza.
+ *
+ * Enganchar de más era una puerta abierta y no una comodidad. Con una prueba
+ * gratis alcanzaba para agregar al dueño de otro negocio como mesero y, desde
+ * ahí, resetearle la contraseña —que es global— y entrar a SU negocio. Esa
+ * cadena la corta esta regla junto con `puedeRestablecerContrasenaGlobal`; hace
+ * falta que estén las dos.
+ *
+ * Lo que sí tiene que seguir funcionando, y es el caso que más importa: la misma
+ * persona trabajando en dos sucursales de la misma cuenta. Ahí el dueño ya
+ * controla los dos negocios, así que no se cruza ninguna frontera de confianza.
+ *
+ * Al empleado de un negocio ajeno se lo deja pasar a propósito: un mesero que
+ * trabaja en dos restaurantes distintos existe de verdad, y lo que lo protege es
+ * que su contraseña ya no se puede resetear desde acá.
+ */
+export function puedeVincularCuentaExistente(candidato: {
+  /** Es PROPIETARIO de algún negocio que no pertenece a esta cuenta. */
+  esPropietarioAfuera: boolean;
+}): Veredicto {
+  if (candidato.esPropietarioAfuera) {
+    return no(
+      "Ese correo es de alguien que ya tiene su propio negocio en Platlia. " +
+        "Si trabaja con vos, pedile que use otro correo para esta cuenta.",
+    );
+  }
+  return PERMITIDO;
+}
+
+/**
+ * Ponerle una contraseña nueva a alguien, sabiendo que la contraseña es GLOBAL.
+ *
+ * `puedeRestablecerContrasena` decide con los roles de este negocio, que es lo
+ * correcto puertas adentro. Lo que no ve es que `User.passwordHash` no es de
+ * este negocio: es de la persona. Reseteársela a alguien que además trabaja en
+ * otro lado no le cambia la clave "acá", le cambia la única que tiene, y de paso
+ * se la entrega a quien la escribió.
+ *
+ * Por eso, cuando la persona tiene cuentas afuera, la salida es el enlace de
+ * recuperación: lo elige ella y nadie más lo conoce. No es una restricción
+ * incómoda por precaución, es la diferencia entre cambiarle la clave a un
+ * empleado y quedarse con la llave de su otro negocio.
+ */
+export function puedeRestablecerContrasenaGlobal(
+  actor: Actor,
+  objetivo: Objetivo,
+  tieneCuentasFuera: boolean,
+): Veredicto {
+  const dentro = puedeRestablecerContrasena(actor, objetivo);
+  if (!dentro.permitido) return dentro;
+
+  // Cambiarse la propia contraseña nunca es un problema, tenga las cuentas que
+  // tenga: ya es su dueña.
+  if (actor.userId === objetivo.userId) return PERMITIDO;
+
+  if (tieneCuentasFuera) {
+    return no(
+      "Esa persona usa el mismo correo en otro negocio de Platlia, así que su " +
+        "contraseña no es solo de acá. Mandale un enlace de recuperación para que " +
+        "la elija ella.",
+    );
+  }
+
+  return PERMITIDO;
+}

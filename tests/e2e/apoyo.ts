@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { CLAVE_SEMILLA } from "@/prisma/datos-semilla";
 
 /**
  * Utilidades compartidas de los e2e.
@@ -8,8 +9,25 @@ import { expect, type Page } from "@playwright/test";
  * sea que lo dejó el anterior.
  */
 
-export const CAJERO = { email: "caja@platlia.com", password: "platlia123" };
-export const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
+/**
+ * La clave para las cuentas que las pruebas CREAN por formulario.
+ *
+ * Tiene que cumplir `lib/auth/reglas-contrasena.ts`: el registro, el alta de un
+ * empleado y el restablecimiento la validan de verdad. Antes acá decía
+ * "contrasenasegura" —toda en minúscula— y con la política nueva esas pruebas
+ * fallarían en el campo de contraseña, o sea lejos de lo que están probando.
+ *
+ * Ingresar no la exige, así que las cuentas sembradas entran con CLAVE_SEMILLA.
+ */
+export const CLAVE_DE_PRUEBA = "PruebaSegura123!";
+
+/** Para las pruebas que CAMBIAN una contraseña y comprueban que la nueva sirve.
+ *  Distinta de la anterior, y también cumple la política —incluida la del
+ *  superadministrador, que pide 12 y no 10—. */
+export const OTRA_CLAVE_DE_PRUEBA = "OtraSegura456!";
+
+export const CAJERO = { email: "caja@platlia.com", password: CLAVE_SEMILLA };
+export const DUENO = { email: "dueno@platlia.com", password: CLAVE_SEMILLA };
 
 /**
  * Abrir y cerrar el turno viven en la sección "movimientos" de la caja, y a una

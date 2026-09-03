@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  contrasenaEsValida,
+  LARGO_MAXIMO,
+  LARGO_MINIMO_SUPERADMIN,
+  mensajeDeContrasena,
+} from "@/lib/auth/reglas-contrasena";
 import { parseCop } from "@/lib/money";
 
 /**
@@ -100,3 +106,63 @@ export const listaDeIds = z.preprocess(
   (v) => (v === undefined || v === "" ? [] : Array.isArray(v) ? v : [v]),
   z.array(id).max(50, "Demasiadas opciones elegidas."),
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identidad: correo y contraseña
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * El correo, normalizado antes de validar.
+ *
+ * Se guarda siempre en minúsculas: la unicidad de PostgreSQL distingue
+ * mayúsculas, así que sin normalizar entrarían dos cuentas para la misma
+ * persona —y `User.email` es `@unique` global, o sea que esa segunda cuenta
+ * sería una identidad paralela con sus propias membresías—.
+ *
+ * Vive acá y no en cada feature porque estaba escrito dos veces, en
+ * `features/auth/schemas.ts` y en `features/equipo/schemas.ts`. Dos copias de
+ * una regla de identidad es una que se actualiza y otra que no.
+ */
+export const correo = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email("Escribí un correo válido."));
+
+/**
+ * Una contraseña que se está CREANDO.
+ *
+ * Los requisitos y el porqué de cada uno viven en `lib/auth/reglas-contrasena.ts`,
+ * puro y con tests, para que el servidor y la pantalla no puedan discrepar.
+ *
+ * Ojo con dónde se usa: esto es para crear o cambiar una contraseña. **Al
+ * ingresar no va** —ahí se verifica contra un hash que ya existe, y exigirle la
+ * política nueva dejaría afuera a todos los usuarios actuales de un día para el
+ * otro—.
+ */
+export const contrasenaFuerte = z
+  .string()
+  .max(LARGO_MAXIMO, "La contraseña es demasiado larga.")
+  .refine(contrasenaEsValida, {
+    // El mensaje se arma con el valor recibido para nombrar exactamente lo que
+    // falta ("le falta: una mayúscula"). Un "revisá la contraseña" obliga a
+    // adivinar cuál de los cinco requisitos no se cumplió.
+    error: (issue) => mensajeDeContrasena(String(issue.input)) ?? "Revisá la contraseña.",
+  });
+
+/**
+ * La contraseña de un superadministrador: los mismos requisitos, más larga.
+ *
+ * Se arma con las mismas funciones y no con su propia regla, que es como estaba:
+ * `min(12)` a secas, sin ninguna de las cuatro clases. O sea que la cuenta que
+ * ve TODOS los negocios aceptaba doce letras seguidas mientras a un cajero se le
+ * exigía un símbolo.
+ */
+export const contrasenaFuerteSuperAdmin = z
+  .string()
+  .max(LARGO_MAXIMO, "La contraseña es demasiado larga.")
+  .refine((v) => contrasenaEsValida(v, LARGO_MINIMO_SUPERADMIN), {
+    error: (issue) =>
+      mensajeDeContrasena(String(issue.input), LARGO_MINIMO_SUPERADMIN) ??
+      "Revisá la contraseña.",
+  });

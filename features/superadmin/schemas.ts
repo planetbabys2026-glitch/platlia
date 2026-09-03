@@ -10,12 +10,7 @@ import { finDelDiaEnZona, inicioDelDiaEnZona, ZONA_PLATAFORMA } from "@/lib/time
  * functions", que no dice nada de zod.
  */
 
-const correo = z.string().trim().toLowerCase().pipe(z.email("Escribí un correo válido."));
-
-// Más larga que la de un usuario normal: esta cuenta ve todos los negocios.
-const contrasenaSuperAdmin = z
-  .string()
-  .min(12, "Para un superadministrador, mínimo 12 caracteres.");
+import { contrasenaFuerteSuperAdmin as contrasenaSuperAdmin, correo } from "@/lib/validaciones";
 
 export const bootstrapSchema = z.object({
   token: z.string().min(1, "Falta el token."),

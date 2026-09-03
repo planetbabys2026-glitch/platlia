@@ -12,7 +12,17 @@
  * y desde Playwright por igual.
  */
 
-export const CLAVE_SEMILLA = "platlia123";
+/**
+ * La clave de todas las cuentas sembradas.
+ *
+ * Cumple la política de `lib/auth/reglas-contrasena.ts` a propósito. Ingresar no
+ * la exige —al entrar se verifica contra un hash que ya existe— así que la
+ * anterior ("platlia123", sin mayúscula ni símbolo) habría seguido sirviendo
+ * para entrar; lo que rompía eran los e2e que CREAN contraseñas por formulario:
+ * el registro, el alta de un empleado y el restablecimiento. Con la vieja, esas
+ * pruebas fallaban por el formulario y no por lo que estaban probando.
+ */
+export const CLAVE_SEMILLA = "Platlia123!";
 
 export const NEGOCIO = {
   slug: "bar-demo",

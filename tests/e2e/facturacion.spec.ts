@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PANTALLA_DE_ENTRADA } from "./apoyo";
+import { CLAVE_SEMILLA } from "@/prisma/datos-semilla";
 
 /**
  * Licencia y cobro.
@@ -10,7 +11,7 @@ import { PANTALLA_DE_ENTRADA } from "./apoyo";
  * firma válida**, que es la parte que un atacante ataca.
  */
 
-const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
+const DUENO = { email: "dueno@platlia.com", password: CLAVE_SEMILLA };
 
 test.describe("webhook de MercadoPago", () => {
   test("no queda detrás del login: responde por su cuenta", async ({ request }) => {

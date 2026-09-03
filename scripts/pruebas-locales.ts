@@ -88,6 +88,26 @@ async function main() {
     ...process.env,
     DATABASE_URL: URL_BASE,
     REDIS_URL: "",
+    /**
+     * Turnstile se apaga acá, por la misma razón que Redis.
+     *
+     * `lib/seguridad/turnstile.ts` deja pasar cuando no hay llave y **rechaza
+     * cuando hay llave y el token no verifica**. Un navegador manejado por
+     * Playwright no resuelve el widget, así que con las llaves puestas en el
+     * `.env` —que es lo normal en la máquina de quien desarrolla— TODA la suite
+     * se cae en el primer ingreso, y el error dice "no pudimos verificar que no
+     * seas un robot", que no se parece en nada a lo que la prueba estaba
+     * probando.
+     *
+     * Se apaga la secreta y la pública: sin la pública el widget ni se pinta, y
+     * así el formulario queda igual que en una instalación sin configurar.
+     *
+     * Lo que NO se apaga es el freno por procedencia ni el campo trampa: esos no
+     * dependen de ninguna variable y las pruebas tienen que pasar con ellos
+     * puestos, porque es como corre producción.
+     */
+    TURNSTILE_SECRET_KEY: "",
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
   };
 
   const pedidos = process.argv.slice(2);

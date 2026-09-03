@@ -20,11 +20,12 @@ import {
   suspenderSchema,
 } from "@/features/superadmin/schemas";
 import { definePublicAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { CUPOS } from "@/lib/seguridad/limite";
 import { hashPassword, hashSenuelo, verifyPassword } from "@/lib/auth/password";
 import { getSuperAdmin } from "@/lib/auth/dal";
 import { puedeQuitarSuperAdmin } from "@/lib/auth/reglas-superadmin";
 import { createSession, destroySession, revokeAllSessions } from "@/lib/auth/session";
-import { enviarCorreoSinBloquear } from "@/lib/email/enviar";
+import { enviarCorreoDespues } from "@/lib/email/despues";
 import { correoDeAltaSuperAdmin } from "@/lib/email/plantillas";
 // Superadministración: por definición mira y toca todas las empresas, así que no
 // hay businessId con el cual acotar. Es una de las tres excepciones previstas.
@@ -169,6 +170,21 @@ export const crearSuperAdmin = definePublicAction({
 /** Ingreso a superadministración. Cookie propia, sesión propia. */
 export const ingresarSuperAdmin = definePublicAction({
   schema: ingresoSchema,
+  /**
+   * La puerta más valiosa de la plataforma, y la que menos protegida estaba.
+   *
+   * Tenía el hash señuelo y el mensaje único —o sea, nada que delatara quién es
+   * superadministrador— pero **ningún freno a la fuerza bruta**: ni el bloqueo
+   * por intentos que sí tiene el ingreso normal, ni límite por procedencia. Se
+   * le podían tirar contraseñas toda la noche sin que nada se enterara, y del
+   * otro lado está la consola que ve todos los negocios.
+   *
+   * Va sin bloqueo por cuenta a propósito: con uno, cualquiera deja a soporte
+   * afuera fallando cinco veces contra su correo, y quien necesita entrar
+   * justo entonces es quien viene a resolver un incidente.
+   */
+  protecciones: { limite: CUPOS.superadmin, turnstile: true, trampa: true },
+  respuestaParaTrampa: () => undefined as never,
   async handler({ input }) {
     const user = await rootDb.user.findUnique({
       where: { email: input.email },
@@ -453,7 +469,7 @@ export const agregarSuperAdmin = definePublicAction({
       nombre: input.name,
       urlDeIngreso: `${env.APP_URL}/superadmin/ingresar`,
     });
-    await enviarCorreoSinBloquear({
+    enviarCorreoDespues({
       para: input.email,
       asunto: bienvenida.asunto,
       html: bienvenida.html,

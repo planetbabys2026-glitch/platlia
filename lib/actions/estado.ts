@@ -30,3 +30,14 @@ export class ErrorDeUsuario extends Error {
     this.campos = campos;
   }
 }
+
+/**
+ * El nombre del campo trampa.
+ *
+ * Vive acá por lo mismo que `EstadoAccion`: lo necesitan los dos lados. Lo pinta
+ * un componente cliente y lo lee `definePublicAction` en el servidor, y ese
+ * módulo tiene `server-only` —importarlo desde el navegador rompe el build—. Con
+ * la cadena escrita en cada lado, cambiarla en uno apaga la trampa sin que nada
+ * falle: el campo seguiría existiendo y el servidor miraría otro que nadie manda.
+ */
+export const CAMPO_TRAMPA = "sitio";

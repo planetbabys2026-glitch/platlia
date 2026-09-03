@@ -9,6 +9,7 @@ import { z } from "zod";
 import { rootDb } from "@/lib/db/root";
 import { AppModule, Role, SubscriptionStatus, TaxKind } from "@/generated/prisma/enums";
 import { definePublicAction, ErrorDeUsuario } from "@/lib/actions/define-action";
+import { CUPOS } from "@/lib/seguridad/limite";
 import { hashPassword, hashSenuelo, verifyPassword } from "@/lib/auth/password";
 import {
   createSession,
@@ -28,7 +29,7 @@ import {
 } from "@/features/auth/schemas";
 import { env } from "@/lib/env";
 import { correoDeRecuperacion, correoDeVerificacion } from "@/lib/email/plantillas";
-import { enviarCorreoSinBloquear } from "@/lib/email/enviar";
+import { enviarCorreoDespues } from "@/lib/email/despues";
 
 const DIA_MS = 86_400_000;
 const DIAS_DE_PRUEBA = 7;
@@ -38,6 +39,16 @@ const INTENTOS_MAXIMOS = 10;
 const BLOQUEO_MINUTOS = 15;
 
 const CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos.";
+
+/**
+ * Lo que se contesta cuando alguien se registra con un correo que ya existe.
+ *
+ * Uno solo para todos los casos: quien ya tiene negocio, quien tiene cuenta sin
+ * negocio y quien quedó dado de baja. La pantalla lo acompaña con los dos
+ * caminos que sirven —ingresar y recuperar la contraseña—, así que decir de más
+ * no ayudaría a nadie salvo a quien está probando correos ajenos.
+ */
+const CORREO_YA_REGISTRADO = "Ese correo ya tiene una cuenta en Platlia.";
 
 function aSlug(texto: string): string {
   const limpio = texto
@@ -112,6 +123,15 @@ async function crearNegocio(nombre: string, userId: string) {
 
 export const ingresar = definePublicAction({
   schema: ingresarSchema,
+  // El bloqueo por cuenta que hay más abajo (10 intentos y descansa) frena a
+  // quien insiste contra UNA cuenta. Lo que no ve es el rociado: una contraseña
+  // probable contra doscientos correos distintos no llega a diez en ninguna, así
+  // que ninguna se bloquea nunca. Eso lo frena el cupo por procedencia.
+  protecciones: { limite: CUPOS.ingresar, turnstile: true, trampa: true },
+  // El handler nunca devuelve —termina en `redirect`—, así que acá cualquier
+  // valor sirve para el tipo. Lo que importa es que la pantalla quede igual que
+  // tras un intento fallido: sin sesión y sin decir por qué.
+  respuestaParaTrampa: () => undefined as never,
   async handler({ input }) {
     const user = await rootDb.user.findUnique({
       where: { email: input.email },
@@ -182,17 +202,17 @@ export const ingresar = definePublicAction({
 
 export const registrarse = definePublicAction({
   schema: registroSchema,
+  // Es la puerta más cara del producto: cada registro deja un negocio, una
+  // suscripción, una caja y las tarifas de impuesto. Sin freno, un script llena
+  // la base de cuentas de prueba en una tarde.
+  protecciones: { limite: CUPOS.registro, turnstile: true, trampa: true },
+  // Igual que en ingresar: el camino bueno redirige, así que no hay forma de
+  // distinguirlos mirando la respuesta.
+  respuestaParaTrampa: () => undefined as never,
   async handler({ input }) {
     const existente = await rootDb.user.findUnique({
       where: { email: input.email },
-      select: {
-        id: true,
-        isSuperAdmin: true,
-        memberships: {
-          where: { active: true, business: { deletedAt: null } },
-          select: { id: true, business: { select: { name: true } } },
-        },
-      },
+      select: { id: true, isSuperAdmin: true },
     });
 
     if (existente?.isSuperAdmin) {
@@ -201,27 +221,35 @@ export const registrarse = definePublicAction({
       );
     }
 
-    if (existente && existente.memberships.length > 0) {
-      const nombreEmpresa = existente.memberships[0]?.business?.name ?? "una empresa activa";
-      throw new ErrorDeUsuario(
-        `Este correo electrónico (${input.email}) ya está vinculado a la empresa "${nombreEmpresa}". Para registrar un nuevo negocio independiente debes solicitar primero que te desvinculen de tu empresa actual.`,
-        { email: ["Este correo ya pertenece a una empresa activa."] },
-      );
+    // Un correo que ya existe NO se registra, tenga negocio o no.
+    //
+    // Antes esta guarda solo miraba las membresías activas, y el correo que
+    // existía sin ninguna —un empleado dado de baja, un registro abandonado—
+    // caía en un `let userId = existente.id` que seguía de largo: se le creaba
+    // un negocio y se le abría sesión SIN verificar nunca la contraseña
+    // tecleada, que quedaba descartada en silencio. O sea que conocer el correo
+    // de alguien alcanzaba para entrar como esa persona. Acá no hay forma de
+    // resolverlo bien: para adoptar una cuenta habría que probar su contraseña,
+    // y eso ya es la pantalla de ingreso.
+    //
+    // El mensaje es el mismo para los dos casos a propósito. Distinguir "existe
+    // con negocio" de "existe sin negocio" es contarle a cualquiera que pruebe
+    // correos en qué estado está esa cuenta. Y tampoco se nombra la empresa
+    // —antes decía «ya está vinculado a la empresa "Bar La Esquina"»—: eso le
+    // confirma a un desconocido quién tiene cuenta y dónde trabaja.
+    if (existente) {
+      throw new ErrorDeUsuario(CORREO_YA_REGISTRADO, { email: [CORREO_YA_REGISTRADO] });
     }
 
-    let userId = existente?.id;
-
-    if (!userId) {
-      const user = await rootDb.user.create({
-        data: {
-          email: input.email,
-          name: input.name,
-          passwordHash: await hashPassword(input.password),
-        },
-        select: { id: true },
-      });
-      userId = user.id;
-    }
+    const user = await rootDb.user.create({
+      data: {
+        email: input.email,
+        name: input.name,
+        passwordHash: await hashPassword(input.password),
+      },
+      select: { id: true },
+    });
+    const userId = user.id;
 
     const negocio = await crearNegocio(input.nombreNegocio, userId);
     await createSession({ userId, businessId: negocio.id });
@@ -232,7 +260,7 @@ export const registrarse = definePublicAction({
       nombre: input.name,
       urlDeVerificacion: `${env.APP_URL}/verificar-correo?token=${token}`,
     });
-    await enviarCorreoSinBloquear({
+    enviarCorreoDespues({
       para: input.email,
       asunto: verificacion.asunto,
       html: verificacion.html,
@@ -246,8 +274,28 @@ export const registrarse = definePublicAction({
 
 const COOLDOWN_REENVIO_MS = 60_000;
 
+/**
+ * La única respuesta de "recuperar contraseña", exista o no la cuenta.
+ *
+ * Es una constante porque ahora la devuelven dos caminos —el normal y el de la
+ * trampa—: escrita dos veces, alcanzaba con que una cambiara para que la
+ * respuesta al robot se distinguiera de la buena, y ahí la trampa deja de serlo.
+ */
+const MENSAJE_RECUPERACION =
+  "Si ese correo tiene una cuenta, ya le mandamos cómo recuperar la contraseña.";
+
 export const solicitarRecuperacion = definePublicAction({
   schema: solicitarRecuperacionSchema,
+  // Cada intento manda un correo a una dirección que elige quien pide, así que
+  // sin freno es un cañón de spam apuntando a donde quieran. El enfriamiento de
+  // 60 s que ya había es POR CUENTA: no frena pedir uno por cada correo de una
+  // lista.
+  protecciones: { limite: CUPOS.recuperar, turnstile: true, trampa: true },
+  // Acá la pantalla SÍ lee lo que vuelve (`estado.data.mensaje`), así que la
+  // trampa tiene que devolver la misma forma —y el mismo texto— que el camino
+  // bueno. Devolver `undefined` rompía la página con un TypeError, que es
+  // cualquier cosa menos indistinguible del éxito.
+  respuestaParaTrampa: () => ({ mensaje: MENSAJE_RECUPERACION }),
   async handler({ input }) {
     const user = await rootDb.user.findUnique({
       where: { email: input.email },
@@ -268,7 +316,7 @@ export const solicitarRecuperacion = definePublicAction({
         const recuperacion = correoDeRecuperacion({
           urlDeRestablecer: `${env.APP_URL}/restablecer-contrasena?token=${token}`,
         });
-        await enviarCorreoSinBloquear({
+        enviarCorreoDespues({
           para: input.email,
           asunto: recuperacion.asunto,
           html: recuperacion.html,
@@ -278,10 +326,7 @@ export const solicitarRecuperacion = definePublicAction({
       }
     }
 
-    return {
-      mensaje:
-        "Si ese correo tiene una cuenta, ya le mandamos cómo recuperar la contraseña.",
-    };
+    return { mensaje: MENSAJE_RECUPERACION };
   },
 });
 
@@ -337,7 +382,7 @@ export const reenviarVerificacion = definePublicAction({
       nombre: user.name,
       urlDeVerificacion: `${env.APP_URL}/verificar-correo?token=${token}`,
     });
-    await enviarCorreoSinBloquear({
+    enviarCorreoDespues({
       para: user.email,
       asunto: verificacion.asunto,
       html: verificacion.html,

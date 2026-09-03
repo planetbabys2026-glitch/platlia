@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { abrirCaja, cerrarPedidosAbiertos, dejarCajaCerrada, ingresar } from "./apoyo";
+import { CLAVE_SEMILLA } from "@/prisma/datos-semilla";
 
-const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
+const DUENO = { email: "dueno@platlia.com", password: CLAVE_SEMILLA };
 
 /**
  * Negocios sin mesas: el módulo se apaga desde Configuración y la interfaz
@@ -91,12 +92,12 @@ async function ingresarSinAsumirDestino(
 test("el cajero entra directo a POS, no al panel", async ({ page }) => {
   // Mesas sigue apagado desde la prueba anterior. Contexto de navegador propio
   // de este test: no arrastra la sesión del dueño.
-  await ingresarSinAsumirDestino(page, { email: "caja@platlia.com", password: "platlia123" });
+  await ingresarSinAsumirDestino(page, { email: "caja@platlia.com", password: CLAVE_SEMILLA });
   await expect(page).toHaveURL(/\/pos$/);
 });
 
 test("el administrador también entra directo a POS", async ({ page }) => {
-  await ingresarSinAsumirDestino(page, { email: "admin@platlia.com", password: "platlia123" });
+  await ingresarSinAsumirDestino(page, { email: "admin@platlia.com", password: CLAVE_SEMILLA });
   await expect(page).toHaveURL(/\/pos$/);
 });
 

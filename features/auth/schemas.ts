@@ -1,27 +1,30 @@
 import { z } from "zod";
+import { contrasenaFuerte as contrasena, correo } from "@/lib/validaciones";
 
 /**
  * Esquemas de autenticación. Los mensajes están en español y escritos para que
  * el dueño de un bar los entienda, no para un desarrollador.
+ *
+ * El correo y la contraseña salen de `lib/validaciones.ts`: estaban duplicados
+ * acá y en `features/equipo/schemas.ts`, y una regla de identidad escrita dos
+ * veces es una que se endurece en un lado y se olvida en el otro.
+ *
+ * Sobre la contraseña: `contrasenaFuerte` exige composición (mayúscula,
+ * minúscula, número, símbolo) y un mínimo de 10. Acá antes se pedían 8
+ * caracteres y nada más, con este argumento —que sigue siendo cierto y conviene
+ * no perder—: las reglas de composición empujan a `Bar123!` y a anotarla en un
+ * papel al lado de la caja, y la guía vigente del NIST (SP 800-63B)
+ * desaconseja exigirlas. La decisión del producto fue pedirlas igual; el
+ * mínimo subió a 10 para que la exigencia sirva de algo, porque `Bar123!`
+ * cumple las cuatro clases y son ocho caracteres. El detalle está en
+ * `lib/auth/reglas-contrasena.ts`.
  */
-
-/** El correo se guarda siempre en minúsculas: PostgreSQL distingue mayúsculas y
- *  sin normalizar entrarían dos cuentas para la misma persona. */
-const correo = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .pipe(z.email("Escribí un correo válido."));
-
-// Mínimo 8 caracteres y nada más. Las reglas de "una mayúscula y un símbolo"
-// empujan a la gente a Bar123! y a anotarla en un papel al lado de la caja.
-const contrasena = z
-  .string()
-  .min(8, "La contraseña necesita al menos 8 caracteres.")
-  .max(200, "La contraseña es demasiado larga.");
 
 export const ingresarSchema = z.object({
   email: correo,
+  // A propósito `min(1)` y no `contrasenaFuerte`: acá la contraseña se verifica
+  // contra un hash que ya existe. Aplicarle la política nueva dejaría afuera, de
+  // un día para el otro, a todos los que se registraron con la anterior.
   password: z.string().min(1, "Escribí tu contraseña."),
   desde: z.string().optional(),
 });

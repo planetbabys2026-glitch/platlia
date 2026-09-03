@@ -11,6 +11,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CampoContrasena } from "@/components/formulario/campo-contrasena";
+import { LARGO_MINIMO_SUPERADMIN } from "@/lib/auth/reglas-contrasena";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
@@ -78,8 +79,9 @@ export function AgregarSuperAdmin() {
         label="Contraseña"
         name="password"
         required
-        minLength={12}
-        ayuda="Mínimo 12 caracteres: esta cuenta ve todos los negocios."
+        requisitos
+        largoMinimo={LARGO_MINIMO_SUPERADMIN}
+        ayuda="Esta cuenta ve todos los negocios, por eso pide más largo."
         errores={campos?.password}
       />
 
@@ -200,9 +202,9 @@ export function AccionesSuperAdmin({
         <input type="hidden" name="userId" value={userId} />
         <Input
           name="password"
-          minLength={12}
+          type="password"
           required
-          placeholder="Contraseña nueva (mín. 12)"
+          placeholder="Contraseña nueva"
           aria-label="Contraseña nueva"
           className="h-8 w-48 text-xs"
         />

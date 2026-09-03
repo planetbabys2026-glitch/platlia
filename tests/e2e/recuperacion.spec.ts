@@ -1,5 +1,5 @@
+import { CLAVE_DE_PRUEBA, DUENO, PANTALLA_DE_ENTRADA, ingresar } from "./apoyo";
 import { expect, test } from "@playwright/test";
-import { DUENO, ingresar, PANTALLA_DE_ENTRADA } from "./apoyo";
 
 /**
  * Verificación de correo y recuperación de contraseña.
@@ -21,7 +21,7 @@ test("el registro no deja mandar contraseñas que no coinciden", async ({ page }
   await page.getByLabel("Tu nombre").fill("Prueba Contraseñas");
   await page.getByLabel("Nombre del negocio").fill(`Bar Contraseñas ${sufijo}`);
   await page.getByLabel("Correo").fill(`no-coincide-${sufijo}@platlia.test`);
-  await page.getByLabel("Contraseña", { exact: true }).fill("contrasenasegura");
+  await page.getByLabel("Contraseña", { exact: true }).fill(CLAVE_DE_PRUEBA);
   await page.getByLabel("Repetir contraseña").fill("otra-contrasena-distinta");
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
 
@@ -86,8 +86,8 @@ test("restablecer sin token en la URL avisa que el enlace no es válido", async 
 
 test("restablecer con un token inventado lo rechaza en el servidor", async ({ page }) => {
   await page.goto("/restablecer-contrasena?token=esto-no-es-un-token-valido");
-  await page.getByLabel(/contraseña nueva/i).fill("contrasenanueva1");
-  await page.getByLabel("Repetir contraseña").fill("contrasenanueva1");
+  await page.getByLabel(/contraseña nueva/i).fill(CLAVE_DE_PRUEBA);
+  await page.getByLabel("Repetir contraseña").fill(CLAVE_DE_PRUEBA);
   await page.getByRole("button", { name: /guardar contraseña/i }).click();
 
   await expect(page.getByText(/ese enlace venció o no es válido/i)).toBeVisible();
@@ -109,8 +109,8 @@ test("un negocio recién registrado ve el aviso de correo sin confirmar", async 
   await page.getByLabel("Tu nombre").fill("Prueba Verificación");
   await page.getByLabel("Nombre del negocio").fill(`Bar Verificación ${sufijo}`);
   await page.getByLabel("Correo").fill(`verificacion-${sufijo}@platlia.test`);
-  await page.getByLabel("Contraseña", { exact: true }).fill("contrasenasegura");
-  await page.getByLabel("Repetir contraseña").fill("contrasenasegura");
+  await page.getByLabel("Contraseña", { exact: true }).fill(CLAVE_DE_PRUEBA);
+  await page.getByLabel("Repetir contraseña").fill(CLAVE_DE_PRUEBA);
   await page.getByRole("button", { name: /empezar los 7 días/i }).click();
   await expect(page).toHaveURL(PANTALLA_DE_ENTRADA);
 

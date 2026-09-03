@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { Campo } from "@/components/formulario/campo";
 import { CampoContrasena } from "@/components/formulario/campo-contrasena";
+import { CampoTrampa } from "@/components/formulario/trampa";
+import { Turnstile } from "@/components/formulario/turnstile";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ingresar } from "@/features/auth/actions";
@@ -38,7 +40,8 @@ export function FormularioIngreso({ desde }: { desde?: string }) {
   const [estado, accion] = useActionState(ingresar, ESTADO_INICIAL);
 
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form action={accion} className="relative space-y-4" noValidate>
+      <CampoTrampa />
       {desde && <input type="hidden" name="desde" value={desde} />}
 
       {!estado.ok && estado.error && (
@@ -71,6 +74,7 @@ export function FormularioIngreso({ desde }: { desde?: string }) {
         </p>
       </div>
 
+      <Turnstile />
       <Enviar>Ingresar al panel</Enviar>
     </form>
   );

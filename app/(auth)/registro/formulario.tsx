@@ -2,8 +2,11 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
+import Link from "next/link";
 import { Campo } from "@/components/formulario/campo";
 import { CampoContrasena } from "@/components/formulario/campo-contrasena";
+import { CampoTrampa } from "@/components/formulario/trampa";
+import { Turnstile } from "@/components/formulario/turnstile";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { registrarse } from "@/features/auth/actions";
@@ -38,11 +41,43 @@ export function FormularioRegistro() {
   const [estado, accion] = useActionState(registrarse, ESTADO_INICIAL);
   const campos = !estado.ok ? estado.campos : undefined;
 
+  // El correo repetido es el único rechazo que tiene salida, así que es el único
+  // que se acompaña con los dos caminos que sirven. Se detecta por el campo
+  // —que la acción manda en `campos.email`— y no comparando el texto del
+  // mensaje: un mensaje se reescribe y nadie se acuerda de este `if`.
+  const correoRepetido = Boolean(campos?.email?.length);
+
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form action={accion} className="relative space-y-4" noValidate>
+      <CampoTrampa />
+
       {!estado.ok && estado.error && (
         <Alert variant="destructive" role="alert" className="animate-shake border-destructive/40 bg-destructive/15 text-destructive-soft rounded-xl">
-          <AlertDescription>{estado.error}</AlertDescription>
+          <AlertDescription className="space-y-3">
+            <p>{estado.error}</p>
+            {correoRepetido && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href="/ingresar"
+                    className="border-destructive/40 hover:bg-destructive/20 inline-flex h-9 items-center rounded-lg border px-3 font-semibold"
+                  >
+                    Ingresar
+                  </Link>
+                  <Link
+                    href="/recuperar"
+                    className="border-destructive/40 hover:bg-destructive/20 inline-flex h-9 items-center rounded-lg border px-3 font-semibold"
+                  >
+                    Recuperar contraseña
+                  </Link>
+                </div>
+                <p className="text-xs opacity-90">
+                  ¿Vas a abrir otra sede? Entrá con tu cuenta y usá «Crear nueva sucursal»:
+                  así queda bajo la misma licencia en vez de pagarse aparte.
+                </p>
+              </>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -75,7 +110,7 @@ export function FormularioRegistro() {
         name="password"
         autoComplete="new-password"
         required
-        ayuda="Mínimo 8 caracteres."
+        requisitos
         errores={campos?.password}
       />
       {/* `registroSchema` compara este campo con el anterior. Faltaba, así que
@@ -91,6 +126,7 @@ export function FormularioRegistro() {
         errores={campos?.confirmarPassword}
       />
 
+      <Turnstile />
       <Enviar />
     </form>
   );

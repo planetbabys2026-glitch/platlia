@@ -140,8 +140,21 @@ async function main() {
     },
   });
 
+  /**
+   * Los contadores de intentos de ventanas que ya pasaron.
+   *
+   * Una fila por procedencia y por ventana: en un día con alguien insistiendo
+   * son muchas, y ninguna sirve una vez cerrada su ventana —el freno solo mira
+   * la ventana en curso—. Se barren las de más de un día, no las de recién, por
+   * lo mismo que los códigos de OAuth: si hay que entender por qué a alguien lo
+   * frenaron esta mañana, el rastro del día tiene que seguir estando.
+   */
+  const intentos = await rootDb.intentoDeAcceso.deleteMany({
+    where: { ventanaAt: { lt: new Date(ahora.getTime() - 24 * 60 * 60 * 1000) } },
+  });
+
   console.log(
-    `Revisadas ${suscripciones.length} suscripciones. ${cambios.length} cambiaron de estado, ${avisados.length} avisadas, ${expirados.count} pagos pendientes expirados, ${codigos.count} códigos de IA barridos.`,
+    `Revisadas ${suscripciones.length} suscripciones. ${cambios.length} cambiaron de estado, ${avisados.length} avisadas, ${expirados.count} pagos pendientes expirados, ${codigos.count} códigos de IA barridos, ${intentos.count} contadores de intentos barridos.`,
   );
   for (const cambio of cambios) console.log(`  · ${cambio}`);
   for (const aviso of avisados) console.log(`  ✉ ${aviso}`);

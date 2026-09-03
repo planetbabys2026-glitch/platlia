@@ -81,6 +81,7 @@ export default async function EquipoPage() {
                     membershipId={miembro.id}
                     role={miembro.role}
                     active={miembro.active}
+                    tieneCuentasFuera={miembro.tieneCuentasFuera}
                     puedeAscenderAPropietario={ctx.role === Role.PROPIETARIO}
                   />
                 )}
@@ -115,6 +116,7 @@ export default async function EquipoPage() {
                     membershipId={miembro.id}
                     role={miembro.role}
                     active={miembro.active}
+                    tieneCuentasFuera={miembro.tieneCuentasFuera}
                     puedeAscenderAPropietario={ctx.role === Role.PROPIETARIO}
                   />
                 </li>

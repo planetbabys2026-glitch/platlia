@@ -12,6 +12,7 @@ import { estadoInicial } from "@/features/domicilios/reglas";
 import { avisarAlAgente } from "@/lib/printing/cola";
 import { encolarComandas } from "@/lib/printing/emitir";
 import { ErrorDeUsuario } from "@/lib/actions/define-action";
+import { contarIntento, CUPOS } from "@/lib/seguridad/limite";
 import { licenciaVigente } from "@/lib/auth/reglas";
 import { getSettings } from "@/features/negocio/queries";
 import { sincronizarEstadoMesa } from "@/features/salon/estado-mesa";
@@ -39,6 +40,22 @@ import { verificarYDescontarStockReceta } from "@/lib/inventory/stock";
 
 export async function crearPedidoClienteQR(rawInput: CrearPedidoClienteQRInput) {
   try {
+    // El freno por procedencia, a mano y por el mismo motivo que la licencia de
+    // más abajo: esto no pasa por ningún envoltorio. Es la puerta que cualquiera
+    // en internet puede empujar sabiendo el slug de un negocio, y sin esto un
+    // script le llena la cocina de comandas falsas un viernes a la noche.
+    //
+    // El cupo es holgado a propósito (CUPOS.pedidoQr): una mesa de doce pide
+    // desde el wifi del local, o sea desde una sola IP. Frena la inundación
+    // automática sin estorbarle a una cena.
+    const cupo = await contarIntento(CUPOS.pedidoQr);
+    if (!cupo.permitido) {
+      return {
+        ok: false,
+        error: "Estamos recibiendo muchos pedidos desde esta conexión. Esperá un momento y volvé a intentar.",
+      };
+    }
+
     const input = crearPedidoClienteQRSchema.parse(rawInput);
 
     if (input.type === "DOMICILIO") {

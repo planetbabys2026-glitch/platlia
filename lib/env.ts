@@ -151,6 +151,18 @@ const schema = z.object({
   GOOGLE_SITE_VERIFICATION: opcional(z.string().min(1)),
   BING_SITE_VERIFICATION: opcional(z.string().min(1)),
 
+  // ─── Protección anti-robots (Cloudflare Turnstile) ────────────────────────
+  // El sitio ya está detrás de Cloudflare, así que Turnstile no suma un tercero
+  // nuevo. La pública va con el prefijo NEXT_PUBLIC_ porque la necesita el
+  // widget en el navegador; la secreta solo la usa la verificación del servidor.
+  //
+  // **Opcionales, y tienen que seguir siéndolo**, por lo mismo que las de
+  // verificación de buscadores: `next build` importa este archivo al recolectar
+  // las rutas. Sin ellas la verificación se saltea y quedan la trampa y el freno
+  // por procedencia, que es como corren desarrollo y la suite e2e.
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: opcional(z.string().min(1)),
+  TURNSTILE_SECRET_KEY: opcional(z.string().min(1)),
+
   // ─── Bootstrap del superadministrador ─────────────────────────────────────
   // Se define únicamente durante el primer despliegue y se borra después. Sin
   // ella, /pl-bootstrap responde 404 y es indistinguible de una ruta inexistente.

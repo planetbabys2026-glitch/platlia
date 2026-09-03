@@ -7,6 +7,8 @@ import { Campo } from "@/components/formulario/campo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ESTADO_INICIAL } from "@/lib/actions/estado";
+import { CampoContrasena } from "@/components/formulario/campo-contrasena";
+import { LARGO_MINIMO_SUPERADMIN } from "@/lib/auth/reglas-contrasena";
 
 function Enviar() {
   const { pending } = useFormStatus();
@@ -40,13 +42,13 @@ export function FormularioBootstrap() {
       />
       <Campo label="Nombre" name="name" required errores={campos?.name} />
       <Campo label="Correo" name="email" type="email" required errores={campos?.email} />
-      <Campo
+      <CampoContrasena
         label="Contraseña"
         name="password"
-        type="password"
         required
-        minLength={12}
-        ayuda="Mínimo 12 caracteres."
+        requisitos
+        largoMinimo={LARGO_MINIMO_SUPERADMIN}
+        ayuda="Esta cuenta ve todos los negocios, por eso pide más largo."
         errores={campos?.password}
       />
 

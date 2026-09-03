@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { CLAVE_SEMILLA } from "@/prisma/datos-semilla";
+import { CLAVE_DE_PRUEBA, OTRA_CLAVE_DE_PRUEBA } from "./apoyo";
 
 /**
  * El equipo de superadministración: agregar, editar, restablecer contraseña y
@@ -10,19 +12,19 @@ import { expect, test, type Page } from "@playwright/test";
  */
 test.describe.configure({ mode: "serial" });
 
-const SUPER = { email: "super@platlia.com", password: "platlia123" };
+const SUPER = { email: "super@platlia.com", password: CLAVE_SEMILLA };
 
 const sufijo = Date.now().toString(36);
 const NUEVO = {
   nombre: `Julián Prueba ${sufijo}`,
   email: `sa-${sufijo}@platlia.test`,
-  clave: "contrasenaseguradoce",
+  clave: CLAVE_DE_PRUEBA,
 };
 
 async function ingresar(page: Page) {
   await page.goto("/superadmin/ingresar");
   await page.getByLabel("Correo").fill(SUPER.email);
-  await page.getByLabel("Contraseña").fill(SUPER.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(SUPER.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await expect(page).toHaveURL(/\/superadmin$/);
 }
@@ -44,7 +46,7 @@ test("se agrega a alguien al equipo y aparece en la lista", async ({ page }) => 
 test("esa persona entra por su propia cuenta a la consola", async ({ page }) => {
   await page.goto("/superadmin/ingresar");
   await page.getByLabel("Correo").fill(NUEVO.email);
-  await page.getByLabel("Contraseña").fill(NUEVO.clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(NUEVO.clave);
   await page.getByRole("button", { name: /entrar/i }).click();
 
   await expect(page).toHaveURL(/\/superadmin$/);
@@ -70,7 +72,7 @@ test("se le restablece la contraseña y entra con la nueva", async ({ page }) =>
   await ingresar(page);
   await page.goto("/superadmin/equipo");
 
-  const claveNueva = "otracontrasenamuysegura";
+  const claveNueva = OTRA_CLAVE_DE_PRUEBA;
   const fila = page.locator("li").filter({ hasText: NUEVO.nombre });
   await fila.getByLabel("Contraseña nueva").fill(claveNueva);
   await fila.getByRole("button", { name: /restablecer/i }).click();
@@ -81,7 +83,7 @@ test("se le restablece la contraseña y entra con la nueva", async ({ page }) =>
   await page.context().clearCookies();
   await page.goto("/superadmin/ingresar");
   await page.getByLabel("Correo").fill(NUEVO.email);
-  await page.getByLabel("Contraseña").fill(claveNueva);
+  await page.getByLabel("Contraseña", { exact: true }).fill(claveNueva);
   await page.getByRole("button", { name: /entrar/i }).click();
   await expect(page).toHaveURL(/\/superadmin$/);
 });
@@ -109,7 +111,7 @@ test("se le quita el acceso y ya no puede entrar a la consola", async ({ page })
   await page.context().clearCookies();
   await page.goto("/superadmin/ingresar");
   await page.getByLabel("Correo").fill(NUEVO.email);
-  await page.getByLabel("Contraseña").fill("otracontrasenamuysegura");
+  await page.getByLabel("Contraseña", { exact: true }).fill(OTRA_CLAVE_DE_PRUEBA);
   await page.getByRole("button", { name: /entrar/i }).click();
   await expect(page).toHaveURL(/\/superadmin\/ingresar$/);
 });

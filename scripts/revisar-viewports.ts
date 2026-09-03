@@ -12,6 +12,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { chromium, type Page } from "@playwright/test";
+import { CLAVE_SEMILLA } from "@/prisma/datos-semilla";
 
 const BASE = process.argv.includes("--url")
   ? process.argv[process.argv.indexOf("--url") + 1]
@@ -45,7 +46,7 @@ const RUTAS = [
   "/administracion/configuracion",
 ];
 
-const CREDENCIALES = { email: "dueno@platlia.com", password: "platlia123" };
+const CREDENCIALES = { email: "dueno@platlia.com", password: CLAVE_SEMILLA };
 
 /** El mínimo táctil del manual. Abajo de esto, el dedo falla. */
 const MINIMO_TACTIL = 44;

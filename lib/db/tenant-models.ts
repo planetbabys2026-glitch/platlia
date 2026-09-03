@@ -85,6 +85,10 @@ export const GLOBAL_MODELS: ReadonlySet<string> = new Set([
   // La bolsa de documentos electrónicos también: se le compra a Factus a nombre
   // de la plataforma y después se reparte entre los negocios.
   "CompraDocumentosDian",
+  // El freno por procedencia cuenta intentos de gente que todavía no tiene
+  // sesión —ingresar, registrarse, recuperar la contraseña—, así que no hay
+  // ningún negocio al cual pertenezca.
+  "IntentoDeAcceso",
 ]);
 
 /**

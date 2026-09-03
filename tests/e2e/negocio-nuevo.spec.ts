@@ -1,5 +1,5 @@
+import { CLAVE_DE_PRUEBA, PANTALLA_DE_ENTRADA, agregarProducto, laCuenta } from "./apoyo";
 import { expect, test } from "@playwright/test";
-import { PANTALLA_DE_ENTRADA, agregarProducto, laCuenta } from "./apoyo";
 
 /**
  * El camino del cliente real: alguien se registra y monta su negocio desde cero.
@@ -14,7 +14,7 @@ test.describe.configure({ mode: "serial" });
 const sufijo = Date.now().toString(36);
 const NEGOCIO = `Bar M4 ${sufijo}`;
 const CORREO = `m4-${sufijo}@platlia.test`;
-const CLAVE = "contrasenasegura";
+const CLAVE = CLAVE_DE_PRUEBA;
 
 test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ page }) => {
   // ── Registro ─────────────────────────────────────────────────────────────
@@ -56,7 +56,9 @@ test("de registrarse a cobrar la primera cuenta, sin datos previos", async ({ pa
   // ── Carta: una categoría y un producto ───────────────────────────────────
   await page.goto("/administracion/carta");
   await page.getByLabel("Nombre de la categoría").fill("Cervezas");
-  await page.getByRole("button", { name: /^agregar$/i }).click();
+  // El botón dice "Crear", no "Agregar": el rótulo cambió y esta prueba se quedó
+  // esperando los dos minutos del presupuesto a uno que ya no existe.
+  await page.getByRole("button", { name: /^crear$/i }).click();
   await expect(page.getByRole("heading", { name: /^Cervezas/ })).toBeVisible();
 
   await page.getByLabel("Producto").fill("Cerveza nacional");

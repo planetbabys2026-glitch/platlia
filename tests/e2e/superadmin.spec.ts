@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PANTALLA_DE_ENTRADA } from "./apoyo";
+import { CLAVE_DE_PRUEBA, PANTALLA_DE_ENTRADA } from "./apoyo";
+import { CLAVE_SEMILLA } from "@/prisma/datos-semilla";
 
 /**
  * Superadministración.
@@ -9,8 +10,8 @@ import { PANTALLA_DE_ENTRADA } from "./apoyo";
  * puertas distintas a propósito, con cookies distintas.
  */
 
-const SUPER = { email: "super@platlia.com", password: "platlia123" };
-const DUENO = { email: "dueno@platlia.com", password: "platlia123" };
+const SUPER = { email: "super@platlia.com", password: CLAVE_SEMILLA };
+const DUENO = { email: "dueno@platlia.com", password: CLAVE_SEMILLA };
 
 async function ingresarApp(page: Page, datos: { email: string; password: string }) {
   await page.goto("/ingresar");
@@ -53,7 +54,7 @@ test("ni siquiera el superadministrador entra con la cookie de la aplicación", 
 test("el superadministrador entra por su puerta y ve los negocios", async ({ page }) => {
   await page.goto("/superadmin/ingresar");
   await page.getByLabel("Correo").fill(SUPER.email);
-  await page.getByLabel("Contraseña").fill(SUPER.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(SUPER.password);
   await page.getByRole("button", { name: /entrar/i }).click();
 
   await expect(page).toHaveURL(/\/superadmin$/);
@@ -67,14 +68,14 @@ test("un correo que no es superadministrador recibe el mismo mensaje", async ({ 
   // No se puede averiguar quién tiene la marca desde este formulario.
   await page.goto("/superadmin/ingresar");
   await page.getByLabel("Correo").fill(DUENO.email);
-  await page.getByLabel("Contraseña").fill(DUENO.password);
+  await page.getByLabel("Contraseña", { exact: true }).fill(DUENO.password);
   await page.getByRole("button", { name: /entrar/i }).click();
 
   const alerta = page.locator("form").getByRole("alert");
   await expect(alerta).toHaveText("Credenciales incorrectas.");
 
   await page.getByLabel("Correo").fill("nadie-existe@platlia.test");
-  await page.getByLabel("Contraseña").fill("loquesea12345");
+  await page.getByLabel("Contraseña", { exact: true }).fill(CLAVE_DE_PRUEBA);
   await page.getByRole("button", { name: /entrar/i }).click();
   await expect(alerta).toHaveText("Credenciales incorrectas.");
 });

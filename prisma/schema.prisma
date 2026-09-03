@@ -2162,3 +2162,33 @@ model OrderItemModifier {
 
   @@index([businessId, orderItemId])
 }
+
+/// Cuántas veces se intentó algo desde una misma procedencia, dentro de una
+/// ventana de tiempo.
+///
+/// Vive en Postgres y no en Redis por la misma razón que la cola de impresión:
+/// `lib/redis.ts` devuelve `null` sin `REDIS_URL` y todos sus publicadores se
+/// vuelven no-ops en silencio —la suite e2e corre así a propósito—. Un
+/// limitador que se apaga solo cuando falta una variable opcional no es un
+/// limitador; es peor que no tenerlo, porque figura en el código y no frena
+/// nada. Acá, si la base no está, la acción tampoco iba a poder hacer nada.
+///
+/// La ventana es fija y forma parte de la clave única: al cambiar de ventana
+/// aparece una fila nueva y el conteo arranca de cero solo, sin que nadie tenga
+/// que borrar ni reiniciar nada. Las filas viejas las barre el cron diario.
+model IntentoDeAcceso {
+  id String @id @default(cuid())
+
+  /// Qué se intentó y desde dónde: "ingresar:ip:190.0.0.1".
+  clave String
+  /// Comienzo de la ventana, ya redondeado. Con `clave` forma la unicidad que
+  /// permite contar con un solo upsert atómico.
+  ventanaAt DateTime @db.Timestamptz(3)
+
+  intentos Int @default(1)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([clave, ventanaAt])
+  @@index([ventanaAt])
+}

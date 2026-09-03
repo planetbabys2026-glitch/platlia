@@ -37,7 +37,7 @@ export function FormularioRestablecer({ token }: { token: string }) {
         autoComplete="new-password"
         required
         autoFocus
-        ayuda="Mínimo 8 caracteres."
+        requisitos
         errores={campos?.password}
       />
       <CampoContrasena
