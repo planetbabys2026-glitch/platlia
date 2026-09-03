@@ -331,6 +331,16 @@ const ventaPosCompleta = z
       (v) => (v === "" || v === undefined ? undefined : Number(v)),
       montoCopPositivo.optional(),
     ),
+    /**
+     * El cobro directo desde el mostrador.
+     *
+     * Lleva los tres campos del fiado por lo mismo que los lleva `pagoSchema`:
+     * el POS acepta `CREDITO` desde que `method` es el enum completo, y sin
+     * ellos un fiado cobrado por acá creaba el `OrderPayment` sin su `Fiado`.
+     * O sea una venta cerrada, plata que no entró, y una deuda que no figura en
+     * Cartera y que nadie va a cobrar nunca. La validación va abajo, con el
+     * mismo `refine` que usa la caja.
+     */
     pago: z
       .object({
         method: z.enum(PaymentMethod),
@@ -345,6 +355,7 @@ const ventaPosCompleta = z
           montoCopPositivo.optional(),
         ),
         reference: textoOpcional(60),
+        ...camposDeCredito,
       })
       .optional(),
   })
@@ -371,7 +382,26 @@ const ventaPosCompleta = z
   .refine((v) => v.type !== OrderType.DOMICILIO || Boolean(v.customerPhone?.trim()), {
     error: "Ingresá el teléfono celular del cliente para el domicilio.",
     path: ["customerPhone"],
-  });
+  })
+  /**
+   * El fiado exige lo mismo que en la caja, con los campos un nivel más adentro.
+   *
+   * No se puede reusar `exigirDatosDeCredito` porque aquel los espera en la
+   * raíz y acá viajan dentro de `pago`. Lo que NO puede pasar es que el POS sea
+   * más flojo: un fiado sin teléfono no se puede juntar con los otros pedidos de
+   * la misma persona, y sin nombre no hay a quién cobrarle.
+   */
+  .refine((v) => v.pago?.method !== "CREDITO" || Boolean(v.pago?.creditoNombre?.trim()), {
+    error: "Escribí a nombre de quién queda el fiado.",
+    path: ["pago", "creditoNombre"],
+  })
+  .refine(
+    (v) => v.pago?.method !== "CREDITO" || telefonoEsUsable(v.pago?.creditoTelefono ?? ""),
+    {
+      error: "Escribí un teléfono válido: es lo que junta los pedidos de la misma persona.",
+      path: ["pago", "creditoTelefono"],
+    },
+  );
 
 export const procesarVentaPosCompletaSchema = exigirDatosFiscales(ventaPosCompleta);
 

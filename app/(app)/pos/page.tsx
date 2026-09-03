@@ -57,6 +57,7 @@ export default async function PosPage({
         pricesIncludeTax: settings.pricesIncludeTax,
         tipSuggestionEnabled: settings.tipSuggestionEnabled,
         tipSuggestionRateBp: settings.tipSuggestionRateBp,
+        creditoEnabled: settings.creditoEnabled,
       }}
     />
   );

@@ -167,6 +167,27 @@ export function contiene(p: Periodo, dia: Date): boolean {
   return dia.getTime() >= p.desde.getTime() && dia.getTime() <= p.hasta.getTime();
 }
 
+/**
+ * A qué día anclar cuando se cambia de tramo.
+ *
+ * Antes se anclaba siempre al PRIMER día del tramo que se estaba mirando, y eso
+ * hacía que volver de "mes" a "día" aterrizara en el 1º, y de "semana" a "día"
+ * en el lunes. O sea que mirar el mes y volver al día costaba dos toques: el
+ * tramo y después "Volver a hoy". El caso más común de la pantalla —ver cómo va
+ * el mes y volver a lo de hoy— era justo el que más fricción tenía.
+ *
+ * La regla es: si hoy cae adentro del tramo que se está mirando, se ancla en
+ * hoy. Si no, se conserva el comienzo del tramo.
+ *
+ * Esa segunda mitad importa tanto como la primera: quien está mirando marzo de
+ * 2025 y cambia a "día" quiere el 1º de marzo, no hoy. Anclar siempre en hoy
+ * arreglaría un caso rompiendo el otro —perder el lugar donde uno estaba
+ * parado—, que es peor, porque volver exige teclear la fecha entera.
+ */
+export function anclaAlCambiarTipo(actual: Periodo, hoy: Date): Date {
+  return contiene(actual, hoy) ? hoy : actual.desde;
+}
+
 const MESES = [
   "enero",
   "febrero",

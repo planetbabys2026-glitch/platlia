@@ -2,15 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 import {
-  Banknote,
   Bike,
-  CreditCard,
-  Landmark,
-  MoreHorizontal,
-  Wallet,
   Printer,
   Receipt,
-  Smartphone,
 } from "lucide-react";
 import { PaymentMethod } from "@/generated/prisma/enums";
 import { registrarPago } from "@/features/pedidos/actions";
@@ -21,6 +15,10 @@ import {
 import { SelectorDePropina } from "@/features/pedidos/components/propina";
 import { UnirCuentas } from "@/features/pedidos/components/unir-cuentas";
 import { CamposDeCredito } from "@/features/cartera/components/campos-de-credito";
+import {
+  etiquetaDeMedio,
+  SelectorMedioDePago,
+} from "@/features/caja/components/selector-medio-de-pago";
 import {
   ESTADOS_EN_ORDEN,
   ETIQUETA_DE_COBRO,
@@ -38,24 +36,6 @@ import { formatCop } from "@/lib/money";
 import { computeSuggestedTip } from "@/lib/tax";
 import { formatTurno } from "@/lib/turns";
 import { cn } from "@/lib/utils";
-
-const METODOS_PAGO = [
-  { clave: PaymentMethod.EFECTIVO, etiqueta: "Efectivo", icono: Banknote },
-  { clave: PaymentMethod.NEQUI, etiqueta: "Nequi", icono: Smartphone },
-  { clave: PaymentMethod.DAVIPLATA, etiqueta: "Daviplata", icono: Smartphone },
-  { clave: PaymentMethod.TARJETA_DEBITO, etiqueta: "T. Débito", icono: CreditCard },
-  { clave: PaymentMethod.TARJETA_CREDITO, etiqueta: "T. Crédito", icono: CreditCard },
-  { clave: PaymentMethod.TRANSFERENCIA, etiqueta: "Transferencia", icono: Landmark },
-  { clave: PaymentMethod.BONO, etiqueta: "Bono", icono: Receipt },
-  { clave: PaymentMethod.OTRO, etiqueta: "Otro", icono: MoreHorizontal },
-] as const;
-
-/** El fiado va aparte: no es un medio de pago más, es no cobrar hoy. */
-const METODO_CREDITO = {
-  clave: PaymentMethod.CREDITO,
-  etiqueta: "Crédito (fiado)",
-  icono: Wallet,
-} as const;
 
 type Cuenta = {
   id: string;
@@ -208,45 +188,10 @@ function FormularioCobro({
         <Label className="text-xs font-semibold text-foreground">
           Método de pago
         </Label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-          {METODOS_PAGO.map(({ clave, etiqueta, icono: Icono }) => (
-            <button
-              key={clave}
-              type="button"
-              onClick={() => setMetodo(clave)}
-              className={cn(
-                "flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium transition-all text-center",
-                metodo === clave
-                  ? "border-brand bg-brand/10 text-brand font-bold shadow-xs"
-                  : "border-border bg-background hover:bg-muted text-foreground",
-              )}
-            >
-              <Icono className="size-3.5 shrink-0 opacity-80" />
-              <span>{etiqueta}</span>
-            </button>
-          ))}
-
-          {/* El fiado, aparte y con su propio peso visual: elegirlo no es cobrar
-              de otra forma, es no cobrar hoy. */}
-          {puedeFiar && (
-            <button
-              type="button"
-              onClick={() => setMetodo(METODO_CREDITO.clave)}
-              className={cn(
-                "col-span-2 flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-center text-xs font-medium transition-all sm:col-span-4",
-                metodo === METODO_CREDITO.clave
-                  ? "border-warning bg-warning/10 font-bold text-warning-soft shadow-xs"
-                  : "border-border bg-background text-foreground hover:bg-muted",
-              )}
-            >
-              <METODO_CREDITO.icono className="size-3.5 shrink-0 opacity-80" />
-              <span>{METODO_CREDITO.etiqueta}</span>
-            </button>
-          )}
-        </div>
+        <SelectorMedioDePago valor={metodo} onChange={setMetodo} puedeFiar={puedeFiar} />
       </div>
 
-      {metodo === METODO_CREDITO.clave && <CamposDeCredito />}
+      {metodo === PaymentMethod.CREDITO && <CamposDeCredito />}
 
       {/* Campos de Cobro y Efectivo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -347,7 +292,7 @@ function FormularioCobro({
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-xs text-muted-foreground">Método</dt>
-              <dd className="text-sm font-semibold text-foreground">{METODOS_PAGO.find((m) => m.clave === metodo)?.etiqueta ?? metodo}</dd>
+              <dd className="text-sm font-semibold text-foreground">{etiquetaDeMedio(metodo)}</dd>
             </div>
             {metodo === "EFECTIVO" && (
               <div className="flex items-baseline justify-between gap-3 border-t border-brand/20 pt-2">

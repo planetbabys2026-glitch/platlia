@@ -55,6 +55,10 @@ import { computeSuggestedTip } from "@/lib/tax";
 import { EncabezadoPantalla } from "@/components/marca/pantalla";
 import { Acordeon, SeccionPlegable } from "@/components/marca/seccion-plegable";
 import { cn } from "@/lib/utils";
+import {
+  esElectronico,
+  SelectorMedioDePago,
+} from "@/features/caja/components/selector-medio-de-pago";
 
 export type PosProducto = ProductoConModificadores & {
   id: string;
@@ -225,6 +229,8 @@ type ModuloPosInteractiveProps = {
     /** Si el negocio sugiere propina al cobrar, y con qué tarifa. */
     tipSuggestionEnabled: boolean;
     tipSuggestionRateBp: number;
+    /** Si el negocio fía. Lo mismo que mira la caja para ofrecer el crédito. */
+    creditoEnabled: boolean;
   };
   /**
    * Si el negocio está en condiciones de emitir factura electrónica. Llega
@@ -435,7 +441,19 @@ export function ModuloPosInteractive({
   /** El panel donde se elige la propina antes de mandar la cuenta a la caja. */
   const [modalParqueadosAbierto, setModalParqueadosAbierto] = useState(false);
   const [modalAlertasStockAbierto, setModalAlertasStockAbierto] = useState(false);
-  const [metodoPago, setMetodoPago] = useState<"EFECTIVO" | "TARJETA_DEBITO" | "TARJETA_CREDITO" | "NEQUI" | "DAVIPLATA" | "TRANSFERENCIA">("EFECTIVO");
+  /**
+   * Con qué se cobra.
+   *
+   * Es `string` y no la unión de seis valores escrita a mano que había: esa
+   * lista se había quedado corta respecto de la caja —le faltaban Bono, Otro y
+   * el fiado— y el tipo era justamente lo que hacía que sumarlos pareciera un
+   * cambio grande. La lista de verdad vive en `SelectorMedioDePago`, una sola
+   * para las dos pantallas.
+   */
+  const [metodoPago, setMetodoPago] = useState<string>("EFECTIVO");
+  const [creditoNombre, setCreditoNombre] = useState("");
+  const [creditoTelefono, setCreditoTelefono] = useState("");
+  const [creditoDireccion, setCreditoDireccion] = useState("");
 
   // ── Alertas de Stock Bajo (Insumos de Receta y Productos Terminados) ───────
   const alertasStockPos = useMemo(() => {
@@ -759,7 +777,9 @@ export function ModuloPosInteractive({
       }
     }
 
-    if (accion === "PAGAR_DIRECTO" && metodoPago !== "EFECTIVO" && !numeroComprobante.trim()) {
+    // El comprobante se exige a lo electrónico. El fiado no lo tiene: no hubo
+    // datáfono ni transferencia, no entró plata.
+    if (accion === "PAGAR_DIRECTO" && esElectronico(metodoPago) && !numeroComprobante.trim()) {
       setErrorGlobal("Para pagos electrónicos o tarjeta, ingresá el número de comprobante o referencia.");
       return;
     }
@@ -803,6 +823,16 @@ export function ModuloPosInteractive({
               tipCop: propinaCop,
               tenderedCop: metodoPago === "EFECTIVO" && numRecibido > 0 ? numRecibido : undefined,
               reference: numeroComprobante.trim() || undefined,
+              // Los tres del fiado. Van solo cuando corresponde: mandarlos
+              // siempre dejaría el nombre del último fiado pegado en una venta
+              // que se cobró en efectivo.
+              ...(metodoPago === "CREDITO"
+                ? {
+                    creditoNombre: creditoNombre.trim(),
+                    creditoTelefono: creditoTelefono.trim(),
+                    creditoDireccion: creditoDireccion.trim() || undefined,
+                  }
+                : {}),
             },
           }
         : {}),
@@ -1813,34 +1843,65 @@ export function ModuloPosInteractive({
                   {/* Selector Método de Pago */}
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-foreground">Método de pago</Label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {[
-                        { id: "EFECTIVO", label: "Efectivo" },
-                        { id: "NEQUI", label: "Nequi" },
-                        { id: "DAVIPLATA", label: "Daviplata" },
-                        { id: "TARJETA_DEBITO", label: "T. Débito" },
-                        { id: "TARJETA_CREDITO", label: "T. Crédito" },
-                        { id: "TRANSFERENCIA", label: "Transf." },
-                      ].map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setMetodoPago(m.id as typeof metodoPago)}
-                          className={cn(
-                            "py-2 px-1.5 rounded-xl text-xs font-medium transition-all border text-center",
-                            metodoPago === m.id
-                              ? "bg-brand/10 border-brand text-brand font-bold shadow-xs"
-                              : "bg-background text-foreground hover:bg-muted border-border"
-                          )}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
+                    <SelectorMedioDePago
+                      valor={metodoPago}
+                      onChange={setMetodoPago}
+                      puedeFiar={settings.creditoEnabled}
+                      columnas="grid-cols-3"
+                    />
                   </div>
 
-                  {/* Si es EFECTIVO: Verificación de Pago y Devuelta */}
-                  {metodoPago === "EFECTIVO" ? (
+                  {/* Con fiado no entra plata: ni efectivo que contar ni
+                      comprobante que anotar. Lo que hace falta es saber quién
+                      queda debiendo, que es lo que junta sus pedidos. */}
+                  {metodoPago === "CREDITO" ? (
+                    <div className="space-y-3 rounded-2xl border border-warning/40 bg-warning/5 p-3.5">
+                      <p className="text-xs font-semibold text-warning-soft">
+                        Fiado: la venta se cierra y la deuda queda en Cartera.
+                      </p>
+                      <div className="space-y-1">
+                        <Label htmlFor="creditoNombre" className="text-xs font-semibold">
+                          A nombre de quién *
+                        </Label>
+                        <Input
+                          id="creditoNombre"
+                          value={creditoNombre}
+                          onChange={(e) => setCreditoNombre(e.target.value)}
+                          placeholder="Andrés Gómez"
+                          className="h-10 rounded-xl bg-background text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="creditoTelefono" className="text-xs font-semibold">
+                          Celular *
+                        </Label>
+                        <Input
+                          id="creditoTelefono"
+                          value={creditoTelefono}
+                          onChange={(e) => setCreditoTelefono(e.target.value)}
+                          placeholder="300 123 4567"
+                          className="h-10 rounded-xl bg-background font-mono text-sm"
+                        />
+                        {/* El teléfono es la identidad del deudor, no el nombre:
+                            "Andrés" y "Andres G" serían dos personas distintas. */}
+                        <span className="block text-rotulo text-muted-foreground">
+                          Es lo que junta los pedidos de la misma persona.
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="creditoDireccion" className="text-xs font-semibold">
+                          Dirección
+                        </Label>
+                        <Input
+                          id="creditoDireccion"
+                          value={creditoDireccion}
+                          onChange={(e) => setCreditoDireccion(e.target.value)}
+                          placeholder="Opcional"
+                          className="h-10 rounded-xl bg-background text-sm"
+                        />
+                      </div>
+                    </div>
+                  ) : metodoPago === "EFECTIVO" ? (
                     <div className="space-y-3 p-3.5 rounded-2xl bg-muted/40 border border-border">
                       <div className="space-y-1">
                         <Label htmlFor="montoRecibido" className="text-xs font-semibold text-foreground">

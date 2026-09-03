@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, CalendarRange } from "lucide-react";
 import {
+  anclaAlCambiarTipo,
   ETIQUETA_TIPO,
   periodoAnterior,
   periodoSiguiente,
@@ -11,7 +12,7 @@ import {
   type Periodo,
   type TipoPeriodo,
 } from "@/features/informes/periodo";
-import { formatBusinessDate } from "@/lib/time";
+import { formatBusinessDate, parseBusinessDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,7 +70,12 @@ export function SelectorPeriodo({
       return;
     }
     setAbierto(false);
-    ir({ periodo: tipo, jornada: desde, desde: null, hasta: null });
+    // Se ancla en hoy cuando hoy cae adentro del tramo que se estaba mirando, y
+    // en el comienzo del tramo cuando no. Antes iba siempre al comienzo, así que
+    // volver de "mes" a "día" aterrizaba en el 1º y había que tocar además
+    // "Volver a hoy" —dos toques para el recorrido más común de la pantalla—.
+    const ancla = formatBusinessDate(anclaAlCambiarTipo(periodo, parseBusinessDate(hoy)));
+    ir({ periodo: tipo, jornada: ancla, desde: null, hasta: null });
   }
 
   /**

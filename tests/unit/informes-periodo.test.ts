@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  anclaAlCambiarTipo,
   anclaDe,
   contiene,
   diasDelPeriodo,
@@ -189,5 +190,44 @@ describe("contiene y ancla", () => {
   it("el ancla reconstruye el mismo período", () => {
     const p = resolverPeriodo({ tipo: "semana", ancla: d("2026-08-27") });
     expect(par(resolverPeriodo({ tipo: "semana", ancla: anclaDe(p) }))).toEqual(par(p));
+  });
+});
+
+describe("anclaAlCambiarTipo", () => {
+  const hoy = d("2026-08-27"); // jueves
+
+  it("al volver de mes a día aterriza en HOY, no en el 1º", () => {
+    // Era el recorrido más común de la pantalla —mirar cómo va el mes y volver
+    // a lo de hoy— y costaba dos toques: el tramo, y después "Volver a hoy".
+    const mes = resolverPeriodo({ tipo: "mes", ancla: hoy });
+    expect(formatBusinessDate(anclaAlCambiarTipo(mes, hoy))).toBe("2026-08-27");
+    expect(formatBusinessDate(mes.desde)).toBe("2026-08-01");
+  });
+
+  it("al volver de semana a día tampoco aterriza en el lunes", () => {
+    const semana = resolverPeriodo({ tipo: "semana", ancla: hoy });
+    expect(formatBusinessDate(semana.desde)).toBe("2026-08-24");
+    expect(formatBusinessDate(anclaAlCambiarTipo(semana, hoy))).toBe("2026-08-27");
+  });
+
+  it("mirando un tramo pasado conserva el lugar donde uno estaba", () => {
+    // La otra mitad de la regla, y pesa igual: quien está mirando marzo y cambia
+    // a "día" quiere el 1º de marzo. Anclar siempre en hoy arreglaría un caso
+    // rompiendo el otro, y volver a marzo exigiría teclear la fecha entera.
+    const marzo = resolverPeriodo({ tipo: "mes", ancla: d("2026-03-15") });
+    expect(formatBusinessDate(anclaAlCambiarTipo(marzo, hoy))).toBe("2026-03-01");
+  });
+
+  it("desde el año en curso también cae en hoy", () => {
+    const anio = resolverPeriodo({ tipo: "anio", ancla: hoy });
+    expect(formatBusinessDate(anclaAlCambiarTipo(anio, hoy))).toBe("2026-08-27");
+  });
+
+  it("en los bordes del tramo cuenta como adentro", () => {
+    // `contiene` es inclusivo en las dos puntas; si no, el último día del mes
+    // sería el único que se comporta distinto.
+    const mes = resolverPeriodo({ tipo: "mes", ancla: hoy });
+    expect(formatBusinessDate(anclaAlCambiarTipo(mes, d("2026-08-01")))).toBe("2026-08-01");
+    expect(formatBusinessDate(anclaAlCambiarTipo(mes, d("2026-08-31")))).toBe("2026-08-31");
   });
 });

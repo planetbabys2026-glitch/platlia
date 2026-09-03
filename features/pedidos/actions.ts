@@ -2274,14 +2274,24 @@ export const procesarVentaPosCompleta = defineAction({
           const deliveryStatusActual = pActualizado.deliveryStatus;
 
           const amountCop = p.amountCop > 0 ? p.amountCop : pActualizado.totalCop;
-          const tenderedCop = p.tenderedCop ?? null;
+
+          // El mismo chequeo que `registrarPago`: el crédito se enciende en
+          // Configuración, y sin eso fiar no es una opción del negocio.
+          if (esFiado(p.method) && !settings.creditoEnabled) {
+            throw new ErrorDeUsuario(
+              "Este negocio no tiene el crédito habilitado. Se enciende en Configuración.",
+            );
+          }
+
+          // Con crédito no entra plata: no hay recibido ni vuelto que calcular.
+          const tenderedCop = esFiado(p.method) ? null : (p.tenderedCop ?? null);
           if (tenderedCop !== null && tenderedCop < amountCop) {
             throw new ErrorDeUsuario("Con lo que entregó no alcanza para cubrir el pago.");
           }
           const changeCop =
             tenderedCop !== null && tenderedCop > amountCop ? tenderedCop - amountCop : null;
 
-          await tx.orderPayment.create({
+          const pagoCreado = await tx.orderPayment.create({
             data: {
               businessId: ctx.business.id,
               orderId: pedido.id,
@@ -2294,6 +2304,44 @@ export const procesarVentaPosCompleta = defineAction({
               receivedById: ctx.user.id,
             },
           });
+
+          /**
+           * El fiado se anota en la MISMA transacción que el pago, igual que en
+           * la caja.
+           *
+           * Acá faltaba entero: el esquema ya aceptaba `CREDITO` —`method` es el
+           * enum completo— pero nadie llamaba a `anotarFiado`. O sea que un
+           * fiado cobrado por el mostrador cerraba la venta, no metía plata al
+           * arqueo y **no dejaba deuda en ningún lado**: nadie iba a cobrarla
+           * nunca, y el cliente no figuraba debiendo. Es la peor forma de
+           * fallar, porque todo parece haber salido bien.
+           */
+          if (esFiado(p.method)) {
+            const fiado = await anotarFiado(tx, {
+              businessId: ctx.business.id,
+              orderId: pedido.id,
+              orderPaymentId: pagoCreado.id,
+              montoCop: amountCop,
+              datos: {
+                nombre: p.creditoNombre ?? "",
+                telefono: p.creditoTelefono ?? "",
+                direccion: p.creditoDireccion,
+              },
+              creadoPorId: ctx.user.id,
+              cashSessionId: caja?.id ?? null,
+            });
+
+            await tx.auditLog.create({
+              data: {
+                businessId: ctx.business.id,
+                userId: ctx.user.id,
+                action: "cartera.fiar",
+                entity: "Fiado",
+                entityId: fiado.fiadoId,
+                metadata: { orderId: pedido.id, montoCop: amountCop, desde: "pos" },
+              },
+            });
+          }
 
           const totales = await recalcularTotales(tx, pedido.id);
           const faltante = totales.totalCop - totales.paidCop;

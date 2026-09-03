@@ -108,6 +108,20 @@ async function main() {
      */
     TURNSTILE_SECRET_KEY: "",
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
+    /**
+     * Y el correo tampoco sale.
+     *
+     * `enviarCorreo` corta apenas ve que falta la llave y contesta sin tocar la
+     * red. Sin esto, cada corrida le manda a Resend un correo de verdad por cada
+     * empleado que crea la suite —a direcciones inventadas como
+     * `mesero-mtlwhwlg@platlia.test`—: se gasta cuota real, el panel queda lleno
+     * de ruido y, cuando Resend empieza a limitar, las pruebas pasan a depender
+     * de la latencia de un tercero.
+     *
+     * Lo que las pruebas tienen que verificar es que el alta funcione **aunque
+     * el correo no salga**, que es justamente el caso que queda cubierto así.
+     */
+    RESEND_API_KEY: "",
   };
 
   const pedidos = process.argv.slice(2);

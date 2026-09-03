@@ -82,6 +82,7 @@ export default async function PedidoPage({
           pricesIncludeTax: settings.pricesIncludeTax,
           tipSuggestionEnabled: settings.tipSuggestionEnabled,
           tipSuggestionRateBp: settings.tipSuggestionRateBp,
+          creditoEnabled: settings.creditoEnabled,
         }}
       />
     );
