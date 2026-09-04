@@ -2277,6 +2277,27 @@ export const procesarVentaPosCompleta = defineAction({
 
           // El mismo chequeo que `registrarPago`: el crédito se enciende en
           // Configuración, y sin eso fiar no es una opción del negocio.
+          /**
+           * Cobrar exige turno abierto, lo exija el negocio o no.
+           *
+           * `requireOpenCashSession` decide si se pueden TOMAR pedidos sin
+           * turno, que es otra cosa. Acá entra plata —o queda una deuda— y hay
+           * UNA caja física de la que alguien es responsable: su efectivo y su
+           * cuenta de bancos, sin importar si la venta entró por el POS o por el
+           * módulo de caja. Un pago con `cashSessionId: null` no aparece en
+           * ningún arqueo ni traba el cierre: es plata que el sistema cobró y
+           * nadie tiene que cuadrar.
+           *
+           * Estaba escrito como `caja?.id ?? null`, que dejaba esa puerta
+           * abierta. `PAGAR_DIRECTO` ya la cerraba más arriba; esto lo afirma
+           * donde se escribe la fila.
+           */
+          if (!caja) {
+            throw new ErrorDeUsuario(
+              "Para cobrar hace falta un turno de caja abierto: alguien tiene que responder por ese dinero.",
+            );
+          }
+
           if (esFiado(p.method) && !settings.creditoEnabled) {
             throw new ErrorDeUsuario(
               "Este negocio no tiene el crédito habilitado. Se enciende en Configuración.",
@@ -2295,7 +2316,7 @@ export const procesarVentaPosCompleta = defineAction({
             data: {
               businessId: ctx.business.id,
               orderId: pedido.id,
-              cashSessionId: caja?.id ?? null,
+              cashSessionId: caja.id,
               method: p.method,
               amountCop,
               tenderedCop,
@@ -2317,6 +2338,27 @@ export const procesarVentaPosCompleta = defineAction({
            * fallar, porque todo parece haber salido bien.
            */
           if (esFiado(p.method)) {
+            /**
+             * El fiado necesita turno, sin excepción.
+             *
+             * `caja` es opcional más arriba porque el POS deja TOMAR pedidos sin
+             * turno cuando el negocio no lo exige. Cobrar es otra cosa: el
+             * cajero que abrió el turno es el responsable de esa caja física
+             * —del efectivo y de la cuenta de bancos— y el fiado cuelga de su
+             * sesión para poder mostrarse como "Fiado hoy" en el arqueo. Con
+             * `cashSessionId: null` la deuda quedaría fuera de ese arqueo, que
+             * es justo donde el dueño la busca al cerrar la noche.
+             *
+             * `PAGAR_DIRECTO` ya lo exige más arriba; esto lo deja escrito en el
+             * lugar donde importa, para que no dependa de que esa guarda de allá
+             * siga existiendo.
+             */
+            if (!caja) {
+              throw new ErrorDeUsuario(
+                "Para fiar hace falta un turno de caja abierto: la deuda queda a nombre de quien lo abrió.",
+              );
+            }
+
             const fiado = await anotarFiado(tx, {
               businessId: ctx.business.id,
               orderId: pedido.id,
@@ -2328,7 +2370,7 @@ export const procesarVentaPosCompleta = defineAction({
                 direccion: p.creditoDireccion,
               },
               creadoPorId: ctx.user.id,
-              cashSessionId: caja?.id ?? null,
+              cashSessionId: caja.id,
             });
 
             await tx.auditLog.create({

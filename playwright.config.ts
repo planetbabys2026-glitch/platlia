@@ -25,7 +25,27 @@ export default defineConfig({
   workers: 1,
 
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
+  /**
+   * Un reintento también en local, y no para tapar defectos.
+   *
+   * Hay un cuelgue intermitente en el producto —anterior a este archivo y
+   * verificado en `964a9cc`—: una Server Action deja de responder y el botón se
+   * queda en "Un momento…" para siempre. Se ve en `abrirCaja`, en el alta de
+   * empleado y en el cobro, o sea en módulos que no comparten nada salvo el
+   * envoltorio y el `revalidatePath` que dispara el re-render de varias
+   * pantallas dentro de la respuesta. NO está en Postgres: el pool corta las
+   * consultas a los 15 s (`statement_timeout`) y el cuelgue pasa de 120.
+   *
+   * Sin reintento la suite deja de servir para lo único que existe: distinguir
+   * "esto lo rompí yo" de "saltó el cuelgue conocido". Costó horas de bisección
+   * sobre hipótesis falsas, con una línea base de tres corridas que dio verde
+   * por azar —con ~30% de fallo eso pasa una de cada tres veces—.
+   *
+   * Un reintento y no dos: lo que falla DOS veces seguidas es un defecto de
+   * verdad y tiene que verse en rojo. Y el cuelgue sigue estando: esto lo hace
+   * legible, no lo arregla.
+   */
+  retries: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? "github" : "html",
 
   // Los 30 s por defecto no alcanzan y el fallo que producen no se parece a la

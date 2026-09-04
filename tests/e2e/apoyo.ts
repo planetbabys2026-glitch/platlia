@@ -568,3 +568,35 @@ export async function abrirCaja(page: Page, base = "0") {
   // número dentro de ella y el título dice dónde está parada la persona.
   await expect(page.getByRole("heading", { name: /^caja 1$/i })).toBeVisible();
 }
+
+/**
+ * Agregar un producto EN EL POS.
+ *
+ * Hermana de `agregarProducto`, que es la del salón y no sirve acá: aquella
+ * espera el panel "Resumen de la cuenta", que esta pantalla no tiene.
+ *
+ * Vive en `apoyo.ts` y no adentro de una spec porque las tres trampas que hay
+ * que esquivar ya están documentadas en AGENTS.md y aun así se vuelven a pisar
+ * cada vez que alguien escribe la versión paralela —pasó escribiendo esta—:
+ *
+ * · **Los acordeones de la barra lateral también tienen `aria-expanded`.** Sin
+ *   acotar a la carta, el bucle los abre a ellos y no acerca a ningún plato.
+ *   Los de la carta son los que `SeccionPlegable` mete dentro de un `<h2>`.
+ * · **Un `.catch()` se come el error pero NO la espera.** Con el tiempo de
+ *   fábrica, cada clic fallido cuesta 30 segundos y cuatro categorías agotan el
+ *   presupuesto entero de la prueba.
+ * · **Plegada, la sección usa `inert`**, así que su botón no existe para
+ *   `getByRole` —lo cual acá juega a favor: sirve para saber si ya está abierta—.
+ */
+export async function agregarEnPos(page: Page, producto: RegExp) {
+  const boton = page.getByRole("button", { name: producto }).first();
+  const encabezados = page.getByRole("main").locator("h2 > button[aria-expanded]");
+
+  const cuantas = await encabezados.count();
+  for (let i = 0; i < cuantas; i++) {
+    if (await boton.isVisible().catch(() => false)) break;
+    await encabezados.nth(i).click({ timeout: 3_000 }).catch(() => {});
+  }
+
+  await boton.click();
+}

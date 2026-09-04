@@ -1226,10 +1226,30 @@ export function ModuloPosInteractive({
                           const conModificadores = tieneModificadores(prod);
 
                           return (
-                            <div
+                            /**
+                             * La tarjeta es un `<button>`, no un `<div onClick>`.
+                             *
+                             * Era un div, y eso tenía tres costos que se ven poco
+                             * y pesan mucho: la carta del POS **no se podía
+                             * recorrer con teclado** —la pantalla más usada del
+                             * producto—, un lector de pantalla no la anunciaba
+                             * como algo tocable, y agotado se "deshabilitaba"
+                             * solo con opacidad, sin que nada se lo dijera a
+                             * quien no ve el color.
+                             *
+                             * Las otras dos puertas de venta —el salón y el menú
+                             * QR— ya usaban botones. Esta era la excepción.
+                             *
+                             * `text-left` porque un botón centra su contenido por
+                             * omisión y acá el nombre y el precio van alineados a
+                             * la izquierda, como en el resto de la carta.
+                             */
+                            <button
                               key={prod.id}
+                              type="button"
+                              disabled={!prod.isAvailable}
+                              aria-label={`${prod.name}${prod.isAvailable ? "" : " (agotado)"}`}
                               onClick={() => {
-                                if (!prod.isAvailable) return;
                                 // Con modificadores hay algo que decidir: se abre
                                 // el modal. Sin ellos entra de un toque, que es
                                 // como se vende la mayoría de la carta.
@@ -1237,10 +1257,11 @@ export function ModuloPosInteractive({
                                 else agregarAlCarrito(prod);
                               }}
                               className={cn(
-                                "group relative p-3 rounded-2xl border bg-card transition-all cursor-pointer flex flex-col justify-between space-y-2 select-none",
+                                "group relative flex flex-col justify-between space-y-2 select-none rounded-2xl border bg-card p-3 text-left transition-all",
+                                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
                                 prod.isAvailable
-                                  ? "hover:border-brand hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-                                  : "opacity-50 cursor-not-allowed border-dashed"
+                                  ? "cursor-pointer hover:border-brand hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                  : "cursor-not-allowed border-dashed opacity-50"
                               )}
                             >
                               {/* Counter Badge */}
@@ -1342,7 +1363,7 @@ export function ModuloPosInteractive({
                                   {cant > 0 ? `Agregado (${cant})` : "Agregar"}
                                 </Button>
                               </div>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -1781,8 +1802,20 @@ export function ModuloPosInteractive({
 
           {/* ── MODAL COBRO EXPRESS CON VERIFICACION DE CAMBIO / COMPROBANTE ──── */}
           {modalPagoAbierto && (
-            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="w-full max-w-md bg-card border-border shadow-2xl rounded-2xl overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-200">
+            // `overflow-y-auto` y un alto tope, o el modal deja de ser usable en
+            // cuanto crece. Estaba centrado con `items-center` y sin límite de
+            // alto: si el contenido pasa la pantalla, se desborda hacia arriba y
+            // hacia abajo por igual y el botón de confirmar queda FUERA del
+            // viewport, sin forma de llegar. Apareció al sumar los tres campos
+            // del fiado, pero no era exclusivo de eso: en una tableta de
+            // mostrador, con propina y datos fiscales abiertos, pasaba lo mismo.
+            // Un cobro que no se puede confirmar es la peor pantalla posible.
+            //
+            // `dvh` y no `vh` porque en un teléfono la barra del navegador entra
+            // y sale, y `vh` mide la ventana sin ella: el tope quedaría más alto
+            // que lo que de verdad se ve.
+            <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm tableta:items-center">
+              <Card className="my-auto max-h-[92dvh] w-full max-w-md space-y-0 overflow-y-auto rounded-2xl border-border bg-card shadow-2xl duration-200 animate-in fade-in zoom-in-95">
                 <div className="p-4 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <DollarSign className="size-5 text-success-soft" />

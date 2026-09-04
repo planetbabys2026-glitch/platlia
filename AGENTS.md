@@ -2735,6 +2735,50 @@ Siete trampas más, que ya costaron tiempo dos veces cada una:
   no pasó nada; y la tarjeta desaparece del todo cuando la unión SÍ funcionó. El
   reintento se decide contando las cuentas de la mesa, con la pantalla recargada.
 
+### Un cuelgue intermitente que solo aparece en la suite local
+
+El síntoma: se toca un botón, queda **"Un momento…" deshabilitado**, y la acción
+no vuelve. Se ve en `abrirCaja`, en el alta de empleado, en registrar un
+movimiento y en el cobro —módulos que no comparten lógica, solo el envoltorio—.
+Cerca de una vez cada tres corridas.
+
+**No es del producto.** En el servidor real no se reproduce: 20 aperturas y
+cierres de caja seguidos sin un solo cuelgue, con la máquina ociosa (CPU 0,12%,
+376 MB de 7,7 GB). Tampoco lo introdujo ningún trabajo reciente: falla igual en
+`964a9cc`.
+
+Lo descartado, todo con medición y no por intuición:
+
+| Sospecha | Cómo se descartó |
+|---|---|
+| Postgres trabado | El pool corta a los 15 s (`statement_timeout`); el cuelgue pasa de 120 |
+| Pool agotado por los SSE | Sin Redis esos streams son un `setInterval` de ping: no toman conexión |
+| Resend | 426 ms medidos, y falla igual con `RESEND_API_KEY` vacía |
+| argon2 | 17 ms |
+| Carga de máquina / del VPS | load 0,48 con 24 GB libres, y la suite corre local |
+| El freno por procedencia | Falla igual desactivándolo |
+| Reutilizar el servidor de Playwright | `reuseExistingServer: false` no cambia nada |
+
+Un dato que acota y que conviene no perder: en una corrida fallida el log del
+servidor muestra `[correo] bienvenida a …`, o sea que **la acción terminó del
+lado del servidor** y aun así el botón siguió pendiente. En el caso del arqueo,
+en cambio, el movimiento nunca se escribió. No es un solo mecanismo.
+
+La familia más probable —y **no está probada**— es la que este mismo archivo ya
+documenta para otros casos: el clic que llega antes de la hidratación se pierde
+sin error visible. Las pruebas que ya lo sufrieron se defienden reintentando
+(`agregarProducto`, el traslado de cuenta); las cuatro de `caja-y-salon` que
+fallan no lo hacen.
+
+**La lección de método, que costó más que el síntoma**: una línea base de tres
+corridas no prueba nada contra un fallo del 30% —tres verdes seguidas salen por
+azar una de cada tres veces—. Con esa base se concluyó "esto lo rompí yo" y se
+persiguieron cinco hipótesis sobre código propio, todas correctamente
+descartadas y todas partiendo de una premisa falsa. Para atribuir un fallo
+intermitente hacen falta seis corridas por lado, el árbol tiene que estar quieto
+—medir mientras se edita no mide nada— y conviene comprobar en el servidor real
+antes de declararlo defecto del producto.
+
 ### Una prueba que afirma una pantalla vieja no protege nada
 
 La suite acumuló afirmaciones que describían una interfaz que ya no existe, y como
