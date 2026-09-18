@@ -302,14 +302,32 @@ export function Carta({
   permitirVentaSinStock?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
+  const [categoriaActivaId, setCategoriaActivaId] = useState<string>("TODAS");
 
   const buscando = busqueda.trim().length > 0;
+  const todosLosProductosCount = useMemo(
+    () => categorias.reduce((acc, c) => acc + c.products.length, 0),
+    [categorias],
+  );
 
-  const resultados = useMemo(() => {
-    if (!buscando) return null;
-    const q = normalizar(busqueda);
-    return categorias.flatMap((c) => c.products).filter((p) => normalizar(p.name).includes(q));
-  }, [busqueda, buscando, categorias]);
+  const categoriasFiltradas = useMemo(() => {
+    return categorias
+      .map((cat) => {
+        if (categoriaActivaId !== "TODAS" && categoriaActivaId !== "MAS_VENDIDOS" && cat.id !== categoriaActivaId) {
+          return null;
+        }
+        if (!buscando) return cat;
+
+        const q = normalizar(busqueda);
+        const catMatch = normalizar(cat.name).includes(q);
+        const products = cat.products.filter(
+          (p) => catMatch || normalizar(p.name).includes(q)
+        );
+        if (products.length === 0) return null;
+        return { ...cat, products };
+      })
+      .filter(Boolean) as CategoriaDeCarta[];
+  }, [categorias, categoriaActivaId, buscando, busqueda]);
 
   if (!editable) {
     return (
@@ -319,7 +337,6 @@ export function Carta({
     );
   }
 
-
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -327,37 +344,102 @@ export function Carta({
           value={busqueda}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBusqueda(e.target.value)}
           type="search"
-          placeholder="Buscar en la carta…"
+          placeholder="Buscar en la carta (por producto o categoría)…"
           aria-label="Buscar producto"
         />
-
       </div>
 
-      {buscando ? (
-        resultados && resultados.length > 0 ? (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {resultados.map((producto) => (
-              <TarjetaProducto
-                key={producto.id}
-                orderId={orderId}
-                producto={producto}
-                inventoryEnabled={inventoryEnabled}
-                permitirVentaSinStock={permitirVentaSinStock}
-              />
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            Nada coincide con &quot;{busqueda}&quot;.
-          </p>
-        )
+      {/* Barra de Categorías Adaptable (Flex-Wrap + Más Vendidos) */}
+      {todosLosProductosCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 py-0.5 text-xs select-none">
+          <button
+            type="button"
+            onClick={() => setCategoriaActivaId("TODAS")}
+            className={cn(
+              "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border",
+              categoriaActivaId === "TODAS"
+                ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            <span>TODOS</span>
+            <span
+              className={cn(
+                "px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono",
+                categoriaActivaId === "TODAS"
+                  ? "bg-brand-foreground/20 text-brand-foreground"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {todosLosProductosCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCategoriaActivaId("MAS_VENDIDOS")}
+            className={cn(
+              "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border",
+              categoriaActivaId === "MAS_VENDIDOS"
+                ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            <span>🔥 Más vendidos</span>
+          </button>
+
+          {categorias.map((cat) => {
+            const esActiva = categoriaActivaId === cat.id;
+            const count = cat.products.length;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setCategoriaActivaId(cat.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border",
+                  esActiva
+                    ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                    : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <span>{cat.name}</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono",
+                    esActiva
+                      ? "bg-brand-foreground/20 text-brand-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {categoriasFiltradas.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          {buscando
+            ? `Nada coincide con "${busqueda}".`
+            : "No hay productos disponibles en esta categoría."}
+        </p>
       ) : (
-        <Acordeon>
-          <div className="space-y-6">
-          {categorias.map((categoria) => {
-            const productos = (
-              // Auto-fill, igual que el salón y cocina: la tarjeta mide lo que
-              // tiene que medir en vez de partirse en dos columnas fijas.
+        <div className="space-y-6">
+          {categoriasFiltradas.map((categoria) => (
+            <div key={categoria.id} className="space-y-2.5">
+              {categoriaActivaId === "TODAS" && (
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                    {categoria.name}
+                  </h3>
+                  <span className="text-rotulo font-bold text-muted-foreground">
+                    {categoria.products.length} productos
+                  </span>
+                </div>
+              )}
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
                 {categoria.products.map((producto) => (
                   <TarjetaProducto
@@ -369,21 +451,9 @@ export function Carta({
                   />
                 ))}
               </ul>
-            );
-
-            return (
-              <SeccionPlegable
-                key={categoria.id}
-                id={categoria.id}
-                titulo={categoria.name}
-                cuenta={categoria.products.length}
-              >
-                {productos}
-              </SeccionPlegable>
-            );
-          })}
-          </div>
-        </Acordeon>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -344,6 +344,7 @@ export function ModuloPosInteractive({
 
   // ── Estado de catálogo y búsqueda ──────────────────────────────────────────
   const [busqueda, setBusqueda] = useState("");
+  const [categoriaActivaId, setCategoriaActivaId] = useState<string>("TODAS");
 
   // ── Estado del Pedido Activo / Parqueado ───────────────────────────────────
   const [activeOrderId, setActiveOrderId] = useState<string | null>(pedidoInicial?.id ?? null);
@@ -906,10 +907,19 @@ export function ModuloPosInteractive({
   // ── Filtrado de Productos ──────────────────────────────────────────────────
   const q = busqueda.trim().toLowerCase();
 
+  const productosMasVendidos = useMemo(() => {
+    // Productos destacados/más vendidos (tomando los primeros productos de cada categoría)
+    return carta.flatMap((c) => c.products.slice(0, 2)).slice(0, 10);
+  }, [carta]);
+
   const categoriasFiltradas = carta
     .map((cat) => {
+      if (categoriaActivaId !== "TODAS" && categoriaActivaId !== "MAS_VENDIDOS" && cat.id !== categoriaActivaId) {
+        return null;
+      }
+      const catMatch = cat.name.toLowerCase().includes(q);
       const productosFiltrados = cat.products.filter(
-        (p) => !q || p.name.toLowerCase().includes(q),
+        (p) => !q || catMatch || p.name.toLowerCase().includes(q),
       );
 
       if (productosFiltrados.length === 0) return null;
@@ -1138,10 +1148,10 @@ export function ModuloPosInteractive({
             </Alert>
           )}
 
-          {/* Grid Principal POS (Izquierda: Catálogo 60% | Derecha: Carrito 40%) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            {/* ── PANEL IZQUIERDO: BUSQUEDA, CATEGORIAS Y PRODUCTOS (7 COLS / 60%) ── */}
-            <div className="lg:col-span-7 space-y-4">
+          {/* Grid Principal POS (Izquierda: Catálogo 67% | Derecha: Carrito 33%) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            {/* ── PANEL IZQUIERDO: BUSQUEDA, CATEGORIAS Y PRODUCTOS (7-8 COLS / 67%) ── */}
+            <div className="lg:col-span-7 xl:col-span-8 space-y-3.5">
               {/* Buscador Rápido de Productos + Botón Modesto Alertas Stock */}
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
@@ -1188,12 +1198,79 @@ export function ModuloPosInteractive({
                 )}
               </div>
 
+              {/* Barra de Categorías Adaptable (Flex-Wrap + Más Vendidos) */}
+              {todosLosProductosCount > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 py-0.5 text-xs select-none">
+                  <button
+                    type="button"
+                    onClick={() => setCategoriaActivaId("TODAS")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border",
+                      categoriaActivaId === "TODAS"
+                        ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                        : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <span>TODOS</span>
+                    <span
+                      className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono",
+                        categoriaActivaId === "TODAS"
+                          ? "bg-brand-foreground/20 text-brand-foreground"
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {todosLosProductosCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCategoriaActivaId("MAS_VENDIDOS")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border",
+                      categoriaActivaId === "MAS_VENDIDOS"
+                        ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                        : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <span>🔥 Más vendidos</span>
+                  </button>
+
+                  {carta.map((cat) => {
+                    const esActiva = categoriaActivaId === cat.id;
+                    const count = cat.products.length;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setCategoriaActivaId(cat.id)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border",
+                          esActiva
+                            ? "bg-brand text-brand-foreground border-brand font-bold shadow-xs"
+                            : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <span>{cat.name}</span>
+                        <span
+                          className={cn(
+                            "px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono",
+                            esActiva
+                              ? "bg-brand-foreground/20 text-brand-foreground"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Grid de Tarjetas de Productos */}
               <div className="space-y-6">
-                {/* Un negocio recién creado llega acá con la carta vacía y veía
-                    "no se encontraron productos: probá con otro nombre", que lo
-                    manda a buscar algo que no existe. No es lo mismo no encontrar
-                    que no haber cargado nada todavía. */}
                 {todosLosProductosCount === 0 ? (
                   <div className="p-8 text-center bg-card rounded-2xl border border-dashed border-border space-y-3">
                     <p className="text-sm font-semibold">Todavía no hay carta</p>
@@ -1212,173 +1289,130 @@ export function ModuloPosInteractive({
                     </p>
                   </div>
                 ) : (
-                  <Acordeon>
+                  <div className="space-y-6">
                     {categoriasFiltradas.map((cat) => (
-                    <SeccionPlegable
-                      key={cat.id}
-                      id={cat.id}
-                      titulo={cat.name}
-                      cuenta={cat.products.length}
-                    >
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
-                        {cat.products.map((prod) => {
-                          const cant = enCarritoDelProducto(prod.id);
-                          const conModificadores = tieneModificadores(prod);
+                      <div key={cat.id} className="space-y-2.5">
+                        {categoriaActivaId === "TODAS" && (
+                          <div className="flex items-center justify-between px-1">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                              {cat.name}
+                            </h3>
+                            <span className="text-rotulo font-bold text-muted-foreground">
+                              {cat.products.length} productos
+                            </span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-3">
+                          {cat.products.map((prod) => {
+                            const cant = enCarritoDelProducto(prod.id);
+                            const conModificadores = tieneModificadores(prod);
+                            const disp = calcularStockDisponibleProducto(prod, settings.inventoryEnabled);
+                            const esSinStock = disp !== null && disp <= 0;
 
-                          return (
-                            /**
-                             * La tarjeta es un `<button>`, no un `<div onClick>`.
-                             *
-                             * Era un div, y eso tenía tres costos que se ven poco
-                             * y pesan mucho: la carta del POS **no se podía
-                             * recorrer con teclado** —la pantalla más usada del
-                             * producto—, un lector de pantalla no la anunciaba
-                             * como algo tocable, y agotado se "deshabilitaba"
-                             * solo con opacidad, sin que nada se lo dijera a
-                             * quien no ve el color.
-                             *
-                             * Las otras dos puertas de venta —el salón y el menú
-                             * QR— ya usaban botones. Esta era la excepción.
-                             *
-                             * `text-left` porque un botón centra su contenido por
-                             * omisión y acá el nombre y el precio van alineados a
-                             * la izquierda, como en el resto de la carta.
-                             */
-                            <button
-                              key={prod.id}
-                              type="button"
-                              disabled={!prod.isAvailable}
-                              aria-label={`${prod.name}${prod.isAvailable ? "" : " (agotado)"}`}
-                              onClick={() => {
-                                // Con modificadores hay algo que decidir: se abre
-                                // el modal. Sin ellos entra de un toque, que es
-                                // como se vende la mayoría de la carta.
-                                if (conModificadores) setProductoAElegir(prod);
-                                else agregarAlCarrito(prod);
-                              }}
-                              className={cn(
-                                "group relative flex flex-col justify-between space-y-2 select-none rounded-2xl border bg-card p-3 text-left transition-all",
-                                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-                                prod.isAvailable
-                                  ? "cursor-pointer hover:border-brand hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-                                  : "cursor-not-allowed border-dashed opacity-50"
-                              )}
-                            >
-                              {/* Counter Badge */}
-                              {cant > 0 && (
-                                <Badge className="absolute -top-2 -right-2 bg-brand text-brand-foreground text-xs font-bold px-2 py-0.5 rounded-full shadow-md z-10">
-                                  {cant}
-                                </Badge>
-                              )}
+                            return (
+                              <button
+                                key={prod.id}
+                                type="button"
+                                disabled={!prod.isAvailable}
+                                aria-label={`${prod.name}${prod.isAvailable ? "" : " (agotado)"}`}
+                                onClick={() => {
+                                  if (conModificadores) setProductoAElegir(prod);
+                                  else agregarAlCarrito(prod);
+                                }}
+                                className={cn(
+                                  "group relative flex flex-col justify-between space-y-2 select-none rounded-2xl border bg-card p-3 text-left transition-all",
+                                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                                  prod.isAvailable
+                                    ? "cursor-pointer hover:border-brand hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                    : "cursor-not-allowed border-dashed opacity-50"
+                                )}
+                              >
+                                {/* Counter Badge */}
+                                {cant > 0 && (
+                                  <Badge className="absolute -top-2 -right-2 bg-brand text-brand-foreground text-xs font-bold px-2 py-0.5 rounded-full shadow-md z-10">
+                                    {cant}
+                                  </Badge>
+                                )}
 
-                              {/* Solo hay recuadro si hay foto. Sin ella se pintaba
-                                  un bloque gris azulado con las dos primeras
-                                  letras del nombre —"CE", "CE", "CE" para las tres
-                                  cervezas—: no distinguía nada, se comía la mitad
-                                  de la tarjeta y le quitaba peso justo a lo que se
-                                  lee para elegir rápido, que es el nombre y el
-                                  precio. */}
-                              {prod.imageUrl && (
-                                <div className="aspect-video w-full rounded-xl bg-[var(--panel-2)] overflow-hidden flex items-center justify-center relative">
-                                  <img
-                                    src={prod.imageUrl}
-                                    alt={prod.name}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                  />
-                                  {!prod.isAvailable && (
-                                    <span className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex items-center justify-center text-rotulo font-bold text-destructive">
-                                      Agotado
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {!prod.imageUrl && !prod.isAvailable && (
-                                <span className="text-destructive text-rotulo font-bold">Agotado</span>
-                              )}
-
-                              {/* Info del Producto */}
-                              <div className="space-y-1">
-                                <h4 className="font-semibold text-xs text-foreground line-clamp-2 leading-tight">
-                                  {prod.name}
-                                </h4>
-                                <p className="numeral font-bold text-sm text-brand">
-                                  {formatCop(prod.priceCop)}
-                                </p>
-
-                                {/* Indicador de porciones preparables con insumos de la receta */}
-                                {(() => {
-                                  const disp = calcularStockDisponibleProducto(prod, settings.inventoryEnabled);
-                                  if (disp === null) return null;
-
-                                  const esSinStock = disp <= 0;
-                                  const esBajoStock = disp > 0 && disp <= 5;
-                                  const tieneReceta = Boolean(prod.recipeItems && prod.recipeItems.length > 0);
-
-                                  // El mismo texto que la carta del salón: es el
-                                  // mismo dato y la misma persona lo mira en las
-                                  // dos pantallas. Y corto a propósito —"Sin
-                                  // insumos (0 disp.)" no entraba en una tarjeta
-                                  // de 150px y se salía por el costado, porque el
-                                  // `truncate` no puede recortar dentro de un
-                                  // contenedor `w-fit`, que crece con el texto.
-                                  return (
-                                    <div
+                                {/* Encabezado Superior de Tarjeta: Categoría y Cuadro de Stock */}
+                                <div className="flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground/80 w-full gap-1">
+                                  <span className="truncate max-w-[62%]">{cat.name}</span>
+                                  {disp !== null ? (
+                                    <span
                                       className={cn(
-                                        "inline-flex max-w-full items-center gap-1 rounded-xl border px-1.5 py-0.5 text-rotulo font-bold",
+                                        "px-2 py-0.5 rounded-md text-[9px] font-bold font-mono tracking-wider shrink-0 border shadow-2xs",
                                         esSinStock
-                                          ? "border-destructive/30 bg-destructive/10 text-destructive-soft"
-                                          : esBajoStock
-                                            ? "border-warning/30 bg-warning/10 text-warning-soft"
-                                            : "border-success/30 bg-success/10 text-success-soft",
+                                          ? "bg-destructive/15 text-destructive border-destructive/30"
+                                          : disp <= 5
+                                            ? "bg-warning/15 text-warning-soft border-warning/30"
+                                            : "bg-secondary/90 text-secondary-foreground border-border/80"
                                       )}
-                                      title={
-                                        tieneReceta
-                                          ? `Según los insumos de la receta: ${disp} porciones preparables`
-                                          : `Stock directo: ${disp} unidades disponibles`
-                                      }
                                     >
-                                      <Box className="size-3 shrink-0" />
-                                      <span className="truncate">
-                                        {esSinStock ? "Sin stock" : `${disp} disp.`}
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
+                                      {esSinStock ? "AGOTADO" : `STOCK: ${disp}`}
+                                    </span>
+                                  ) : !prod.isAvailable ? (
+                                    <span className="px-2 py-0.5 rounded-md text-[9px] font-bold font-mono tracking-wider shrink-0 bg-destructive/15 text-destructive border border-destructive/30">
+                                      AGOTADO
+                                    </span>
+                                  ) : null}
+                                </div>
 
-                              {/* Botón rápido */}
-                              <div className="pt-1">
-                                <Button
-                                  type="button"
-                                  disabled={!prod.isAvailable}
-                                  size="sm"
-                                  className={cn(
-                                    "w-full h-8 text-rotulo font-bold rounded-xl gap-1 transition-all",
-                                    cant > 0
-                                      ? "bg-brand text-brand-foreground"
-                                      : "bg-secondary text-secondary-foreground group-hover:bg-brand group-hover:text-brand-foreground"
-                                  )}
-                                >
-                                  <Plus className="size-3.5" />
-                                  {cant > 0 ? `Agregado (${cant})` : "Agregar"}
-                                </Button>
-                              </div>
-                            </button>
-                          );
-                        })}
+                                {prod.imageUrl && (
+                                  <div className="aspect-video w-full rounded-xl bg-[var(--panel-2)] overflow-hidden flex items-center justify-center relative">
+                                    <img
+                                      src={prod.imageUrl}
+                                      alt={prod.name}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    />
+                                    {!prod.isAvailable && (
+                                      <span className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex items-center justify-center text-rotulo font-bold text-destructive">
+                                        Agotado
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Info del Producto */}
+                                <div className="space-y-1">
+                                  <h4 className="font-semibold text-xs text-foreground line-clamp-2 leading-tight">
+                                    {prod.name}
+                                  </h4>
+                                  <p className="numeral font-bold text-sm text-brand">
+                                    {formatCop(prod.priceCop)}
+                                  </p>
+                                </div>
+
+                                {/* Indicador visual de agregar (div no-botón para evitar anidación de <button>) */}
+                                <div className="pt-1">
+                                  <div
+                                    className={cn(
+                                      "w-full h-8 text-rotulo font-bold rounded-xl gap-1 transition-all flex items-center justify-center select-none",
+                                      cant > 0
+                                        ? "bg-brand text-brand-foreground"
+                                        : "bg-secondary text-secondary-foreground group-hover:bg-brand group-hover:text-brand-foreground",
+                                      !prod.isAvailable && "opacity-50 pointer-events-none"
+                                    )}
+                                  >
+                                    <Plus className="size-3.5" />
+                                    {cant > 0 ? `Agregado (${cant})` : "Agregar"}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </SeccionPlegable>
                     ))}
-                  </Acordeon>
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* ── PANEL DERECHO: PANEL DE VENTA Y CARRITO (5 COLS / 40%) ────────── */}
-            <div className="lg:col-span-5 space-y-4 sticky top-4">
-              <Card className="border-border bg-card shadow-sm rounded-2xl overflow-hidden space-y-0">
-                {/* Header del Carrito */}
-                <div className="p-3.5 border-b border-border bg-[var(--panel-2)] flex items-center justify-between">
+            {/* ── PANEL DERECHO: PANEL DE VENTA Y CARRITO (5-4 COLS / 33%) ────────── */}
+            <div className="lg:col-span-5 xl:col-span-4 sticky top-3 max-h-[calc(100vh-5rem)] flex flex-col">
+              <Card className="border-border bg-card shadow-sm rounded-2xl overflow-hidden flex flex-col max-h-[calc(100vh-5rem)] space-y-0">
+                {/* Header del Carrito (Fijo) */}
+                <div className="p-3 border-b border-border bg-[var(--panel-2)] flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2">
                     <ShoppingCart className="size-4 text-brand" />
                     <span className="font-bold text-sm text-foreground">Detalle del pedido</span>
@@ -1401,18 +1435,19 @@ export function ModuloPosInteractive({
                   )}
                 </div>
 
-                <div className="p-4 space-y-4">
+                {/* Cuerpo del Carrito (Deslizable para ajustarse a pantallas de 800-900px) */}
+                <div className="p-3.5 space-y-3 overflow-y-auto flex-1">
                   {/* Selector de Tipo de Consumo */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
                       Tipo de consumo
                     </Label>
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--panel-2)] rounded-xl border border-border/60">
+                    <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--panel-2)] rounded-xl border border-border/60">
                       <button
                         type="button"
                         onClick={() => setTipoConsumo("LLEVAR")}
                         className={cn(
-                          "min-h-9 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                          "min-h-8 py-1 px-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1",
                           tipoConsumo === "LLEVAR"
                             ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
                             : "text-muted-foreground hover:text-foreground"
@@ -1424,7 +1459,7 @@ export function ModuloPosInteractive({
                         type="button"
                         onClick={() => setTipoConsumo("EN_SITIO")}
                         className={cn(
-                          "min-h-9 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                          "min-h-8 py-1 px-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1",
                           tipoConsumo === "EN_SITIO"
                             ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
                             : "text-muted-foreground hover:text-foreground"
@@ -1437,7 +1472,7 @@ export function ModuloPosInteractive({
                           type="button"
                           onClick={() => setTipoConsumo("DOMICILIO")}
                           className={cn(
-                            "min-h-9 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                            "min-h-8 py-1 px-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1",
                             tipoConsumo === "DOMICILIO"
                               ? "bg-[var(--brasa)] text-[var(--tinta)] shadow-xs font-bold"
                               : "text-muted-foreground hover:text-foreground"
@@ -1457,7 +1492,7 @@ export function ModuloPosInteractive({
                       dos campos que son del mismo formulario. Que aparezcan solo
                       al elegir Domicilio ya dice que son de la entrega; no hace
                       falta además encerrarlos. */}
-                  <div className="space-y-3 pt-1">
+                  <div className="space-y-2.5 pt-0.5">
                     <CampoPedido
                       id="customerName"
                       etiqueta={
@@ -1522,7 +1557,7 @@ export function ModuloPosInteractive({
                       es cambiarle el plato a alguien que ya lo está haciendo; para
                       eso está anular desde la cuenta, con motivo y bitácora. */}
                   {enCocina.length > 0 && (
-                    <div className="space-y-1.5 pt-2 border-t border-border/80">
+                    <div className="space-y-1 pt-1 border-t border-border/80">
                       <div className="flex items-baseline justify-between gap-2">
                         <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
                           Ya en cocina
@@ -1531,7 +1566,7 @@ export function ModuloPosInteractive({
                           {formatCop(totalEnCocinaCop)}
                         </span>
                       </div>
-                      <ul className="space-y-1 rounded-xl border border-dashed border-border/80 bg-[var(--panel-2)] p-2.5">
+                      <ul className="space-y-1 rounded-xl border border-dashed border-border/80 bg-[var(--panel-2)] p-2">
                         {enCocina.map((item) => (
                           <li
                             key={item.id}
@@ -1553,14 +1588,14 @@ export function ModuloPosInteractive({
                     </div>
                   )}
 
-                  <div className="space-y-1.5 pt-2 border-t border-border/80">
+                  <div className="space-y-1 pt-1 border-t border-border/80">
                     <Label className="text-rotulo font-semibold uppercase tracking-wider text-muted-foreground block">
                       {enCocina.length > 0 ? "Agregar al pedido" : "Productos seleccionados"}
                     </Label>
-                    <div className="space-y-2 max-h-[20rem] overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-[14rem] overflow-y-auto pr-1">
                       {cart.length === 0 ? (
-                        <div className="p-6 text-center text-muted-foreground space-y-1 bg-[var(--panel-2)] rounded-xl border border-dashed border-border/80">
-                          <ShoppingBag className="size-6 mx-auto opacity-30" />
+                        <div className="p-4 text-center text-muted-foreground space-y-1 bg-[var(--panel-2)] rounded-xl border border-dashed border-border/80">
+                          <ShoppingBag className="size-5 mx-auto opacity-30" />
                           <p className="text-xs font-medium">
                             {enCocina.length > 0 ? "Sin adiciones" : "El pedido está vacío"}
                           </p>
@@ -1572,7 +1607,7 @@ export function ModuloPosInteractive({
                         cart.map((item) => (
                           <div
                             key={item.lineKey}
-                            className="p-2.5 rounded-xl bg-[var(--panel-2)] border border-border/80 space-y-1.5"
+                            className="p-2 rounded-xl bg-[var(--panel-2)] border border-border/80 space-y-1.5"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="space-y-0.5 flex-1 min-w-0">
@@ -1600,33 +1635,33 @@ export function ModuloPosInteractive({
                             </div>
 
                             {/* Controles de cantidad e inline note */}
-                            <div className="flex items-center justify-between gap-2 pt-1">
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => cambiarCantidadCart(item.lineKey, -1)}
-                                  className="flex size-7 items-center justify-center rounded-xl border border-border bg-[var(--panel-2)] text-foreground transition-colors hover:bg-[var(--panel-3)]"
+                                  className="flex size-6 items-center justify-center rounded-lg border border-border bg-[var(--panel-2)] text-foreground transition-colors hover:bg-[var(--panel-3)]"
                                 >
                                   <Minus className="size-3" />
                                 </button>
-                                <span className="numeral font-bold text-xs w-6 text-center">
+                                <span className="numeral font-bold text-xs w-5 text-center">
                                   {item.quantity}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => cambiarCantidadCart(item.lineKey, 1)}
-                                  className="flex size-7 items-center justify-center rounded-xl border border-border bg-[var(--panel-2)] text-foreground transition-colors hover:bg-[var(--panel-3)]"
+                                  className="flex size-6 items-center justify-center rounded-lg border border-border bg-[var(--panel-2)] text-foreground transition-colors hover:bg-[var(--panel-3)]"
                                 >
                                   <Plus className="size-3" />
                                 </button>
                               </div>
 
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1">
                                 <Input
                                   value={item.notes}
                                   onChange={(e) => actualizarNotaItem(item.lineKey, e.target.value)}
                                   placeholder="Nota..."
-                                  className="h-7 w-28 rounded-xl px-2 text-xs"
+                                  className="h-6 w-24 rounded-lg px-2 text-xs"
                                 />
                                 <button
                                   type="button"
@@ -1642,158 +1677,152 @@ export function ModuloPosInteractive({
                       )}
                     </div>
                   </div>
+                </div>
 
-                  {/* Total y qué hacer con el pedido */}
-                  <div className="space-y-3 pt-3 border-t border-border">
-                    {errorGlobal && (
-                      <Alert variant="destructive" role="alert" className="py-2 text-xs rounded-xl">
-                        <AlertDescription>{errorGlobal}</AlertDescription>
-                      </Alert>
-                    )}
+                {/* Pie del Carrito (Fijo al fondo de la pantalla para nunca taparse en monitores de 800-900px) */}
+                <div className="p-3 border-t border-border bg-[var(--panel-2)] space-y-2 shrink-0">
+                  {errorGlobal && (
+                    <Alert variant="destructive" role="alert" className="py-1.5 px-2.5 text-xs rounded-xl">
+                      <AlertDescription>{errorGlobal}</AlertDescription>
+                    </Alert>
+                  )}
 
-                    {tipoConsumo === "DOMICILIO" && (
-                      <div className="flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-brand/10 border border-brand/20 text-brand">
-                        <span className="flex items-center gap-1.5 font-bold">
-                          <Bike className="size-4 shrink-0" /> Servicio de domicilio
-                        </span>
-                        <span className="numeral font-bold text-foreground">
-                          {costoDomicilio > 0 ? `+${formatCop(costoDomicilio)}` : "Gratis ($0)"}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--panel-2)] border border-border">
-                      <div className="space-y-0.5">
-                        <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground block">
-                          Total a pagar
-                        </span>
-                        {tipoConsumo === "DOMICILIO" && (
-                          <span className="text-rotulo text-muted-foreground block">
-                            Productos {formatCop(subtotalCart)} + Domicilio {formatCop(costoDomicilio)}
-                          </span>
-                        )}
-                      </div>
-                      <span className="numeral text-2xl font-extrabold text-brand">
-                        {formatCop(totalCart)}
+                  {tipoConsumo === "DOMICILIO" && (
+                    <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-xl bg-brand/10 border border-brand/20 text-brand">
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <Bike className="size-3.5 shrink-0" /> Domicilio
+                      </span>
+                      <span className="numeral font-bold text-foreground">
+                        {costoDomicilio > 0 ? `+${formatCop(costoDomicilio)}` : "$0"}
                       </span>
                     </div>
+                  )}
 
-                    {/* Acciones principales del pedido */}
-                    <div className="space-y-2 pt-1">
-                      {usaMesas ? (
-                        <>
-                          {/* Cobrar también está acá, y antes no.
-                              Con mesas, el POS solo ofrecía cocina / caja /
-                              espera: un negocio que usa salón Y vende de
-                              mostrador tenía que mandar la cuenta a la caja y
-                              cobrarla en otra pantalla, para una gaseosa que el
-                              cliente paga parado ahí. Cobrar es la misma acción
-                              en los dos casos; lo que cambia es dónde se sienta
-                              quien pide. */}
-                          <Button
-                            type="button"
-                            onClick={() => {
-                              if (faltaNombre) {
-                                setErrorGlobal(
-                                  "En un domicilio hace falta a nombre de quién va el pedido.",
-                                );
-                                document.getElementById("customerName")?.focus();
-                                return;
-                              }
-                              const errorStock = auditarStockCarritoRecetas(
-                                carritoParaAuditar(),
-                                carta,
-                                settings.inventoryEnabled && !settings.permitirVentaSinStock,
-                              );
-                              if (errorStock) {
-                                setErrorGlobal(errorStock);
-                                return;
-                              }
-                              setModalPagoAbierto(true);
-                            }}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
-                          >
-                            <CreditCard className="size-4" />
-                            <span>Cobrar y facturar</span>
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
-                          >
-                            <UtensilsCrossed className="size-3.5 text-brand" />
-                            <span>Mandar comanda a cocina</span>
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() => ejecutarProcesarPos("PARQUEAR")}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full text-muted-foreground hover:text-foreground h-8 text-xs gap-1.5"
-                          >
-                            <PauseCircle className="size-3.5" />
-                            <span>Guardar en espera</span>
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            type="button"
-                            onClick={() => {
-                              if (faltaNombre) {
-                                setErrorGlobal(
-                                  "En un domicilio hace falta a nombre de quién va el pedido.",
-                                );
-                                document.getElementById("customerName")?.focus();
-                                return;
-                              }
-                              const errorStock = auditarStockCarritoRecetas(
-                                carritoParaAuditar(),
-                                carta,
-                                settings.inventoryEnabled && !settings.permitirVentaSinStock,
-                              );
-                              if (errorStock) {
-                                setErrorGlobal(errorStock);
-                                return;
-                              }
-                              setModalPagoAbierto(true);
-                            }}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-11 text-xs rounded-xl shadow-xs gap-2"
-                          >
-                            <CreditCard className="size-4" />
-                            <span>Cobrar y facturar</span>
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full font-bold h-10 text-xs rounded-xl gap-2 border-border hover:bg-muted text-foreground"
-                          >
-                            <UtensilsCrossed className="size-3.5 text-brand" />
-                            <span>Mandar a cocina</span>
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() => ejecutarProcesarPos("PARQUEAR")}
-                            disabled={!hayPedido || procesandoAccion}
-                            className="w-full text-muted-foreground hover:text-foreground h-8 text-xs gap-1.5"
-                          >
-                            <PauseCircle className="size-3.5" />
-                            <span>Guardar en espera</span>
-                          </Button>
-                        </>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border/80">
+                    <div className="space-y-0">
+                      <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground block font-mono">
+                        Total a pagar
+                      </span>
+                      {tipoConsumo === "DOMICILIO" && (
+                        <span className="text-[10px] text-muted-foreground block">
+                          {formatCop(subtotalCart)} + Domi {formatCop(costoDomicilio)}
+                        </span>
                       )}
                     </div>
+                    <span className="numeral text-xl font-extrabold text-brand">
+                      {formatCop(totalCart)}
+                    </span>
+                  </div>
+
+                  {/* Acciones principales del pedido */}
+                  <div className="space-y-1.5 pt-0.5">
+                    {usaMesas ? (
+                      <>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (faltaNombre) {
+                              setErrorGlobal(
+                                "En un domicilio hace falta a nombre de quién va el pedido.",
+                              );
+                              document.getElementById("customerName")?.focus();
+                              return;
+                            }
+                            const errorStock = auditarStockCarritoRecetas(
+                              carritoParaAuditar(),
+                              carta,
+                              settings.inventoryEnabled && !settings.permitirVentaSinStock,
+                            );
+                            if (errorStock) {
+                              setErrorGlobal(errorStock);
+                              return;
+                            }
+                            setModalPagoAbierto(true);
+                          }}
+                          disabled={!hayPedido || procesandoAccion}
+                          className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-10 text-xs rounded-xl shadow-xs gap-2"
+                        >
+                          <CreditCard className="size-4" />
+                          <span>Cobrar y facturar</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
+                          disabled={!hayPedido || procesandoAccion}
+                          className="w-full font-bold h-9 text-xs rounded-xl gap-1.5 border-border hover:bg-muted text-foreground"
+                        >
+                          <UtensilsCrossed className="size-3.5 text-brand" />
+                          <span>Mandar comanda a cocina</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => ejecutarProcesarPos("PARQUEAR")}
+                          disabled={!hayPedido || procesandoAccion}
+                          className="w-full text-muted-foreground hover:text-foreground h-7 text-xs gap-1.5"
+                        >
+                          <PauseCircle className="size-3.5" />
+                          <span>Guardar en espera</span>
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (faltaNombre) {
+                              setErrorGlobal(
+                                "En un domicilio hace falta a nombre de quién va el pedido.",
+                              );
+                              document.getElementById("customerName")?.focus();
+                              return;
+                            }
+                            const errorStock = auditarStockCarritoRecetas(
+                              carritoParaAuditar(),
+                              carta,
+                              settings.inventoryEnabled && !settings.permitirVentaSinStock,
+                            );
+                            if (errorStock) {
+                              setErrorGlobal(errorStock);
+                              return;
+                            }
+                            setModalPagoAbierto(true);
+                          }}
+                          disabled={!hayPedido || procesandoAccion}
+                          className="w-full bg-brand hover:bg-brand/90 text-brand-foreground font-bold h-10 text-xs rounded-xl shadow-xs gap-2"
+                        >
+                          <CreditCard className="size-4" />
+                          <span>Cobrar venta</span>
+                        </Button>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => ejecutarProcesarPos("ENVIAR_COCINA")}
+                            disabled={!hayPedido || procesandoAccion}
+                            className="font-bold h-9 text-xs rounded-xl gap-1 border-border hover:bg-muted text-foreground"
+                          >
+                            <UtensilsCrossed className="size-3.5 text-brand" />
+                            <span>Comanda</span>
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => ejecutarProcesarPos("PARQUEAR")}
+                            disabled={!hayPedido || procesandoAccion}
+                            className="font-bold h-9 text-xs rounded-xl gap-1 border-border hover:bg-muted text-foreground"
+                          >
+                            <PauseCircle className="size-3.5 text-muted-foreground" />
+                            <span>En espera</span>
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </Card>
